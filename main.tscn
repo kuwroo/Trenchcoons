@@ -1,8 +1,6 @@
 [gd_scene format=3 uid="uid://sya5tdr2k45a"]
 
 [ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
-[ext_resource type="PackedScene" uid="uid://clycuvpm41v0w" path="res://assets/geodesic_dome.glb" id="2_0xm2m"]
-[ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="2_h2yge"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ig7tw"]
 rayleigh_color = Color(0.280754, 0.49133283, 0.8741724, 1)
@@ -19,11 +17,10 @@ ambient_light_source = 3
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 2.3
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ig7tw"]
+
 [node name="world" type="Node3D" unique_id=448571820]
 script = ExtResource("1_worldgen")
-
-[node name="car" parent="." unique_id=333287723 instance=ExtResource("2_h2yge")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 0)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1568049481]
 transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 0, 0)
@@ -32,7 +29,11 @@ transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70
 environment = SubResource("Environment_h2yge")
 
 [node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1817401376]
-size = Vector3(200, 1, 200)
+use_collision = true
+size = Vector3(200, -1, 200)
+material = SubResource("StandardMaterial3D_ig7tw")
 
-[node name="Root Scene" parent="." unique_id=955285561 instance=ExtResource("2_0xm2m")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 67.19337, 42.902683, 112.17028)
+[node name="Camera3D" type="Camera3D" parent="." unique_id=2034400948]
+transform = Transform3D(1, 0, 0, 0, 0.7965299, 0.6045991, 0, -0.6045991, 0.7965299, 0.09, 6.73, 0)
+h_offset = 0.19
+fov = 118.125
