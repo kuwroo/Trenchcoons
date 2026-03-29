@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://sya5tdr2k45a"]
 
 [ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
+[ext_resource type="PackedScene" uid="uid://clycuvpm41v0w" path="res://assets/geodesic_dome.glb" id="2_0xm2m"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ig7tw"]
 rayleigh_color = Color(0.280754, 0.49133283, 0.8741724, 1)
@@ -28,3 +29,6 @@ environment = SubResource("Environment_h2yge")
 
 [node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1817401376]
 size = Vector3(200, 1, 200)
+
+[node name="Root Scene" parent="." unique_id=955285561 instance=ExtResource("2_0xm2m")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 67.19337, 42.902683, 112.17028)
