@@ -7,22 +7,35 @@
 [sub_resource type="BoxShape3D" id="BoxShape3D_ig7tw"]
 size = Vector3(50, 1, 50)
 
-[node name="world" type="Node3D" unique_id=1567316246]
+[ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
+[ext_resource type="PackedScene" uid="uid://clycuvpm41v0w" path="res://assets/geodesic_dome.glb" id="2_0xm2m"]
 
-[node name="car" parent="." unique_id=1917704272 instance=ExtResource("1_ig7tw")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+[sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ig7tw"]
+rayleigh_color = Color(0.280754, 0.49133283, 0.8741724, 1)
+mie_color = Color(0.7223962, 0.8542478, 1, 1)
+sun_disk_scale = 0.0
 
-[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1910762810]
+[sub_resource type="Sky" id="Sky_0xm2m"]
+sky_material = SubResource("PhysicalSkyMaterial_ig7tw")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="StaticBody3D" unique_id=1599254868]
-mesh = SubResource("PlaneMesh_7dm0k")
+[sub_resource type="Environment" id="Environment_h2yge"]
+background_mode = 2
+sky = SubResource("Sky_0xm2m")
+ambient_light_source = 3
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 2.3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1111301115]
-shape = SubResource("BoxShape3D_ig7tw")
+[node name="world" type="Node3D" unique_id=448571820]
+script = ExtResource("1_worldgen")
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=703796746]
-transform = Transform3D(1, 0, 0, 0, 0.8660254, 0.5, 0, -0.5, 0.8660254, 0, 4, 6)
-current = true
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1568049481]
+transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 0, 0)
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=459666706]
-transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 0, 0)
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1208101335]
+environment = SubResource("Environment_h2yge")
+
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1817401376]
+size = Vector3(200, 1, 200)
+
+[node name="Root Scene" parent="." unique_id=955285561 instance=ExtResource("2_0xm2m")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 67.19337, 42.902683, 112.17028)
