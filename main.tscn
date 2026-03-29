@@ -1,12 +1,5 @@
 [gd_scene format=3 uid="uid://sya5tdr2k45a"]
 
-[ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="1_ig7tw"]
-
-[sub_resource type="PlaneMesh" id="PlaneMesh_7dm0k"]
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_ig7tw"]
-size = Vector3(50, 1, 50)
-
 [ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
 [ext_resource type="PackedScene" uid="uid://clycuvpm41v0w" path="res://assets/geodesic_dome.glb" id="2_0xm2m"]
 
