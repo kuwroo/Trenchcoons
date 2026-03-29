@@ -159,8 +159,8 @@ func _build_road_loop() -> void:
 		for sz in [-r, r]:
 			for col in nt:
 				for row in nt:
-					var px := sx - half + col * t
-					var pz := sz - half + (row + 1) * t
+					var px: float = sx - half + col * t
+					var pz: float = sz - half + (row + 1) * t
 					_place_tile(_corner, Vector3(px, road_y, pz), 0.0)
 
 	# ── Invisible collision boxes  (one per road section) ─────────────
