@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
 [ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="2_0xm2m"]
+[ext_resource type="AudioStream" uid="uid://cko7o5q3hw1m0" path="res://audio/music.mp3" id="3_h2yge"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ig7tw"]
 rayleigh_color = Color(0.280754, 0.49133283, 0.8741724, 1)
@@ -36,3 +37,8 @@ environment = SubResource("Environment_h2yge")
 use_collision = true
 size = Vector3(200, -1, 200)
 material = SubResource("StandardMaterial3D_ig7tw")
+
+[node name="Music" type="AudioStreamPlayer3D" parent="." unique_id=1501359311]
+stream = ExtResource("3_h2yge")
+volume_db = -16.0
+autoplay = true
