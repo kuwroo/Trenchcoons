@@ -2,14 +2,13 @@
 
 [ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
 [ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="2_0xm2m"]
+[ext_resource type="PackedScene" uid="uid://ddjjpo8odyygy" path="res://assets/world.glb" id="3_h2yge"]
+[ext_resource type="Shader" uid="uid://8vp2nkh6edoq" path="res://main.gdshader" id="4_1bvp3"]
 
-[sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ig7tw"]
-rayleigh_color = Color(0.280754, 0.49133283, 0.8741724, 1)
-mie_color = Color(0.7223962, 0.8542478, 1, 1)
-sun_disk_scale = 0.0
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1bvp3"]
 
 [sub_resource type="Sky" id="Sky_0xm2m"]
-sky_material = SubResource("PhysicalSkyMaterial_ig7tw")
+sky_material = SubResource("ProceduralSkyMaterial_1bvp3")
 
 [sub_resource type="Environment" id="Environment_h2yge"]
 background_mode = 2
@@ -18,21 +17,36 @@ ambient_light_source = 3
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 2.3
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ig7tw"]
+[sub_resource type="PlaneMesh" id="PlaneMesh_lquwl"]
+uv2_padding = 2.13
+size = Vector2(300, 300)
+subdivide_width = 20
+subdivide_depth = 20
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_7mycd"]
+render_priority = 0
+shader = ExtResource("4_1bvp3")
+shader_parameter/albedo = Color(0.3, 0.6, 0.9, 0.8)
+shader_parameter/noise_scale = 10.0
+shader_parameter/transparency = 0.6
 
 [node name="world" type="Node3D" unique_id=448571820]
 script = ExtResource("1_worldgen")
 
 [node name="car" parent="." unique_id=333287723 instance=ExtResource("2_0xm2m")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0031738281, 33.57218, 1.9073486e-06)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1568049481]
-transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 0, 0)
+transform = Transform3D(-0.55106443, -0.8021265, 0.2300457, 0.087886065, -0.32993734, -0.9399029, 0.8298218, -0.49772933, 0.2523124, 9.060478, 151.7963, 10.90235)
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1208101335]
 environment = SubResource("Environment_h2yge")
 
-[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1817401376]
-use_collision = true
-size = Vector3(200, -1, 200)
-material = SubResource("StandardMaterial3D_ig7tw")
+[node name="world" parent="." unique_id=367127840 instance=ExtResource("3_h2yge")]
+transform = Transform3D(9.280379, 0, -3.7248573, 0, 10, 0, 3.7248573, 0, 9.280379, 1, 17.695854, 1)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=2047096607]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24.609863, 0)
+cast_shadow = 0
+mesh = SubResource("PlaneMesh_lquwl")
+surface_material_override/0 = SubResource("ShaderMaterial_7mycd")
