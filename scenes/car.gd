@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+@onready var groun = get_parent().get_node("Ground")
+
 var speed = 0.0
 var max_speed = 20.0
 var acceleration = 30.0
@@ -8,7 +10,7 @@ var turn_speed = 2.5
 
 func _physics_process(delta):
 
-	# PLAYER 2 — movement
+	# acceleration
 	if Input.is_action_pressed("accelerate"):
 		speed += acceleration * delta
 	elif Input.is_action_pressed("brake"):
@@ -18,16 +20,15 @@ func _physics_process(delta):
 
 	speed = clamp(speed, -max_speed, max_speed)
 
-	# PLAYER 1 — steering
+	# steering
 	var turn = 0.0
 	if Input.is_action_pressed("steer_left"):
 		turn += 1
 	if Input.is_action_pressed("steer_right"):
 		turn -= 1
 
-	# harder to control at high speed = FUN
 	rotation.y += turn * turn_speed * delta * (speed / max_speed)
 
-	# move forward
-	velocity = -transform.basis.z * speed
-	move_and_slide()
+	# ⭐ MOVE WORLD INSTEAD OF PLAYER
+	var forward = -transform.basis.z
+	groun.global_position += forward * speed * delta
