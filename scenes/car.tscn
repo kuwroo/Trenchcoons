@@ -1,76 +1,42 @@
 [gd_scene format=3 uid="uid://cxyueaq1qtcuc"]
 
 [ext_resource type="Script" uid="uid://cvs8hgscw3a5m" path="res://scenes/car.gd" id="1_c35m8"]
+[ext_resource type="PackedScene" uid="uid://bxqx5631ja1a2" path="res://assets/low_poly_raccoon.glb" id="2_3mrxu"]
 [ext_resource type="AudioStream" uid="uid://c0mwagg8w8s4d" path="res://audio/engine.mp3" id="2_qt2eu"]
+[ext_resource type="PackedScene" uid="uid://dyeebrgccfujm" path="res://assets/cardboard_box.glb" id="3_cp117"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_b0jew"]
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_qt2eu"]
-
-[sub_resource type="SphereMesh" id="SphereMesh_c35m8"]
-
-[sub_resource type="SphereMesh" id="SphereMesh_qt2eu"]
-
-[sub_resource type="SphereMesh" id="SphereMesh_50v30"]
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_jtldb"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jtldb"]
+radius = 0.86816406
+height = 2.5638428
 
 [node name="car" type="CharacterBody3D" unique_id=333287723 groups=["player"]]
 script = ExtResource("1_c35m8")
+
+[node name="Sketchfab_Scene2" parent="." unique_id=1188401011 instance=ExtResource("2_3mrxu")]
+transform = Transform3D(-0.041859094, 0.02946166, -0.5978125, 0.34533724, 0.4906548, -2.2563091e-09, 0.48886606, -0.34407827, -0.051187612, -0.13099003, 0.46455196, 1.3491786)
+
+[node name="Sketchfab_Scene" parent="." unique_id=425322157 instance=ExtResource("3_cp117")]
+transform = Transform3D(-2.6999729, 0, 0.0120167285, 0, 2.6999998, 0, -0.0120167285, 0, -2.6999729, 10.019368, -1.5508561, 6.423937)
+
+[node name="Sketchfab_Scene3" parent="." unique_id=714709553 instance=ExtResource("2_3mrxu")]
+transform = Transform3D(0.014595609, 0.040382512, -0.5984615, 0.15440245, 0.57821244, 0.042781804, 0.5796093, -0.15504725, 0.0036736736, -0.07612419, 1.4628555, 0.8862083)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=369883415]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 mesh = SubResource("BoxMesh_b0jew")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=714274956]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.496737, 0)
-shape = SubResource("BoxShape3D_qt2eu")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3041711, 0.036896944)
+shape = SubResource("CapsuleShape3D_jtldb")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1109319638]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 8)
+transform = Transform3D(1, 0, 0, 0, 0.85214734, 0.52330196, 0, -0.52330196, 0.85214734, 0, 6.7287474, 6.376828)
 current = true
 
 [node name="SpringArm3D" type="SpringArm3D" parent="Camera3D" unique_id=1769846328]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.383999, -2.0053933, 5.346817)
-
-[node name="Raccoons" type="Node3D" parent="." unique_id=1072252691]
-
-[node name="RaccoonBottom" type="Node3D" parent="Raccoons" unique_id=1547385969]
-
-[node name="Head" type="MeshInstance3D" parent="Raccoons/RaccoonBottom" unique_id=494921893]
-transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0.0065625906, 0.9955225, 0.027224302)
-mesh = SubResource("SphereMesh_c35m8")
-
-[node name="EarLeft" type="MeshInstance3D" parent="Raccoons/RaccoonBottom" unique_id=1394189114]
-transform = Transform3D(0.170408, 0, 0.057975102, 0.01145921, -0.17644882, -0.033682406, 0.056831323, 0.03557833, -0.16704604, -0.17916375, 1.2795458, -0.043657877)
-mesh = SubResource("SphereMesh_qt2eu")
-
-[node name="EarRight" type="MeshInstance3D" parent="Raccoons/RaccoonBottom" unique_id=1685225288]
-transform = Transform3D(0.17751583, 0, 0.029801521, 0, 0.18, 0, -0.029801521, 0, 0.17751583, 0.17829813, 1.25, -0.07256589)
-mesh = SubResource("SphereMesh_50v30")
-
-[node name="Body" type="MeshInstance3D" parent="Raccoons/RaccoonBottom" unique_id=2130817478]
-transform = Transform3D(0.35, 0, 0, 0, 0.35, 0, 0, 0, 0.35, -0.25, 0.6, 0)
-mesh = SubResource("CapsuleMesh_jtldb")
-
-[node name="RaccoonTop" type="Node3D" parent="Raccoons" unique_id=1782178460]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.15, 0.75, -0.002)
-
-[node name="Head" type="MeshInstance3D" parent="Raccoons/RaccoonTop" unique_id=1274306046]
-transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, -0.115472466, 0.8414941, 0.22955394)
-mesh = SubResource("SphereMesh_c35m8")
-
-[node name="EarLeft" type="MeshInstance3D" parent="Raccoons/RaccoonTop" unique_id=905989727]
-transform = Transform3D(0.16671658, -0.0021211805, 0.067831255, 0.011459211, -0.17644882, -0.03368241, 0.06688995, 0.03551504, -0.16329242, -0.2382865, 1.1240355, 0.2009663)
-mesh = SubResource("SphereMesh_qt2eu")
-
-[node name="EarRight" type="MeshInstance3D" parent="Raccoons/RaccoonTop" unique_id=731894538]
-transform = Transform3D(0.17999996, 0, 0, 0, 0.17999998, 0, 0, 0, 0.18000002, 0.053089052, 1.09083, 0.18158469)
-mesh = SubResource("SphereMesh_50v30")
-
-[node name="Body" type="MeshInstance3D" parent="Raccoons/RaccoonTop" unique_id=411885042]
-transform = Transform3D(0.34999996, 0, 0, 0, 0.34999996, 0, 0, 0, 0.35, -0.11695877, 0.39273918, 0.20575923)
-mesh = SubResource("CapsuleMesh_jtldb")
 
 [node name="EngineSound" type="AudioStreamPlayer3D" parent="." unique_id=1622341207]
 stream = ExtResource("2_qt2eu")
