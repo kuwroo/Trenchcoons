@@ -4,9 +4,14 @@
 [ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="2_0xm2m"]
 [ext_resource type="PackedScene" uid="uid://ddjjpo8odyygy" path="res://assets/world.glb" id="3_h2yge"]
 [ext_resource type="Shader" uid="uid://8vp2nkh6edoq" path="res://main.gdshader" id="4_1bvp3"]
-[ext_resource type="PackedScene" uid="uid://dp6hcm1p2ge85" path="res://treeobstacle.tscn" id="4_lquwl"]
-[ext_resource type="PackedScene" uid="uid://bau03mmbk1tda" path="res://logobstacle.tscn" id="5_7mycd"]
-[ext_resource type="PackedScene" uid="uid://fyvljtysvggq" path="res://fox.tscn" id="6_272bh"]
+[ext_resource type="PackedScene" path="res://treeobstacle.tscn" id="4_lquwl"]
+[ext_resource type="PackedScene" path="res://logobstacle.tscn" id="5_7mycd"]
+[ext_resource type="PackedScene" path="res://fox.tscn" id="6_272bh"]
+[ext_resource type="PackedScene" uid="uid://54xkojkxpw0a" path="res://startScreen.tscn" id="8_4c57u"]
+[ext_resource type="Script" uid="uid://o42bjjbywejr" path="res://start_screen.gd" id="9_dg77c"]
+[ext_resource type="Texture2D" uid="uid://bdgbxwnw3ld4" path="res://assets/raccoon.png" id="9_efxa6"]
+[ext_resource type="Texture2D" uid="uid://pw0fdxvex6hc" path="res://assets/bg.png" id="10_dg77c"]
+[ext_resource type="FontFile" uid="uid://bmg64fsoctcow" path="res://assets/Minecraft.ttf" id="12_dg77c"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1bvp3"]
 
@@ -32,6 +37,43 @@ shader = ExtResource("4_1bvp3")
 shader_parameter/albedo = Color(0.3, 0.6, 0.9, 0.8)
 shader_parameter/noise_scale = 10.0
 shader_parameter/transparency = 0.6
+
+[sub_resource type="Animation" id="Animation_4c57u"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath(".:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(0, -70)]
+}
+
+[sub_resource type="Animation" id="Animation_efxa6"]
+resource_name = "float"
+length = 1.5
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath(".:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0.033333335, 0.73333335),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [Vector2(0, -70), Vector2(0, -70)]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_dg77c"]
+_data = {
+&"RESET": SubResource("Animation_4c57u"),
+&"float": SubResource("Animation_efxa6")
+}
 
 [node name="world" type="Node3D" unique_id=448571820]
 script = ExtResource("1_worldgen")
@@ -115,3 +157,38 @@ transform = Transform3D(10, 0, 0, 0, 10, 0, 0, 0, 10, 0, -109.04883, 0)
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_lquwl")
 surface_material_override/0 = SubResource("ShaderMaterial_7mycd")
+
+[node name="CanvasLayer" parent="." unique_id=1105722141 instance=ExtResource("8_4c57u")]
+script = ExtResource("9_dg77c")
+
+[node name="bg" type="TextureRect" parent="CanvasLayer" unique_id=808598939]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("10_dg77c")
+expand_mode = 1
+
+[node name="raccoon" type="TextureRect" parent="CanvasLayer" unique_id=890340069]
+offset_top = -70.0
+offset_right = 950.0
+offset_bottom = 712.0
+texture = ExtResource("9_efxa6")
+expand_mode = 2
+stretch_mode = 5
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="CanvasLayer/raccoon" unique_id=432784971]
+libraries/ = SubResource("AnimationLibrary_dg77c")
+
+[node name="Label" type="Label" parent="CanvasLayer" unique_id=2009698135]
+anchors_preset = -1
+anchor_right = 0.18
+anchor_bottom = 0.094000004
+offset_left = 152.0
+offset_top = 547.0
+offset_right = 825.64
+offset_bottom = 566.088
+theme_override_fonts/font = ExtResource("12_dg77c")
+theme_override_font_sizes/font_size = 60
+text = "PRESS SPACE TO START"
