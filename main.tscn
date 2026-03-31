@@ -185,10 +185,21 @@ libraries/ = SubResource("AnimationLibrary_dg77c")
 anchors_preset = -1
 anchor_right = 0.18
 anchor_bottom = 0.094000004
-offset_left = 152.0
-offset_top = 547.0
-offset_right = 825.64
-offset_bottom = 566.088
+offset_left = 191.0
+offset_top = 471.0
+offset_right = 864.64
+offset_bottom = 490.088
 theme_override_fonts/font = ExtResource("12_dg77c")
 theme_override_font_sizes/font_size = 60
 text = "PRESS SPACE TO START"
+
+[node name="Label2" type="Label" parent="CanvasLayer" unique_id=1856149290]
+offset_left = 35.0
+offset_top = 556.0
+offset_right = 650.0
+offset_bottom = 628.0
+theme_override_fonts/font = ExtResource("12_dg77c")
+theme_override_font_sizes/font_size = 21
+text = "HELP US GET OUR DRIVING LISENCE!!
+Player 1: Controls Steering (A & D)
+Player 2: Controls Accelerator and Brake (Up Down Arrows)"
