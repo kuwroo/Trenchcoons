@@ -4,10 +4,11 @@ extends CharacterBody3D
 @onready var engine_sound = $EngineSound
 
 var speed = 0.0
-var max_speed = 35.0        # 🔥 faster top speed
-var acceleration = 60.0     # 🔥 quicker acceleration
+var max_speed = 50.0
+var acceleration = 60.0
 var friction = 8.0
-var turn_speed = 4.5        # 🔥 more sensitive steering
+var turn_speed = 4.5
+var gravity = 40.0   
 
 func _physics_process(delta):
 
@@ -42,17 +43,26 @@ func _physics_process(delta):
 	# 😈 harder to control at higher speed
 	rotation.y += turn * turn_speed * delta * (speed / max_speed) * 2.0
 
-	# 🚗 Movement forward
-	velocity = transform.basis.z * speed
+	# 🚗 Movement forward (IMPORTANT FIX)
+	var forward = transform.basis.z   # since you flipped orientation
+	velocity.x = forward.x * speed
+	velocity.z = forward.z * speed
+
+	# 🌍 Gravity (CORRECT handling)
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	else:
+		velocity.y = 0
+
 	move_and_slide()
 
 	# 🎥 Camera follow
-	var offset = -transform.basis.z * 10 + Vector3(0, 6, 0)
+	var offset = -transform.basis.z * 10 + Vector3(0, 4, 0)
 	var target_pos = global_transform.origin + offset
 	cam.global_transform.origin = cam.global_transform.origin.lerp(target_pos, 0.1)
 	cam.look_at(global_transform.origin)
 
-	# 🔊 Engine pitch changes with speed (VERY NICE EFFECT)
+	# 🔊 Engine pitch changes with speed
 	engine_sound.pitch_scale = 0.8 + (abs(speed) / max_speed)
 
 	# 🔄 Respawn if fall

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cfb8f5c1asigr"
-path="res://.godot/imported/road_corner.gltf-57d2041f4fe4c462ac34d6363271b5ef.scn"
+uid="uid://daoho5c428ooh"
+path="res://.godot/imported/Log.blend.glb-da93682f6f27e07eaab3dfa98bfd40ee.scn"
 
 [deps]
 
-source_file="res://assets/road_corner.gltf"
-dest_files=["res://.godot/imported/road_corner.gltf-57d2041f4fe4c462ac34d6363271b5ef.scn"]
+source_file="res://assets/Log.blend.glb"
+dest_files=["res://.godot/imported/Log.blend.glb-da93682f6f27e07eaab3dfa98bfd40ee.scn"]
 
 [params]
 

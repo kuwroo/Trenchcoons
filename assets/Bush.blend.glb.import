@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://clycuvpm41v0w"
-path="res://.godot/imported/geodesic_dome.glb-02a73d04407a7c6b10667e30c2ebbbad.scn"
+uid="uid://b40u2tshwt1tf"
+path="res://.godot/imported/Bush.blend.glb-a9acfe7fbb28b4f2521a9decbbbc7c0b.scn"
 
 [deps]
 
-source_file="res://assets/geodesic_dome.glb"
-dest_files=["res://.godot/imported/geodesic_dome.glb-02a73d04407a7c6b10667e30c2ebbbad.scn"]
+source_file="res://assets/Bush.blend.glb"
+dest_files=["res://.godot/imported/Bush.blend.glb-a9acfe7fbb28b4f2521a9decbbbc7c0b.scn"]
 
 [params]
 

@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="2_0xm2m"]
 [ext_resource type="PackedScene" uid="uid://ddjjpo8odyygy" path="res://assets/world.glb" id="3_h2yge"]
 [ext_resource type="Shader" uid="uid://8vp2nkh6edoq" path="res://main.gdshader" id="4_1bvp3"]
+[ext_resource type="PackedScene" uid="uid://dp6hcm1p2ge85" path="res://treeobstacle.tscn" id="4_lquwl"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1bvp3"]
 
@@ -34,7 +35,7 @@ shader_parameter/transparency = 0.6
 script = ExtResource("1_worldgen")
 
 [node name="car" parent="." unique_id=333287723 instance=ExtResource("2_0xm2m")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0031738281, 33.57218, 1.9073486e-06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.003, 75, 0)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1568049481]
 transform = Transform3D(-0.55106443, -0.8021265, 0.2300457, 0.087886065, -0.32993734, -0.9399029, 0.8298218, -0.49772933, 0.2523124, 9.060478, 151.7963, 10.90235)
@@ -43,10 +44,15 @@ transform = Transform3D(-0.55106443, -0.8021265, 0.2300457, 0.087886065, -0.3299
 environment = SubResource("Environment_h2yge")
 
 [node name="world" parent="." unique_id=367127840 instance=ExtResource("3_h2yge")]
-transform = Transform3D(9.280379, 0, -3.7248573, 0, 10, 0, 3.7248573, 0, 9.280379, 1, 17.695854, 1)
+transform = Transform3D(27.841139, 0, -11.174571, 0, 30, 0, 11.174571, 0, 27.841139, 1, 17.695854, 1)
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=2047096607]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24.609863, 0)
+[node name="Obstacles" type="Node3D" parent="world" unique_id=1658804604]
+
+[node name="StaticBody3D" parent="world/Obstacles" unique_id=599869102 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 1, 4.9897876, 0.76666665, 5.8992295)
+
+[node name="water" type="MeshInstance3D" parent="." unique_id=2047096607]
+transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, 0, 24.609863, 0)
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_lquwl")
 surface_material_override/0 = SubResource("ShaderMaterial_7mycd")
