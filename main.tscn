@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://dp6hcm1p2ge85" path="res://treeobstacle.tscn" id="4_lquwl"]
 [ext_resource type="PackedScene" uid="uid://bau03mmbk1tda" path="res://logobstacle.tscn" id="5_7mycd"]
 [ext_resource type="PackedScene" uid="uid://fyvljtysvggq" path="res://fox.tscn" id="6_272bh"]
+[ext_resource type="PackedScene" uid="uid://bo21htrimlolj" path="res://death_ui.tscn" id="8_5vw27"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1bvp3"]
 
@@ -115,3 +116,6 @@ transform = Transform3D(10, 0, 0, 0, 10, 0, 0, 0, 10, 0, -109.04883, 0)
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_lquwl")
 surface_material_override/0 = SubResource("ShaderMaterial_7mycd")
+
+[node name="DeathUI" parent="." unique_id=1569431654 groups=["death_ui"] instance=ExtResource("8_5vw27")]
+process_mode = 3

@@ -15,6 +15,8 @@
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_jtldb"]
 
+[sub_resource type="SphereShape3D" id="SphereShape3D_qt2eu"]
+
 [node name="car" type="CharacterBody3D" unique_id=333287723 groups=["player"]]
 script = ExtResource("1_c35m8")
 
@@ -25,13 +27,6 @@ mesh = SubResource("BoxMesh_b0jew")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=714274956]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.496737, 0)
 shape = SubResource("BoxShape3D_qt2eu")
-
-[node name="Camera3D" type="Camera3D" parent="." unique_id=1109319638]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 8)
-current = true
-
-[node name="SpringArm3D" type="SpringArm3D" parent="Camera3D" unique_id=1769846328]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.383999, -2.0053933, 5.346817)
 
 [node name="Raccoons" type="Node3D" parent="." unique_id=1072252691]
 
@@ -75,3 +70,12 @@ mesh = SubResource("CapsuleMesh_jtldb")
 [node name="EngineSound" type="AudioStreamPlayer3D" parent="." unique_id=1622341207]
 stream = ExtResource("2_qt2eu")
 volume_db = -10.0
+
+[node name="SpringArm3D" type="SpringArm3D" parent="." unique_id=880440844]
+transform = Transform3D(-1, 3.6946464e-08, -7.923194e-08, 0, 0.90630776, 0.42261827, 8.742278e-08, 0.42261827, -0.90630776, 0, 4, 0)
+shape = SubResource("SphereShape3D_qt2eu")
+spring_length = 10.0
+
+[node name="Camera3D" type="Camera3D" parent="SpringArm3D" unique_id=1109319638]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 8)
+current = true

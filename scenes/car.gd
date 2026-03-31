@@ -1,18 +1,19 @@
 extends CharacterBody3D
 
-@onready var cam = $Camera3D
+@onready var spring_arm = $SpringArm3D
+@onready var cam = $SpringArm3D/Camera3D
 @onready var engine_sound = $EngineSound
 
 var speed = 0.0
-var max_speed = 50.0
+var max_speed = 35.0
 var acceleration = 60.0
 var friction = 8.0
 var turn_speed = 4.5
-var gravity = 40.0   
+var gravity = 30.0
 
 func _physics_process(delta):
 
-	# 🚗 Movement (Player 2)
+	# 🚗 Movement
 	if Input.is_action_pressed("accelerate"):
 		speed += acceleration * delta
 		
@@ -33,20 +34,18 @@ func _physics_process(delta):
 
 	speed = clamp(speed, -max_speed, max_speed)
 
-	# 🎮 Steering (Player 1)
+	# 🎮 Steering
 	var turn = 0.0
 	if Input.is_action_pressed("steer_left"):
 		turn += 1
 	if Input.is_action_pressed("steer_right"):
 		turn -= 1
 
-	# 😈 harder to control at higher speed
 	rotation.y += turn * turn_speed * delta * (speed / max_speed) * 2.0
 
-	# 🚗 Movement forward (IMPORTANT FIX)
-	var forward = transform.basis.z   # since you flipped orientation
-	velocity.x = forward.x * speed
-	velocity.z = forward.z * speed
+	# 🚗 Movement forward
+	velocity.x = transform.basis.z.x * speed
+	velocity.z = transform.basis.z.z * speed
 
 	# 🌍 Gravity
 	if not is_on_floor():
@@ -56,16 +55,23 @@ func _physics_process(delta):
 
 	move_and_slide()
 
-	# 🎥 Camera follow
-	var offset = -transform.basis.z * 10 + Vector3(0, 4, 0)
-	var target_pos = global_transform.origin + offset
-	cam.global_transform.origin = cam.global_transform.origin.lerp(target_pos, 0.1)
+	# 🎥 Camera always looks at car
 	cam.look_at(global_transform.origin)
 
-	# 🔊 Engine pitch changes with speed
+	# 🔊 Engine pitch
 	engine_sound.pitch_scale = 0.8 + (abs(speed) / max_speed)
 
-	# 🔄 Respawn if fall
+	# 🌊 Water death
 	if global_position.y < 0:
-		global_position = Vector3(0, 3, -60)
-		speed = 0
+		die()
+
+
+func die():
+	if get_tree().paused:
+		return
+
+	get_tree().paused = true
+
+	var ui = get_tree().get_first_node_in_group("death_ui")
+	if ui:
+		ui.show_death_screen()
