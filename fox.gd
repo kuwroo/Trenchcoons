@@ -1,7 +1,7 @@
 extends CharacterBody3D
 
 @export var speed = 40.0
-@export var detection_range = 150.0
+@export var detection_range = 80.0
 
 # 🔥 Adjust this path if your node name differs
 @onready var anim = $Sketchfab_Scene2/AnimationPlayer

@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://c7cdr4y17m3wd"
-valid=false
+path="res://.godot/imported/bushclean.blend-4e6b190014d964d15e910a1633d2b2ca.scn"
 
 [deps]
 
 source_file="res://assets/bushclean.blend"
+dest_files=["res://.godot/imported/bushclean.blend-4e6b190014d964d15e910a1633d2b2ca.scn"]
 
 [params]
 

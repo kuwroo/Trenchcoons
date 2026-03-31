@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://oo7cyaqqq7vd"
-valid=false
+path="res://.godot/imported/rockclean.blend-0a44134648a0427726546e245edc2ce1.scn"
 
 [deps]
 
 source_file="res://assets/rockclean.blend"
+dest_files=["res://.godot/imported/rockclean.blend-0a44134648a0427726546e245edc2ce1.scn"]
 
 [params]
 

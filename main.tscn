@@ -3,16 +3,16 @@
 [ext_resource type="Script" uid="uid://tn2eu7lsuly4" path="res://scripts/world_gen.gd" id="1_worldgen"]
 [ext_resource type="PackedScene" uid="uid://cxyueaq1qtcuc" path="res://scenes/car.tscn" id="2_0xm2m"]
 [ext_resource type="PackedScene" uid="uid://ddjjpo8odyygy" path="res://assets/world.glb" id="3_h2yge"]
-[ext_resource type="Shader" uid="uid://8vp2nkh6edoq" path="res://main.gdshader" id="4_1bvp3"]
+[ext_resource type="Shader" path="res://main.gdshader" id="4_1bvp3"]
 [ext_resource type="PackedScene" path="res://treeobstacle.tscn" id="4_lquwl"]
 [ext_resource type="PackedScene" path="res://logobstacle.tscn" id="5_7mycd"]
 [ext_resource type="PackedScene" path="res://fox.tscn" id="6_272bh"]
-[ext_resource type="PackedScene" uid="uid://54xkojkxpw0a" path="res://startScreen.tscn" id="8_4c57u"]
-[ext_resource type="Script" uid="uid://o42bjjbywejr" path="res://start_screen.gd" id="9_dg77c"]
+[ext_resource type="PackedScene" path="res://startScreen.tscn" id="8_4c57u"]
+[ext_resource type="PackedScene" path="res://death_ui.tscn" id="8_5vw27"]
+[ext_resource type="Script" path="res://start_screen.gd" id="9_dg77c"]
 [ext_resource type="Texture2D" uid="uid://bdgbxwnw3ld4" path="res://assets/raccoon.png" id="9_efxa6"]
 [ext_resource type="Texture2D" uid="uid://pw0fdxvex6hc" path="res://assets/bg.png" id="10_dg77c"]
 [ext_resource type="FontFile" uid="uid://bmg64fsoctcow" path="res://assets/Minecraft.ttf" id="12_dg77c"]
-[ext_resource type="PackedScene" uid="uid://bo21htrimlolj" path="res://death_ui.tscn" id="8_5vw27"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1bvp3"]
 
@@ -132,11 +132,23 @@ transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 6.9244323, 0.6428546, 5
 [node name="tree12" parent="world/Obstacles" unique_id=1932757976 instance=ExtResource("4_lquwl")]
 transform = Transform3D(1, 0, 0, 0, 0.9999989, 0, 0, 0, 1, 5.2116137, 0.92328095, 1.7096056)
 
+[node name="tree23" parent="world/Obstacles" unique_id=1614025291 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.99999875, 0, 0, 0, 1, 4.0194893, 0.40812093, -1.2605362)
+
+[node name="tree21" parent="world/Obstacles" unique_id=1446013617 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.99999887, 0, 0, 0, 1, -0.4346494, 0.9232809, 3.9758408)
+
 [node name="tree13" parent="world/Obstacles" unique_id=1676156385 instance=ExtResource("4_lquwl")]
 transform = Transform3D(0.4, 0, 0, 0, 0.4, 0, 0, 0, 0.4, 5.9090333, 0.4237554, 3.447208)
 
 [node name="tree14" parent="world/Obstacles" unique_id=1199453782 instance=ExtResource("4_lquwl")]
 transform = Transform3D(0.39999998, 0, -7.4505806e-08, 0, 0.3999999, 0, 7.4505806e-08, 0, 0.39999998, 3.7268414, 0.6694572, 2.7920341)
+
+[node name="tree20" parent="world/Obstacles" unique_id=1619063891 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.39999995, 0, -7.4505806e-08, 0, 0.39999986, 0, 7.4505806e-08, 0, 0.39999995, 2.076696, 0.66945714, -1.3192583)
+
+[node name="tree22" parent="world/Obstacles" unique_id=466881957 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.6, 0, -1.1175874e-07, 0, 0.6, 0, 1.1175874e-07, 0, 0.6, 1.1067843, 0.7270153, 0.16956936)
 
 [node name="tree15" parent="world/Obstacles" unique_id=1008938182 instance=ExtResource("5_7mycd")]
 transform = Transform3D(0.3, 0, -7.450581e-09, 0, 0.29999998, 0, 7.450581e-09, 0, 0.3, 1.06006, 1.33115, 2.6411116)
@@ -152,6 +164,15 @@ transform = Transform3D(-7.450581e-09, 0, 0.19999996, 0, 0.19999993, 0, -0.19999
 
 [node name="Fox" parent="world/Obstacles" unique_id=1405790744 instance=ExtResource("6_272bh")]
 transform = Transform3D(0.2, 0, -4.4703487e-08, 0, 0.2, 0, 4.4703487e-08, 0, 0.2, 6.1711364, 0.81633246, 2.8643765)
+
+[node name="Fox4" parent="world/Obstacles" unique_id=343343977 instance=ExtResource("6_272bh")]
+transform = Transform3D(0.2, 0, -6.7055225e-08, 0, 0.19999996, 0, 6.7055225e-08, 0, 0.2, 3.143629, 1.2740905, 1.5695193)
+
+[node name="Fox2" parent="world/Obstacles" unique_id=1846958999 instance=ExtResource("6_272bh")]
+transform = Transform3D(0.2, 0, -6.7055225e-08, 0, 0.19999996, 0, 6.7055225e-08, 0, 0.2, 2.4773421, 1.0766791, 4.346951)
+
+[node name="Fox3" parent="world/Obstacles" unique_id=730662844 instance=ExtResource("6_272bh")]
+transform = Transform3D(0.19999996, 0, -8.940697e-08, 0, 0.19999993, 0, 8.940697e-08, 0, 0.19999996, 1.6732469, 1.4035027, 2.3435707)
 
 [node name="water" type="MeshInstance3D" parent="." unique_id=2047096607]
 transform = Transform3D(10, 0, 0, 0, 10, 0, 0, 0, 10, 0, -109.04883, 0)
@@ -206,4 +227,3 @@ Player 1: Controls Steering (A & D)
 Player 2: Controls Accelerator and Brake (Up Down Arrows)"
 
 [node name="DeathUI" parent="." unique_id=1569431654 groups=["death_ui"] instance=ExtResource("8_5vw27")]
-process_mode = 3
