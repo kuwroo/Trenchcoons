@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://bau03mmbk1tda"]
+
+[ext_resource type="PackedScene" uid="uid://v3qgyq75p08t" path="res://assets/logclean.blend" id="1_lfpj5"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_43l2m"]
+
+[node name="StaticBody3D" type="StaticBody3D" unique_id=1008938182]
+
+[node name="logclean" parent="." unique_id=424530795 instance=ExtResource("1_lfpj5")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=538700539]
+transform = Transform3D(1.9, 0, 0, 0, -8.305164e-08, -1.9, 0, 1.9, -8.305164e-08, -1.5, 0, 0)
+shape = SubResource("CylinderShape3D_43l2m")

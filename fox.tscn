@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://fyvljtysvggq"]
+
+[ext_resource type="PackedScene" uid="uid://1kwrptmjp2at" path="res://assets/low_poly_fox.glb" id="1_8x0u3"]
+[ext_resource type="Script" uid="uid://l7aabwrybaak" path="res://fox.gd" id="1_kpck0"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_kpck0"]
+
+[node name="Fox" type="CharacterBody3D" unique_id=1405790744]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.31090832, 0)
+script = ExtResource("1_kpck0")
+
+[node name="Sketchfab_Scene" parent="." unique_id=759895513 instance=ExtResource("1_8x0u3")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=440258644]
+transform = Transform3D(1.5285484e-15, 3.4969112e-08, 0.8, 0.8, -3.4969112e-08, 0, 3.4969112e-08, 0.8, -3.4969112e-08, 0, 0, 0)
+shape = SubResource("CapsuleShape3D_kpck0")

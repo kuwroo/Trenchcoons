@@ -5,7 +5,7 @@
 
 [sub_resource type="BoxMesh" id="BoxMesh_b0jew"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_c35m8"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_qt2eu"]
 
 [sub_resource type="SphereMesh" id="SphereMesh_c35m8"]
 
@@ -15,7 +15,7 @@
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_jtldb"]
 
-[node name="car" type="CharacterBody3D" unique_id=333287723]
+[node name="car" type="CharacterBody3D" unique_id=333287723 groups=["player"]]
 script = ExtResource("1_c35m8")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=369883415]
@@ -23,12 +23,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 mesh = SubResource("BoxMesh_b0jew")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=714274956]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
-shape = SubResource("CapsuleShape3D_c35m8")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.496737, 0)
+shape = SubResource("BoxShape3D_qt2eu")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1109319638]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 8)
 current = true
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Camera3D" unique_id=1769846328]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.383999, -2.0053933, 5.346817)
 
 [node name="Raccoons" type="Node3D" parent="." unique_id=1072252691]
 

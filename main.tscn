@@ -5,6 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://ddjjpo8odyygy" path="res://assets/world.glb" id="3_h2yge"]
 [ext_resource type="Shader" uid="uid://8vp2nkh6edoq" path="res://main.gdshader" id="4_1bvp3"]
 [ext_resource type="PackedScene" uid="uid://dp6hcm1p2ge85" path="res://treeobstacle.tscn" id="4_lquwl"]
+[ext_resource type="PackedScene" uid="uid://bau03mmbk1tda" path="res://logobstacle.tscn" id="5_7mycd"]
+[ext_resource type="PackedScene" uid="uid://fyvljtysvggq" path="res://fox.tscn" id="6_272bh"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1bvp3"]
 
@@ -35,24 +37,81 @@ shader_parameter/transparency = 0.6
 script = ExtResource("1_worldgen")
 
 [node name="car" parent="." unique_id=333287723 instance=ExtResource("2_0xm2m")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.003, 75, 0)
+transform = Transform3D(4, 0, 0, 0, 4, 0, 0, 0, 4, 324.20758, 58.11184, 368.3254)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1568049481]
-transform = Transform3D(-0.55106443, -0.8021265, 0.2300457, 0.087886065, -0.32993734, -0.9399029, 0.8298218, -0.49772933, 0.2523124, 9.060478, 151.7963, 10.90235)
+transform = Transform3D(0.3781166, -0.31242022, -0.87144804, 0.7605466, -0.43187106, 0.48482597, -0.5278226, -0.84609747, 0.07431252, 9.060478, 466.7114, 10.90235)
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1208101335]
 environment = SubResource("Environment_h2yge")
 
 [node name="world" parent="." unique_id=367127840 instance=ExtResource("3_h2yge")]
-transform = Transform3D(27.841139, 0, -11.174571, 0, 30, 0, 11.174571, 0, 27.841139, 1, 17.695854, 1)
+transform = Transform3D(55.682278, 0, -22.349142, 0, 60, 0, 22.349142, 0, 55.682278, 1, -1, 1)
 
 [node name="Obstacles" type="Node3D" parent="world" unique_id=1658804604]
 
-[node name="StaticBody3D" parent="world/Obstacles" unique_id=599869102 instance=ExtResource("4_lquwl")]
+[node name="tree1" parent="world/Obstacles" unique_id=599869102 instance=ExtResource("4_lquwl")]
 transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 1, 4.9897876, 0.76666665, 5.8992295)
 
+[node name="tree2" parent="world/Obstacles" unique_id=992119897 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.9999993, 0, 0, 0, 1, 5.0902214, 0.4840324, 3.7710795)
+
+[node name="tree3" parent="world/Obstacles" unique_id=655030181 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.9999991, 0, 0, 0, 1, 5.531322, 0.50181764, 4.66623)
+
+[node name="tree4" parent="world/Obstacles" unique_id=880069690 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.9999996, 0, 0, 0, 1, 6.780586, 1.0096359, -1.0288274)
+
+[node name="tree5" parent="world/Obstacles" unique_id=550590149 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.99999934, 0, 0, 0, 1, 7.6475005, 0.8131306, 1.1310675)
+
+[node name="tree6" parent="world/Obstacles" unique_id=387919667 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.5, 0, 0, 0, 0.49999997, 0, 0, 0, 0.5, 7.2160363, 0.8131305, 0.056086563)
+
+[node name="tree7" parent="world/Obstacles" unique_id=271794293 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.6, 0, -1.4901161e-08, 0, 0.59999996, 0, 1.4901161e-08, 0, 0.6, 8.07157, 0.6388186, -0.28729817)
+
+[node name="tree8" parent="world/Obstacles" unique_id=797015723 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.6, 0, -1.4901161e-08, 0, 0.59999996, 0, 1.4901161e-08, 0, 0.6, 6.410137, 0.8131305, 1.6277065)
+
+[node name="tree9" parent="world/Obstacles" unique_id=1905421496 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.6, 0, -5.9604645e-08, 0, 0.59999985, 0, 5.9604645e-08, 0, 0.6, 7.5938563, 0.72869706, 3.4239495)
+
+[node name="tree19" parent="world/Obstacles" unique_id=1885333982 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.54, 0, -5.3644182e-08, 0, 0.54, 0, 5.3644182e-08, 0, 0.54, 8.041587, 0.72313386, 2.3130925)
+
+[node name="tree10" parent="world/Obstacles" unique_id=818796645 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.99999917, 0, 0, 0, 1, 8.019396, 0.6428547, 4.5500336)
+
+[node name="tree11" parent="world/Obstacles" unique_id=1627218468 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 6.9244323, 0.6428546, 5.977044)
+
+[node name="tree12" parent="world/Obstacles" unique_id=1932757976 instance=ExtResource("4_lquwl")]
+transform = Transform3D(1, 0, 0, 0, 0.9999989, 0, 0, 0, 1, 5.2116137, 0.92328095, 1.7096056)
+
+[node name="tree13" parent="world/Obstacles" unique_id=1676156385 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.4, 0, 0, 0, 0.4, 0, 0, 0, 0.4, 5.9090333, 0.4237554, 3.447208)
+
+[node name="tree14" parent="world/Obstacles" unique_id=1199453782 instance=ExtResource("4_lquwl")]
+transform = Transform3D(0.39999998, 0, -7.4505806e-08, 0, 0.3999999, 0, 7.4505806e-08, 0, 0.39999998, 3.7268414, 0.6694572, 2.7920341)
+
+[node name="tree15" parent="world/Obstacles" unique_id=1008938182 instance=ExtResource("5_7mycd")]
+transform = Transform3D(0.3, 0, -7.450581e-09, 0, 0.29999998, 0, 7.450581e-09, 0, 0.3, 1.06006, 1.33115, 2.6411116)
+
+[node name="tree16" parent="world/Obstacles" unique_id=2007031958 instance=ExtResource("5_7mycd")]
+transform = Transform3D(0.19999997, 0, -3.7252903e-08, 0, 0.19999996, 0, 3.7252903e-08, 0, 0.19999997, 6.8485, 0.8716841, 2.5989122)
+
+[node name="tree18" parent="world/Obstacles" unique_id=1829110861 instance=ExtResource("5_7mycd")]
+transform = Transform3D(0.19999996, 0, -3.7252903e-08, 0, 0.19999993, 0, 3.7252903e-08, 0, 0.19999996, 6.2669315, 1.3022165, 1.149956)
+
+[node name="tree17" parent="world/Obstacles" unique_id=1246767116 instance=ExtResource("5_7mycd")]
+transform = Transform3D(-7.450581e-09, 0, 0.19999996, 0, 0.19999993, 0, -0.19999996, 0, -7.450581e-09, 7.415439, 0.7887887, 4.01143)
+
+[node name="Fox" parent="world/Obstacles" unique_id=1405790744 instance=ExtResource("6_272bh")]
+transform = Transform3D(0.2, 0, -4.4703487e-08, 0, 0.2, 0, 4.4703487e-08, 0, 0.2, 6.1711364, 0.81633246, 2.8643765)
+
 [node name="water" type="MeshInstance3D" parent="." unique_id=2047096607]
-transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, 0, 24.609863, 0)
+transform = Transform3D(10, 0, 0, 0, 10, 0, 0, 0, 10, 0, -109.04883, 0)
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_lquwl")
 surface_material_override/0 = SubResource("ShaderMaterial_7mycd")

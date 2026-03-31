@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://byyhulg0hh566"
-path="res://.godot/imported/Rock.blend.glb-517e28823febc1dad8f13985ccf0fc43.scn"
+uid="uid://1kwrptmjp2at"
+path="res://.godot/imported/low_poly_fox.glb-a7898f8136911663ad8f6bdc7f007808.scn"
 
 [deps]
 
-source_file="res://assets/Rock.blend.glb"
-dest_files=["res://.godot/imported/Rock.blend.glb-517e28823febc1dad8f13985ccf0fc43.scn"]
+source_file="res://assets/low_poly_fox.glb"
+dest_files=["res://.godot/imported/low_poly_fox.glb-a7898f8136911663ad8f6bdc7f007808.scn"]
 
 [params]
 

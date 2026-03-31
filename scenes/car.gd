@@ -48,7 +48,7 @@ func _physics_process(delta):
 	velocity.x = forward.x * speed
 	velocity.z = forward.z * speed
 
-	# 🌍 Gravity (CORRECT handling)
+	# 🌍 Gravity
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	else:
