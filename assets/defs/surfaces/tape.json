@@ -1,0 +1,27 @@
+{
+  "id": "tape",
+  "version": 1,
+  "type": "surface",
+  "notes": "Packing tape and the shipping label — the two paper elements on the box. Pale and warm, but deliberately NOT neutral: `npm run palette` fails a frame at 12% near-grey pixels, and a genuinely colourless tape band plus a label is a big enough patch to matter. ART_BIBLE 7 reserves specular for water, ice and vehicle paint, so the sheen that says 'plastic tape' rather than 'painted stripe' is bought with a strong low-power sky rim instead: rimStrength 0.7 against the box's 0.3, which lifts the band wherever it turns away from the camera and is exactly where tape catches the sky. The brush is nearly off — tape is the one surface on the kart with no fibre at all.",
+  "material": {
+    "base": "#cfc4a6",
+    "shadow": "#95886c",
+    "lit": "#efe8d0",
+    "top": "#f6f0dc",
+    "topGain": 1.04,
+    "gradientBase": -0.55,
+    "gradientHeight": 1.2,
+    "gradientStrength": 0.18,
+    "brushScale": 1.8,
+    "brushStrength": 0.12,
+    "brushSaturation": 0.1,
+    "brushHue": 0.04,
+    "regionStep": 0.05,
+    "detailStrength": 0.03,
+    "reliefShade": 0.2,
+    "rimStrength": 0.7,
+    "rimPower": 2.0,
+    "saturationGain": 0.22,
+    "shadowSkyTint": 0.3
+  }
+}

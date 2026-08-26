@@ -1,0 +1,26 @@
+{
+  "id": "boxInk",
+  "version": 1,
+  "type": "surface",
+  "notes": "Depot print: the this-way-up arrows, the label bars, the stencil block, and the lid seam. Dark warm brown rather than black — ART_BIBLE 2 forbids a neutral anywhere, and a true black stencil would be the only crushed value in a frame whose whole palette is lifted. This is nonetheless the darkest surface on the vehicle after the eyes, and that is deliberate: without a value anchor the kart floats entirely in the top half of the range against the meadow, which is what made it read as pasted on. The brush is almost off; printed ink has no fibre of its own, it sits on the board's.",
+  "material": {
+    "base": "#4a3524",
+    "shadow": "#2c2018",
+    "lit": "#7a5b40",
+    "top": "#8a6a4c",
+    "topGain": 1.02,
+    "gradientBase": -0.55,
+    "gradientHeight": 1.2,
+    "gradientStrength": 0.15,
+    "brushScale": 1.4,
+    "brushStrength": 0.15,
+    "brushSaturation": 0.12,
+    "brushHue": 0.05,
+    "regionStep": 0.05,
+    "detailStrength": 0.04,
+    "reliefShade": 0.3,
+    "rimStrength": 0.22,
+    "saturationGain": 0.28,
+    "shadowSkyTint": 0.3
+  }
+}

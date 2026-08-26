@@ -29,7 +29,10 @@
 // triangles exactly rather than floating over a slope.
 
 import * as THREE from 'three/webgpu'
-import { attribute, vec3, vec4 } from 'three/tsl'
+import {
+  attribute, float, positionWorld, saturate as saturateNode, uniform, vec2, vec3, vec4,
+} from 'three/tsl'
+import type { Node } from 'three/webgpu'
 import { saturate } from '../core/spring'
 import type { HeightField } from './vehicle'
 import type { Vehicle } from './vehicle'
@@ -69,6 +72,27 @@ const LOBE = {
   bodyR: 2.2,
   bodySpread: 0.5,
   bodyStrength: 0.85,
+  /**
+   * A tight, dark CORE at each contact patch, under the wide wheel lobe.
+   *
+   * The wide lobes are correct and were still losing: measured across
+   * car-airborne at y=845, the meadow's own brush pattern swings luminance
+   * 80->142 over 25 px, while a 1.1 m lobe with a 0.62 spread lays its
+   * gradient down over 200+ px. A signal that shallow is under the surface's
+   * own noise floor no matter how dark its centre is, so both jump frames
+   * still read as a kart pasted onto a hillside at 1:1.
+   *
+   * What a contact patch actually looks like is a small, hard, dark spot the
+   * size of the tyre — high contrast over a short distance, which is the one
+   * thing that beats a noise floor. It also fades over 0.9 m rather than 2.6,
+   * so it is the element that says TOUCHING: the moment the wheels leave the
+   * ground the cores are gone and only the soft lobes remain, which is exactly
+   * the difference between car-landing and car-airborne.
+   */
+  coreR: 0.5,
+  coreSpread: 1.6,
+  coreStrength: 0.95,
+  coreFade: 0.9,
   /** Height, metres, over which a lobe fades to nothing. */
   fade: 2.6,
 } as const
@@ -89,6 +113,9 @@ const LOBE = {
  */
 const TINT = new THREE.Color(0.56, 0.64, 0.79)
 
+/** Four soft wheel lobes plus one chassis lobe, in the vertex attribute. */
+const LOBE_COUNT = 5
+
 const _p = new THREE.Vector3()
 
 export class ContactShadow {
@@ -97,8 +124,25 @@ export class ContactShadow {
   private readonly pos: THREE.BufferAttribute
   private readonly shade: THREE.BufferAttribute
   private readonly n: number
-  /** World XZ + height-above-ground of each lobe, refilled every frame. */
-  private readonly lobes = new Float32Array(5 * 4)
+  /**
+   * Per lobe: world x, world z, height above ground, kind.
+   * Kind 0 = soft wheel lobe, 1 = chassis lobe. The tight contact cores are
+   * NOT in here — see `coreU`.
+   */
+  private readonly lobes = new Float32Array(LOBE_COUNT * 4)
+  /**
+   * The four contact cores, as fragment-stage uniforms: (world x, world z,
+   * height above ground, unused).
+   *
+   * They cannot ride the vertex attribute the soft lobes use. The patch grid is
+   * 0.31 m and a core is 0.5 m across, so interpolating it between vertices
+   * would draw a three-vertex-wide hexagon and the hard edge that is the whole
+   * point of the core would come out as the grid's own triangulation. Raising
+   * the grid resolution enough to carry it would quadruple a per-frame CPU loop
+   * that already costs 961 `heightAt` calls. In the fragment it is exact, it is
+   * four uniforms, and it costs four distance computations per covered pixel.
+   */
+  private readonly coreU = [0, 1, 2, 3].map(() => uniform(new THREE.Vector3()))
 
   constructor(private readonly heightAt: HeightField) {
     const n = PATCH.segments + 1
@@ -130,7 +174,20 @@ export class ContactShadow {
     // everything by exactly 1. `vec3(s, s, s)` of the same node is correct, so
     // this is the attribute node reaching `mix`'s interpolant slot, not the
     // attribute. Broadcasting it by hand first is unambiguous.
-    const fade = vec3(s, s, s)
+    // The four contact cores, evaluated per fragment. Same soft-union algebra
+    // as the vertex field — 1 - prod(1 - lobe) — so a wheel sitting on top of
+    // the chassis lobe darkens it instead of replacing it.
+    let clear: Node<'float'> = float(1).sub(s)
+    for (const u of this.coreU) {
+      const h = u.z
+      const r = float(LOBE.coreR).add(h.mul(LOBE.coreSpread))
+      const lift = saturateNode(h.div(LOBE.coreFade)).oneMinus()
+      const d = vec2(positionWorld.x.sub(u.x), positionWorld.z.sub(u.y)).length()
+      const t = saturateNode(d.div(r))
+      const a = t.mul(t).oneMinus().pow(2).mul(LOBE.coreStrength).mul(lift)
+      clear = clear.mul(a.oneMinus())
+    }
+    const fade = vec3(1, 1, 1).mul(clear.oneMinus())
     material.colorNode = vec4(
       vec3(1, 1, 1).sub(fade.mul(vec3(1 - TINT.r, 1 - TINT.g, 1 - TINT.b))), 1,
     )
@@ -166,18 +223,20 @@ export class ContactShadow {
     const car = vehicle.object.position
     const wheelR = vehicle.geometry.wheelRadius
 
-    // Lobe 0..3: the four wheel contact patches. Lobe 4: the chassis.
+    // Lobe 0..3: the four soft wheel lobes. 4..7: a tight core at the same
+    // four contact patches. 8: the chassis.
     vehicle.object.updateMatrix()
     for (let i = 0; i < 4; i++) {
       const w = vehicle.wheels[i]!
       _p.copy(w.anchor).applyMatrix4(vehicle.object.matrix)
       // The hub hangs `hubDrop` below the anchor; the tyre bottom is one radius
       // below that. `groundY` is the drawn ground under the same anchor.
-      const height = _p.y - w.hubDrop - wheelR - w.groundY
+      const height = Math.max(0, _p.y - w.hubDrop - wheelR - w.groundY)
       this.lobes[i * 4 + 0] = _p.x
       this.lobes[i * 4 + 1] = _p.z
-      this.lobes[i * 4 + 2] = Math.max(0, height)
+      this.lobes[i * 4 + 2] = height
       this.lobes[i * 4 + 3] = 0
+      this.coreU[i]!.value.set(_p.x, _p.z, height)
     }
     this.lobes[16] = car.x
     this.lobes[17] = car.z
@@ -200,10 +259,10 @@ export class ContactShadow {
         posArr[v * 3 + 1] = this.heightAt(x, z) + PATCH.lift
         posArr[v * 3 + 2] = z
 
-        // Soft union of the five lobes: 1 - prod(1 - lobe). Adding them
+        // Soft union of the nine lobes: 1 - prod(1 - lobe). Adding them
         // instead would double up under the axles and clip flat.
         let clear = 1
-        for (let k = 0; k < 5; k++) {
+        for (let k = 0; k < LOBE_COUNT; k++) {
           const h = this.lobes[k * 4 + 2]!
           const body = this.lobes[k * 4 + 3]! > 0.5
           const fade = 1 - saturate(h / LOBE.fade)

@@ -9,22 +9,45 @@
 // the car sits off-centre into a corner instead of being nailed to the middle
 // of the frame.
 //
-// THE SPRINGS RUN IN THE CAR'S FRAME, NOT THE WORLD'S. This is the difference
-// between "lag" and "error", and the first pass got it wrong. A damped
-// oscillator chasing a target that moves at a constant v settles at a constant
-// offset BEHIND it — exactly 2*zeta*v/omega. At 35 m/s that is 2*0.85*35/(1.75
-// *2pi) = 5.4 m for the position spring, so a rig nominally 8.0 m back
-// measured 13.1 m back, and on a descent the nominal 3.1 m of camera height
-// collapsed to 0.74 m. The tuning above was then fighting a bias, not a lag:
-// the shipped camera sat FURTHER back at speed than the 11.3 m first pass that
-// was rejected for making a 15-degree pitch change two pixels tall.
+// THE SPRINGS RUN IN THE WORLD, WITH THE BIAS SOLVED OUT. Two passes got this
+// wrong in opposite directions, and the fix is the third option neither tried.
 //
-// Springing the OFFSET (target minus car position) removes the bias exactly and
-// keeps everything the springs are for. A car at constant velocity has a
-// constant offset, so the spring is at rest and the framing is the nominal one;
-// the offset only changes when the car accelerates, turns, slides, or the
-// terrain solve lifts the rig — and those are precisely the moments that should
-// ease rather than snap.
+// Pass 1 sprang in world space with no correction. A damped oscillator chasing
+// a target moving at a constant v settles a constant distance BEHIND it —
+// exactly 2*zeta*v/omega. At 35 m/s that is 2*0.85*35/(1.75*2pi) = 5.4 m for
+// the position spring, so a rig nominally 8.0 m back measured 13.1 m back, and
+// on a descent the nominal 3.1 m of camera height collapsed to 0.74 m. The
+// tuning was then fighting a bias rather than a lag.
+//
+// Pass 2 sprang the OFFSET from the chassis instead. That removes the bias
+// exactly — and removes the transient with it, which is the whole reason a
+// spring is here. A pure TRANSLATION of the car leaves a chassis-relative
+// offset completely unchanged, so the rig moves rigidly with the car and the
+// springs never fire. Free fall and a hard launch are pure translations.
+// Measured across a 21.8 m jump including ~1.2 s of fall at 14 m/s, `camY -
+// carY` moved 3.100 -> 3.086 and the FOV moved 0.37 deg across the whole flight
+// AND the touchdown: the kart's on-screen centroid shifted 17 px in a 450 px
+// frame, all of it the body's own pitch. car-airborne was indistinguishable
+// from a car parked on a hillside, which is the "teleports rigidly, no lag"
+// failure MILESTONES M3 explicitly names, confined to one axis.
+//
+// So: spring in the WORLD, and feed the bias forward into the target instead of
+// changing the frame the spring runs in.
+//
+//     target = anchor + velocity * (2 * zeta / (freq * TAU))
+//
+// That is the analytic settle offset, added back. At constant velocity the two
+// cancel and the rig sits at exactly the nominal 8.0 m / 3.1 m — pass 2's one
+// real achievement, kept. Under ACCELERATION they do not cancel: the residual
+// is -a/omega^2, and every edge in the velocity (crest, launch, touchdown)
+// steps the target while the spring still carries the old velocity, so the rig
+// overshoots and rings down through metres. Lag where lag belongs, no bias.
+//
+// The vertical axis needed one more thing before any of that could reach it:
+// `Vehicle.velocity` is recomposed each step from `forward` and `right`, so it
+// is horizontal by construction and its y is always exactly 0. The chassis'
+// real vertical speed now ships as `telemetry.vy` and is what this file feeds
+// into both springs and into the aim point's lead.
 
 import * as THREE from 'three/webgpu'
 import { Spring, Spring3, clamp, damp, saturate } from '../core/spring'
@@ -48,6 +71,17 @@ const RIG = {
   heightSpeed: 0.55,
   /** Seconds of velocity the look point leads the car by. */
   lookahead: 0.24,
+  /**
+   * Seconds of VERTICAL velocity the look point leads by.
+   *
+   * Shorter than the horizontal lead on purpose. The horizontal one is aiming
+   * at where the car will be, which is a smooth quantity; `vy` also carries the
+   * sprung heave, so at the full 0.24 s a kerb strike would throw the aim point
+   * around. 0.16 s is enough that the frame drops with the car off a crest and
+   * rises with it out of a compression, which is what the axis was missing
+   * entirely: the look point used to be pinned at carY + 1.02 forever.
+   */
+  lookaheadVert: 0.16,
   /** Height above the chassis origin that the camera aims at. */
   lookUp: 1.02,
   /** How far the arm swings from the heading toward the velocity when sliding.
@@ -55,6 +89,18 @@ const RIG = {
   slideYaw: 0.45,
   fov: 58,
   fovPunch: 5.5,
+  /**
+   * FOV kick per m/s of landing impact, degrees per (m/s).
+   *
+   * The punch used to read `t.aLong` alone, which is contact-gated AND blind to
+   * `vy`, so a 14 m/s touchdown produced a 0.05 deg FOV change — the impact
+   * lives entirely on the vertical axis and none of it reached the frame. This
+   * is the same impact velocity `squashS` is already kicked with, so the frame
+   * punches on exactly the landings that squash the body. As a velocity kick on
+   * a 1.3 Hz spring the peak is roughly kick/omega, i.e. ~5 deg at 14 m/s —
+   * about the size of the standing-start punch, which is the right scale.
+   */
+  fovLandingKick: 3.0,
   /** Camera roll from lateral acceleration, radians. Subtle on purpose. */
   roll: 0.0009,
   /** Minimum clearance above the terrain. */
@@ -116,17 +162,23 @@ export interface ChaseFraming {
   arm?: number | null
 }
 
+const TAU = Math.PI * 2
+
 const _dir = new THREE.Vector3()
 const _anchor = new THREE.Vector3()
 const _look = new THREE.Vector3()
 const _target = new THREE.Vector3()
 const _up = new THREE.Vector3(0, 1, 0)
 const _side = new THREE.Vector3()
+/** Full 3D chassis velocity, including the y that `Vehicle.velocity` lacks. */
+const _vel = new THREE.Vector3()
+const _lead = new THREE.Vector3()
 
 export class ChaseCamera {
   /**
-   * Position spring, in CHASSIS-RELATIVE metres (see the header). Underdamped:
-   * the camera lags a change in the offset, catches up, and settles.
+   * Position spring, in WORLD metres, with the settle bias fed forward into its
+   * target (see the header). Underdamped: the camera falls behind a change in
+   * velocity, catches up past it, and settles.
    */
   private readonly pos = new Spring3(new THREE.Vector3(), 1.75, 0.85)
   /** Look-point spring, slower than the position one so aim trails framing. */
@@ -138,8 +190,6 @@ export class ChaseCamera {
   private readonly arm = new Spring(RIG.arm, 0.85, 1)
   /** Yaw blend toward the velocity vector while sliding. */
   private yawBlend = 0
-  /** Chassis position the two offset springs are measured from, this frame. */
-  private readonly origin = new THREE.Vector3()
 
   /** Capture-only framing offsets. See `ChaseFraming`. */
   private readonly frameYaw: number
@@ -155,12 +205,20 @@ export class ChaseCamera {
     this.frameArm = clamp(framing.arm ?? 1, 0.35, 3)
   }
 
+  /**
+   * The analytic settle offset of a damped oscillator chasing a target moving
+   * at constant velocity: 2*zeta/omega seconds of that velocity, behind. Added
+   * to the target, it cancels — which is the whole trick in the header.
+   */
+  private static lead(spring: Spring3): number {
+    return (2 * spring.zeta) / (spring.freq * TAU)
+  }
+
   /** Snap the rig to the car with no lag. Spawn and teleport only. */
   reset(vehicle: Vehicle): void {
-    this.origin.copy(vehicle.object.position)
     this.resolve(vehicle, 0, _anchor, _look)
-    this.pos.reset(_anchor.sub(this.origin))
-    this.aim.reset(_look.sub(this.origin))
+    this.pos.reset(_anchor)
+    this.aim.reset(_look)
     this.fov.reset(RIG.fov)
     this.roll.reset(0)
     this.arm.reset(RIG.arm)
@@ -191,10 +249,12 @@ export class ChaseCamera {
     let arm = this.arm.step(dt, RIG.arm + RIG.armSpeed * speedNorm) * this.frameArm
     arm = Math.max(arm * 0.42, this.clearOfScatter(car, arm))
 
-    // Velocity lookahead. The car leads the frame into a corner.
+    // Velocity lookahead. The car leads the frame into a corner — and, since
+    // `t.vy` exists, over a crest and down into a landing as well.
     outLook.copy(car)
       .addScaledVector(vehicle.velocity, RIG.lookahead)
       .addScaledVector(_up, RIG.lookUp)
+    outLook.y += clamp(t.vy, -30, 30) * RIG.lookaheadVert
 
     // Two passes over the terrain solve. The first asks how high the rig would
     // have to sit to see over whatever is between it and the car; if that is
@@ -254,9 +314,9 @@ export class ChaseCamera {
 
   private apply(): void {
     const cam = this.camera
-    // Both springs hold offsets from the chassis; the world pose is rebuilt here.
-    cam.position.copy(this.origin).add(this.pos.value)
-    _target.copy(this.origin).add(this.aim.value)
+    // Both springs hold world positions.
+    cam.position.copy(this.pos.value)
+    _target.copy(this.aim.value)
     // Roll by tilting the up-vector about the VIEW axis, then lookAt. Rotating
     // the camera after lookAt does not work — lookAt overwrites the quaternion
     // — and tilting up in world XY only rolls correctly when the view happens
@@ -285,16 +345,21 @@ export class ChaseCamera {
     const t = vehicle.telemetry
     // Terrain clearance is resolved inside `resolve`, BEFORE the spring, so a
     // ridge eases the camera up instead of snapping it.
-    this.origin.copy(vehicle.object.position)
     this.resolve(vehicle, dt, _anchor, _look)
-    // Into the chassis frame, so the springs carry no steady-state error and
-    // respond only to the offset CHANGING. See the header.
-    this.pos.step(dt, _anchor.sub(this.origin))
-    this.aim.step(dt, _look.sub(this.origin))
+    // The chassis velocity the springs lead by. `vehicle.velocity` is
+    // horizontal by construction — see the header — so y comes from telemetry.
+    _vel.set(vehicle.velocity.x, clamp(t.vy, -60, 60), vehicle.velocity.z)
+    // World-space springs with the settle bias fed forward. At constant
+    // velocity the two cancel and the framing is nominal; every change in
+    // velocity leaves a real transient behind.
+    this.pos.step(dt, _lead.copy(_anchor).addScaledVector(_vel, ChaseCamera.lead(this.pos)))
+    this.aim.step(dt, _lead.copy(_look).addScaledVector(_vel, ChaseCamera.lead(this.aim)))
 
     // FOV punch tracks longitudinal acceleration, not speed: it should hit on
-    // the launch and relax at a steady 35 m/s.
+    // the launch and relax at a steady 35 m/s. The landing arrives as an
+    // impulse instead, because it is one — see `fovLandingKick`.
     const punch = saturate(clamp(t.aLong, 0, 80) / 34)
+    if (t.landingImpact > 0) this.fov.kick(t.landingImpact * RIG.fovLandingKick)
     this.fov.step(dt, RIG.fov + RIG.fovPunch * punch)
     this.roll.step(dt, clamp(t.aLat, -40, 40) * -RIG.roll)
     this.apply()

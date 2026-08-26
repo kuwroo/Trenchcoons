@@ -2,7 +2,7 @@
   "id": "meadow",
   "version": 1,
   "type": "surface",
-  "notes": "Rolling grassland — the M1 hub surface. ART_BIBLE 4, Meadow / hub. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
+  "notes": "Rolling grassland \u2014 the M1 hub surface. ART_BIBLE 4, Meadow / hub. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
   "material": {
     "base": "#5eb02e",
     "shadow": "#318f38",

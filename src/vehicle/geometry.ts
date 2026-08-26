@@ -66,6 +66,85 @@ export function wheelGeometry(radius: number, width: number, segments = 14): THR
   return geo
 }
 
+const _mat = new THREE.Matrix4()
+const _quat = new THREE.Quaternion()
+const _eul = new THREE.Euler(0, 0, 0, 'YXZ')
+const _vec = new THREE.Vector3()
+const _scl = new THREE.Vector3(1, 1, 1)
+
+/**
+ * Position a geometry in its parent's space, in place.
+ *
+ * Used to build a dressed part — flutes, tape, print — as ONE geometry that is
+ * then merged, so the extra form on the box costs vertices and not draw calls.
+ * The kart is drawn five times a frame (once for the frame, once per shadow
+ * cascade), so a draw call here is worth five.
+ */
+export function place(
+  geo: THREE.BufferGeometry,
+  x: number, y: number, z: number,
+  rx = 0, ry = 0, rz = 0,
+  sx = 1, sy = 1, sz = 1,
+): THREE.BufferGeometry {
+  _eul.set(rx, ry, rz)
+  _quat.setFromEuler(_eul)
+  geo.applyMatrix4(_mat.compose(_vec.set(x, y, z), _quat, _scl.set(sx, sy, sz)))
+  return geo
+}
+
+/**
+ * Merge indexed geometries that carry position and normal.
+ *
+ * `three/addons/utils/BufferGeometryUtils` would do this, and importing it is
+ * the one thing this file is not allowed to do — see the header: the addons
+ * resolve `three`, not `three/webgpu`, and pull a second copy of the core
+ * library in with two incompatible BufferGeometry classes. Position and normal
+ * are the only attributes the painterly material reads (it works from
+ * `positionLocal` / `positionWorld` / `normalWorld`, never from a UV), so
+ * everything else is dropped on purpose rather than carried dead.
+ */
+export function mergeGeometries(parts: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
+  let vertices = 0
+  let indices = 0
+  for (const p of parts) {
+    const pos = p.getAttribute('position')
+    if (!pos) throw new Error('mergeGeometries: part has no position attribute')
+    if (!p.index) throw new Error('mergeGeometries: part is not indexed')
+    vertices += pos.count
+    indices += p.index.count
+  }
+  const position = new Float32Array(vertices * 3)
+  const normal = new Float32Array(vertices * 3)
+  const index = vertices > 65535 ? new Uint32Array(indices) : new Uint16Array(indices)
+  let v = 0
+  let i = 0
+  for (const p of parts) {
+    const pos = p.getAttribute('position')
+    const nrm = p.getAttribute('normal')
+    const idx = p.index as THREE.BufferAttribute
+    for (let k = 0; k < pos.count; k++) {
+      position[(v + k) * 3] = pos.getX(k)
+      position[(v + k) * 3 + 1] = pos.getY(k)
+      position[(v + k) * 3 + 2] = pos.getZ(k)
+      if (nrm) {
+        normal[(v + k) * 3] = nrm.getX(k)
+        normal[(v + k) * 3 + 1] = nrm.getY(k)
+        normal[(v + k) * 3 + 2] = nrm.getZ(k)
+      }
+    }
+    for (let k = 0; k < idx.count; k++) index[i + k] = v + idx.getX(k)
+    v += pos.count
+    i += idx.count
+    p.dispose()
+  }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.BufferAttribute(position, 3))
+  out.setAttribute('normal', new THREE.BufferAttribute(normal, 3))
+  out.setIndex(new THREE.BufferAttribute(index, 1))
+  out.computeBoundingSphere()
+  return out
+}
+
 /**
  * A batch of identically-shaped parts posed per frame from TRS.
  *

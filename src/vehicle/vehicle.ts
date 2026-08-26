@@ -193,6 +193,28 @@ export interface VehicleTelemetry {
   slipRatio: number
   aLong: number
   aLat: number
+  /**
+   * Vertical velocity of the chassis, m/s. Signed: negative is falling.
+   *
+   * Published because it was the one channel nothing downstream could see.
+   * `velocity` is recomposed every step from `forward` and `right` only, so it
+   * is horizontal BY CONSTRUCTION — the chase camera's lookahead, its FOV punch
+   * and `aLong` were all reading a vector that is exactly zero in y no matter
+   * what the car was doing. Measured across a 21.8 m jump, the camera's height
+   * above the car moved 0.014 m and the FOV moved 0.37 deg, i.e. the rig was
+   * blind to a 14 m/s free fall and to the touchdown that ended it.
+   */
+  vy: number
+  /**
+   * Measured vertical acceleration, m/s^2. NOT contact-gated.
+   *
+   * `aLong` and `aLat` are scaled by `contactGate` because every consumer reads
+   * them as tyre load, and with four wheels in the air there is no load. That
+   * reasoning does not extend to this one: the events worth seeing on this axis
+   * — the launch off a crest, the free fall, the touchdown — are precisely the
+   * ones that happen while the gate is closing or shut.
+   */
+  aVert: number
   yawRate: number
   pitch: number
   roll: number
@@ -208,6 +230,12 @@ export interface VehicleTelemetry {
   idle: number
   /** Seconds since the last landing. Used by the shot harness. */
   sinceLanding: number
+  /**
+   * Downward speed at the instant of the last touchdown, m/s, nonzero on the
+   * landing frame only. The camera and the squash spring kick off the same
+   * number, so a landing that squashes the body also punches the frame.
+   */
+  landingImpact: number
   airtime: number
 }
 
@@ -229,10 +257,11 @@ export class Vehicle {
   vy = 0
 
   readonly telemetry: VehicleTelemetry = {
-    speed: 0, vLong: 0, vLat: 0, slipRatio: 0, aLong: 0, aLat: 0, yawRate: 0,
+    speed: 0, vLong: 0, vLat: 0, slipRatio: 0, aLong: 0, aLat: 0,
+    vy: 0, aVert: 0, yawRate: 0,
     pitch: 0, roll: 0, terrainPitch: 0, terrainRoll: 0,
     airborne: false, contacts: 4, squash: 0, idle: 1,
-    sinceLanding: 99, airtime: 0,
+    sinceLanding: 99, landingImpact: 0, airtime: 0,
   }
 
   // ── the springs. Nothing in here is allowed to move linearly. ─────────────
@@ -323,6 +352,9 @@ export class Vehicle {
     this.idleS.reset(1)
     this.aLatSmooth = 0
     this.aLongSmooth = 0
+    this.telemetry.vy = 0
+    this.telemetry.aVert = 0
+    this.telemetry.landingImpact = 0
     this.contactGate = 1
     this.wasAirborne = false
     this.updateBasis()
@@ -591,6 +623,14 @@ export class Vehicle {
       this.sampleWheels(dt)
     }
 
+    // ── the vertical channel ────────────────────────────────────────────────
+    // Published AFTER the floor clamp, so `vy` is the chassis' real velocity
+    // this frame and a landing reads as the large negative-to-zero step it
+    // physically is. `aVert` is a plain measured difference, ungated — see the
+    // docstrings on `VehicleTelemetry.vy` / `.aVert`.
+    t.aVert = clamp((this.vy - t.vy) / dt, -400, 400)
+    t.vy = this.vy
+
     // ── landing: squash impulse, once, on the transition ─────────────────────
     const airborne = t.contacts === 0
     t.airtime = airborne ? t.airtime + dt : 0
@@ -598,7 +638,13 @@ export class Vehicle {
       const impact = Math.max(0, -impactVy)
       this.squashS.kick(impact * TUNE.landingSquash)
       t.sinceLanding = 0
+      // The same impact the squash spring is kicked with, held for one frame so
+      // the camera can kick off it too. Captured from `impactVy`, i.e. from
+      // BEFORE the floor clamp zeroed the fall — the hardest landings are
+      // exactly the ones the clamp catches inside a single frame.
+      t.landingImpact = impact
     } else {
+      t.landingImpact = 0
       t.sinceLanding += dt
     }
     this.wasAirborne = airborne

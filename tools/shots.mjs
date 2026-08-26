@@ -39,10 +39,23 @@ const NEAR = 'pos=280,3.5,760&warmup=64'
 // gentle across the 32 m the drive scripts cross. The greybox has 150 m of
 // relief on a 380 m wavelength and there is no flat 70 m anywhere in it, so the
 // captures that need level ground are kept SHORT and tight instead. (720, -540)
-// is 1.1 deg of tilt at the spawn and 9.2 deg worst within 32 m; the previous
-// site sat the parked car at 4.6 deg of pitch on ground that pitched to -30 deg
-// two seconds into the corner run and launched it off a hillside.
+// is 0.74 deg of tilt at the spawn — terrainPitch -0.15, terrainRoll -0.73,
+// re-measured against `__trench.car()` after the greybox `groundAt`
+// triangulation fix moved the drawn surface by up to 1.68 m; the "1.1 deg" this
+// comment used to claim was measured before that fix and was never redone. The
+// previous site sat the parked car at 4.6 deg of pitch on ground that pitched
+// to -30 deg two seconds into the corner run.
 const FLAT = 'time=0.62&warmup=64&spawn=720,-540&caryaw=0'
+// Same site, car turned to face the sun.
+//
+// The parked captures need the OCCUPANTS' FACES, and at hour 0.62 the sun is
+// behind the default chase camera, so any vantage that sees a face sees it
+// backlit: swinging `camyaw` round to the front of a car at `caryaw=0` measured
+// shadowLuma 0.159-0.199 against the shadow gate's 0.299 floor, i.e. four
+// vantages in a row failed. Turning the CAR instead costs nothing — the site is
+// the same, the drive script is empty — and puts the key on the faces with the
+// camera's back to it. 0.339 at the framing below.
+const PARKED = 'time=0.62&warmup=64&spawn=720,-540&caryaw=3.142'
 // The jump runs the other way down the valley, so 0.62 would put the sun in
 // front of the camera and fill the frame with a shaded hillside: both jump
 // frames measured shadowLuma 0.26-0.27 against the shadow gate's 0.299 floor.
@@ -83,7 +96,7 @@ export const SHOTS = [
   { name: 'near-noon', q: `time=0.50&${NEAR}&look=-1.15,-0.20` },
   { name: 'near-dusk', q: `time=0.75&${NEAR}&look=-1.15,-0.20` },
 
-  // ── M3: the vehicle, as five poses of one motion system ───────────────────
+  // ── M3: the vehicle, as seven poses of one motion system ──────────────────
   //
   // A screenshot cannot show motion, so these do the next best thing: a fixed
   // input sequence on the deterministic clock, captured at an exact frame.
@@ -95,63 +108,117 @@ export const SHOTS = [
   // The car is OPT-IN under `?shot=1` — the fifteen shots above are ratcheted
   // against a best-ever ledger and must keep being the same pictures.
   //
-  // `camyaw=` swings the chase arm round to a 3/4 rear view for the poses that
-  // are invisible from dead astern, and `camarm=` pulls it in. Both are
+  // `camyaw=` swings the chase arm round to a 3/4 view for the poses that are
+  // invisible from dead astern, and `camarm=` pulls it in. Both are
   // CAPTURE-ONLY overrides on the real rig (src/vehicle/camera.ts) — the
-  // simulated pose is identical either way, only the vantage differs. Pitch and
-  // squash are the entire subject of the launch and landing frames and neither
-  // survives being photographed from directly behind.
+  // simulated pose is identical either way, only the vantage differs, and that
+  // was verified by running each drive script with and without them and
+  // diffing `__trench.car()`.
   //
-  // The numbers in each comment are the telemetry measured at that exact frame,
-  // so a change that breaks the animation shows up as a pose that no longer
-  // matches its own caption.
+  // EVERY NUMBER IN THE COMMENTS BELOW WAS RE-MEASURED against `__trench.car()`
+  // at the exact URL beside it, on the build that shipped them. The previous
+  // round advertised these captions as the tripwire for animation breakage and
+  // then let three of five drift — car-idle claimed "pitch +1.1 / roll -0.2"
+  // against an actual +0.15 / +0.73 — which silently disables the tripwire.
+  // Camera numbers are quoted too, for the same reason: a regression that
+  // re-welds the rig to the chassis is caught by `cam dy` and `fov` no longer
+  // matching, which is exactly the failure that survived the last two rounds.
   //
   // Parked and untouched, so the idle layer is what is on trial: the box
   // breathes, the occupants shift and blink, the coat settles.
-  //   speed 0.00  4/4 contact  idle 1.00  all four wheels at 0.11 compression
-  //   pitch +1.1 / roll -0.2, both entirely terrain. The car is AT REST, so any
-  //   difference between two frames of this shot is the idle layer and nothing
-  //   else. `camarm=0.7` pulls the rig in to 4.6 m: the shot exists to show
-  //   two raccoons breathing and blinking, and it is also what keeps the frame
-  //   off the palette gate's satByLum rule — a longer arm fills the top third
-  //   with hazed, desaturated distance and drags the 0.6-0.8 luminance bin
-  //   below the 0.2-0.4 one, which reads as saturation falling with light.
-  { name: 'car-idle',   q: `${FLAT}&drive=&frame=132&camarm=0.7` },
-  // 0.47 s into a standing start, from over the rear quarter so the nose lift
-  // is against the horizon rather than end-on. `camyaw` is negative because the
-  // sign that framed the pose best also put a shaded hillside across the left
-  // third and took the frame to shadowLuma 0.290 against the gate's 0.299
-  // floor; the mirrored vantage is the same pose at 0.387. Same short arm as
-  // car-idle, for the same palette reason.
-  //   pitch +10.3 with the terrain contributing only +1.1 of it, i.e. 9.2 deg
-  //   of pure load transfer; front suspension extended to -0.12/-0.12 against
-  //   the rear squatted to +0.22/+0.22; 24.9 m/s, 4/4 contact.
-  { name: 'car-launch', q: `${FLAT}&drive=throttle:0-400&frame=28&camyaw=-0.5&camarm=0.7` },
+  //   pitch -0.15 / roll -0.73, both ENTIRELY terrain (terrainPitch -0.15,
+  //   terrainRoll -0.73). speed 0.00, 4/4 contact, idle 1.00, all four wheels
+  //   at 0.110 compression, vy 0.000. cam dy 2.550, arm 3.90 m, fov 58.00.
+  //   The car is AT REST and the camera is bit-identical between this frame and
+  //   car-idle-b, so any difference between the two PNGs is the idle layer and
+  //   nothing else.
+  //   `camyaw=2.95` looks at the FACES. See `PARKED`: this is the only vantage
+  //   on the pair that is not backlit, and until this round the mask, the eyes
+  //   and the blink had never been photographed at all — every car-* frame in
+  //   the set was the backs of two heads.
+  { name: 'car-idle',   q: `${PARKED}&drive=&frame=300&camarm=0.6&camyaw=2.95` },
+  // car-idle, 72 frames (1.2 s) later, same URL otherwise.
+  //
+  // This shot exists because "a parked car must never be a still image" is a
+  // MILESTONES M3 done-when and a single PNG cannot show it. The camera is
+  // bit-identical to car-idle's — verified, not asserted: (710.4181773320053,
+  // 28.801449358268343, -537.8567111827165) at both frames — and the vehicle
+  // telemetry is identical to the last digit, so the entire pixel difference
+  // between the two files is breathing, glancing, blinking and coat settle.
+  { name: 'car-idle-b', q: `${PARKED}&drive=&frame=372&camarm=0.6&camyaw=2.95` },
+  // 0.57 s into a standing start, from over the rear quarter so the nose lift
+  // is against the horizon rather than end-on.
+  //   pitch +9.47 with the terrain contributing +0.15, i.e. 9.3 deg of pure
+  //   load transfer; front suspension extended to -0.144/-0.144 against the
+  //   rear squatted to +0.205/+0.205; 30.3 m/s, aLong +51.9, 4/4 contact.
+  //   cam dy 2.916, arm 6.01 m, fov 64.03 — the FOV is 6 deg into its punch,
+  //   which is the launch half of "FOV punch on acceleration".
+  //   `camarm=0.85`, up from 0.70: at the shorter arm the frame bottom cut both
+  //   rear wheels off, and rear squat against front droop is the entire subject
+  //   of this capture. All four contact patches are now inside the frame.
+  { name: 'car-launch', q: `${FLAT}&drive=throttle:0-400&frame=34&camyaw=-0.6&camarm=0.85` },
   // 1.67 s into a full-lock left. The throttle is held at 0.55 so the car takes
   // longer to wind up and the corner establishes inside the flat site rather
   // than 120 m downrange of it; top speed is unaffected, the demand cap is.
-  //   roll -14.7 with the slope only -4.7 of it, so 10 deg is cornering load;
-  //   inner wheels extended to -0.09/-0.04 against outer compressed to
-  //   +0.18/+0.25; slip ratio 0.16 — the car is genuinely travelling sideways.
+  //   roll -13.63 with the slope only -3.89 of it, so 9.7 deg is cornering
+  //   load; wheels -0.197 / +0.031 / -0.127 / +0.185, i.e. both left wheels
+  //   extended against both right compressed; slip ratio 0.162 and aLat -35.1
+  //   — the car is genuinely travelling sideways. pitch +9.61 (terrain +6.79).
+  //   cam dy 2.889, arm 7.33 m, fov 59.07.
   //   `camyaw` is NEGATIVE here: it swings the camera to the OUTSIDE of the
   //   turn, which is the only side the loaded flank and the lifted inner wheel
   //   are both visible from. -1.0 rather than -0.7 because the shallower swing
-  //   put the frame on a slope facing away from the sun: same pose, shadowLuma
-  //   0.290 against the gate's 0.299 floor, against 0.330 here.
+  //   put the frame on a slope facing away from the sun.
   { name: 'car-corner', q: `${FLAT}&drive=throttle:0-400@0.55,steerLeft:40-400&frame=100&camyaw=-1.0` },
+  // THE DEFAULT RIG. No `camyaw`, no `camarm`, nothing overridden.
+  //
+  // Every other car shot overrides the chase camera, which meant the camera
+  // itself had no gated coverage at all: the arm could regress from 8.0 m back
+  // to the 13.1 m bias the offset-frame fix removed and not one PNG would
+  // change. This is the shot that catches that.
+  //   speed 35.02 at 4/4 contact on a -14.3 deg descent, so the rig is solving
+  //   terrain clearance as well as lag. cam dy 3.154, arm 7.72 m, fov 58.08 —
+  //   arm and height at their nominal top-speed values (RIG.arm + armSpeed =
+  //   8.0, RIG.height + heightSpeed = 3.10) with the terrain solve accounting
+  //   for the rest, and the FOV relaxed because a car at a steady 35 m/s is not
+  //   accelerating.
+  //   pitch -14.20 (terrain -14.26), roll +3.80 (terrain +0.07), wheels
+  //   0.136 / 0.034 / 0.155 / 0.053, vy -10.22.
+  { name: 'car-chase',  q: `${FLAT}&drive=throttle:0-400@0.8,steerRight:60-400@0.35&frame=200` },
   // One jump, two frames of it.
-  // 170: mid-flight, 0.58 s after the crest. All four wheels at full droop
-  //      (-0.26) with the struts visibly extended, nose down 14.2 following the
-  //      flight path (TUNE.airPitch) while the ground below pitches -29.7, and
-  //      the body stretched to -0.055 — a real negative squash, not a caption.
-  //      The contact shadow underneath has spread and faded, which is what
-  //      tells this frame from a parked one at 1:1.
+  // 170: mid-flight, 0.60 s of airtime. All four wheels at full droop (-0.26)
+  //      with the struts visibly extended, nose down 14.19 following the flight
+  //      path (TUNE.airPitch) while the ground below pitches -29.66, and the
+  //      body stretched to -0.055 — a real negative squash, not a caption.
+  //      vy -16.63, aVert -26.0 (free fall), 0/4 contact.
+  //      THE CAMERA IS THE OTHER HALF OF THIS FRAME. cam dy 3.197, arm 7.75 m,
+  //      fov 58.00 — and the aim point sits `lookaheadVert * vy` = 2.66 m BELOW
+  //      the chassis, which is what puts the kart high in the frame with a
+  //      whole hillside of empty ground under it. Before the vertical channel
+  //      existed this shot framed the kart dead centre at exactly the height a
+  //      parked car sits at, and was indistinguishable from one.
   { name: 'car-airborne', q: `${JUMP}&drive=throttle:0-9999&frame=170&camyaw=0.6` },
-  // 209: two frames after touchdown. Front and left rear bottomed at the full
-  //      0.30 of travel and the right rear at 0.25, squash +0.173 — the frame
-  //      the squash and stretch spring exists for — from the quarter so the
-  //      flattening reads against the silhouette rather than end-on.
-  { name: 'car-landing',  q: `${JUMP}&drive=throttle:0-9999&frame=209&camyaw=0.75` },
+  // 209: two frames after touchdown, sinceLanding 0.033 s. Front and left rear
+  //      bottomed at the full 0.300 of travel and the right rear at 0.252,
+  //      squash +0.173 — the frame the squash and stretch spring exists for —
+  //      from the quarter so the flattening reads against the silhouette rather
+  //      than end-on. aVert +123.5, i.e. the impact the vertical channel now
+  //      carries; pitch -19.68 into a -17.14 slope.
+  //      THE CAMERA REACTS. cam dy 2.699 against a 3.10 nominal, arm 3.10 m,
+  //      and fov 61.96
+  //      against 58: the rig is 0.40 m BELOW its steady-state height
+  //      because it was falling at 31 m/s a frame ago and has overshot the
+  //      target the touchdown snapped back up, and the FOV is mid-kick off the
+  //      same impact velocity the squash spring is kicked with. Both numbers
+  //      were 3.09 and 58.4 before this round — the camera did not react to the
+  //      landing at all, on any axis.
+  //      `camarm=0.42` is short, and it is the framing the gates chose: the
+  //      landing sits at the bottom of a valley with no sky in shot, so a
+  //      longer arm fills the frame with shaded hillside (shadowLuma 0.261 at
+  //      the previous vantage, against the gate's 0.299 floor) and, because the
+  //      kart's own kraft/teal/violet are most of the hue variety available
+  //      down there, also costs hue entropy.
+  { name: 'car-landing',  q: `${JUMP}&drive=throttle:0-9999&frame=209&camyaw=0.4&camarm=0.42` },
 ]
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173'

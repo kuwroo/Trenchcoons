@@ -17,7 +17,8 @@ import { PainterlyMaterial } from '../material/painterly'
 import { surface } from '../material/defs'
 import { AngleSpring, Spring, clamp, saturate, sway } from '../core/spring'
 import type { Vehicle } from './vehicle'
-import { PosedInstances, blob, roundedBox, wheelGeometry } from './geometry'
+import { PosedInstances, blob, mergeGeometries, place, roundedBox, wheelGeometry } from './geometry'
+import { boxInkGeometry, boxShellGeometry, boxTapeGeometry, flapGeometry } from './box'
 
 /**
  * Kart dimensions, chassis space. y = 0 is the suspension anchor plane, so the
@@ -58,12 +59,22 @@ export class Kart {
   private readonly hubs: PosedInstances
   /** Trailing arm from the chassis down to each hub. */
   private readonly struts: PosedInstances
-  private readonly flaps: PosedInstances
+  /**
+   * Two batches, not one. The flaps used to share a unit-width geometry scaled
+   * per instance, which stretched the corrugated cut along the free edge into
+   * ellipses on the long flaps and stopped it reading as a repeat. Each width
+   * now gets its own geometry: index 0/1 are the short end flaps, 2/3 the long
+   * side ones, and `flapBatch` maps between the two numbering schemes.
+   */
+  private readonly flapsShort: PosedInstances
+  private readonly flapsLong: PosedInstances
   private readonly heads: PosedInstances
   private readonly ears: PosedInstances
   private readonly masks: PosedInstances
   private readonly muzzles: PosedInstances
   private readonly eyes: PosedInstances
+  /** A dark nose on the end of each muzzle. */
+  private readonly noses: PosedInstances
   private readonly coat: THREE.Mesh
   private readonly collar: THREE.Mesh
 
@@ -85,6 +96,8 @@ export class Kart {
     }
     const cardboard = mat('cardboard')
     const flapMat = mat('cardboardFlap')
+    const tapeMat = mat('tape')
+    const inkMat = mat('boxInk')
     const tyre = mat('tyre')
     const fur = mat('fur')
     const furLight = mat('furLight')
@@ -97,20 +110,36 @@ export class Kart {
     this.root.add(this.body)
 
     // ── the box ────────────────────────────────────────────────────────────
-    const boxMesh = new THREE.Mesh(roundedBox(BOX.w, BOX.h, BOX.d, BOX.r, 4), cardboard)
+    // Corrugation, fold creases, tape and print, all as geometry — see
+    // src/vehicle/box.ts for why none of it could be done in the material.
+    // Three meshes, because they are three different surfaces; the flutes and
+    // the creases are merged into the shell and cost nothing extra.
+    const boxMesh = new THREE.Mesh(boxShellGeometry(BOX.w, BOX.h, BOX.d, BOX.r), cardboard)
     boxMesh.position.y = BOX_Y
     boxMesh.name = 'kart-box'
     boxMesh.frustumCulled = false
     this.body.add(boxMesh)
 
-    // ── flaps: one geometry, hinged at its own origin ──────────────────────
-    // Built spanning y 0..len so the instance rotation IS the hinge. Unit width
-    // in x, scaled per instance, which is what lets the long side flaps and the
-    // short end flaps share a batch.
-    const flapGeo = roundedBox(1, FLAP.len, FLAP.thick, 0.03, 2)
-    flapGeo.translate(0, FLAP.len * 0.5, 0)
-    this.flaps = new PosedInstances(flapGeo, flapMat, 4, 'kart-flaps')
-    this.body.add(this.flaps.mesh)
+    for (const [geo, m, name] of [
+      [boxTapeGeometry(BOX.w, BOX.h, BOX.d, BOX.r), tapeMat, 'kart-box-tape'],
+      [boxInkGeometry(BOX.w, BOX.h, BOX.d, BOX.r), inkMat, 'kart-box-ink'],
+    ] as const) {
+      const mesh = new THREE.Mesh(geo, m)
+      mesh.position.y = BOX_Y
+      mesh.name = name
+      mesh.frustumCulled = false
+      this.body.add(mesh)
+    }
+
+    // ── flaps: hinged at their own origin ──────────────────────────────────
+    // Built spanning y 0..len so the instance rotation IS the hinge.
+    this.flapsShort = new PosedInstances(
+      flapGeometry(BOX.w - 0.16, FLAP.len, FLAP.thick), flapMat, 2, 'kart-flaps-end',
+    )
+    this.flapsLong = new PosedInstances(
+      flapGeometry(BOX.d - 0.2, FLAP.len, FLAP.thick), flapMat, 2, 'kart-flaps-side',
+    )
+    this.body.add(this.flapsShort.mesh, this.flapsLong.mesh)
     for (let i = 0; i < 4; i++) this.flapSprings.push(new Spring(FLAP.rest, 2.3 + i * 0.21, 0.42))
 
     // ── trenchcoat: one coat, two raccoons. That is the whole joke. ─────────
@@ -122,7 +151,18 @@ export class Kart {
     this.coat.frustumCulled = false
     this.body.add(this.coat)
 
-    this.collar = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.5, 0.15, 18, 1, true), coatMat)
+    // Collar and lapels. The critique's "the coat is a plain teal truncated
+    // cone, it reads as a bucket" was fair: a collar band alone is a rim, and
+    // what says COAT is the V of two lapels folding back off it. Two flat
+    // plates, merged into the collar so the whole garment stays two meshes.
+    const lapel = (side: number): THREE.BufferGeometry => {
+      const g = roundedBox(0.26, 0.34, 0.05, 0.02, 2)
+      return place(g, side * 0.19, -0.12, -0.44, 0.34, side * -0.44, side * 0.5)
+    }
+    this.collar = new THREE.Mesh(mergeGeometries([
+      new THREE.CylinderGeometry(0.6, 0.5, 0.15, 18, 1, true),
+      lapel(-1), lapel(1),
+    ]), coatMat)
     this.collar.position.set(0, 1.4, -0.06)
     this.collar.scale.set(1, 1, 0.82)
     this.collar.name = 'kart-collar'
@@ -130,12 +170,26 @@ export class Kart {
     this.body.add(this.collar)
 
     // ── occupants ──────────────────────────────────────────────────────────
-    this.heads = new PosedInstances(blob(HEAD.r, 14), fur, 2, 'kart-heads')
-    this.ears = new PosedInstances(blob(0.105, 10), fur, 4, 'kart-ears')
-    this.masks = new PosedInstances(blob(HEAD.r * 1.02, 14), maskMat, 2, 'kart-masks')
-    this.muzzles = new PosedInstances(blob(0.13, 10), furLight, 2, 'kart-muzzles')
-    this.eyes = new PosedInstances(blob(0.052, 8), eyeMat, 4, 'kart-eyes')
-    for (const b of [this.heads, this.masks, this.muzzles, this.ears, this.eyes]) {
+    // Segment counts are up across the board. At the 4.6 m arm `car-idle` uses,
+    // a head is ~250 px tall and an ear ~70, and at 10 segments the facets on
+    // an ear were individually countable — a hexagonal ear is a modelling
+    // error, not a stylisation. ART_BIBLE 6 asks for "chunky, rounded" forms
+    // whose "volume reads from silhouette alone", which is exactly the thing a
+    // countable facet destroys. The whole occupant is five instanced batches,
+    // so this is ~2k extra triangles on a vehicle budget, not a decision.
+    this.heads = new PosedInstances(blob(HEAD.r, 22), fur, 2, 'kart-heads')
+    this.ears = new PosedInstances(blob(0.105, 16), fur, 4, 'kart-ears')
+    this.masks = new PosedInstances(blob(HEAD.r * 1.02, 22), maskMat, 2, 'kart-masks')
+    this.muzzles = new PosedInstances(blob(0.13, 16), furLight, 2, 'kart-muzzles')
+    this.eyes = new PosedInstances(blob(0.058, 12), eyeMat, 4, 'kart-eyes')
+    // refs/character/raccoon-artstyle-capycastaway.jpg: a hard dark eye and a
+    // hard dark nose against the pale muzzle are the two marks that make the
+    // face read at distance. The eyes existed; the nose did not, so the muzzle
+    // was a featureless pale lump.
+    this.noses = new PosedInstances(blob(0.05, 12), eyeMat, 2, 'kart-noses')
+    for (const b of [
+      this.heads, this.masks, this.muzzles, this.ears, this.eyes, this.noses,
+    ]) {
       this.body.add(b.mesh)
     }
     for (let i = 0; i < 2; i++) {
@@ -194,15 +248,15 @@ export class Kart {
     this.body.position.y = 0.012 * b * amp
 
     // ── flaps: blown open by speed, fluttering always ──────────────────────
-    const flapLayout: readonly [number, number, number, number][] = [
-      // x, z, yaw, width scale
-      [0, -BOX.d * 0.5 + 0.02, 0, BOX.w - 0.16],
-      [0, BOX.d * 0.5 - 0.02, Math.PI, BOX.w - 0.16],
-      [-BOX.w * 0.5 + 0.02, 0, Math.PI * 0.5, BOX.d - 0.2],
-      [BOX.w * 0.5 - 0.02, 0, -Math.PI * 0.5, BOX.d - 0.2],
+    const flapLayout: readonly [number, number, number][] = [
+      // x, z, yaw. Widths are baked into the two geometries now.
+      [0, -BOX.d * 0.5 + 0.02, 0],
+      [0, BOX.d * 0.5 - 0.02, Math.PI],
+      [-BOX.w * 0.5 + 0.02, 0, Math.PI * 0.5],
+      [BOX.w * 0.5 - 0.02, 0, -Math.PI * 0.5],
     ]
     for (let i = 0; i < 4; i++) {
-      const [fx, fz, yaw, wide] = flapLayout[i]!
+      const [fx, fz, yaw] = flapLayout[i]!
       const spring = this.flapSprings[i]!
       // Airflow pushes the leading flaps open and the trailing ones flat; the
       // side flaps mostly feel the corner.
@@ -215,11 +269,12 @@ export class Kart {
         - clamp(t.aLong, -60, 60) * 0.0016
       const angle = spring.step(dt, clamp(target, 0.25, 2.0))
       this.p.set(fx, RIM_Y - 0.03, fz)
-      this.s.set(wide, 1, 1)
       // 'YXZ': yaw first, then the hinge tilt in the flap's own frame.
-      this.flaps.set(i, this.p, -angle, yaw, 0, this.s)
+      const batch = i < 2 ? this.flapsShort : this.flapsLong
+      batch.set(i & 1, this.p, -angle, yaw, 0)
     }
-    this.flaps.flush()
+    this.flapsShort.flush()
+    this.flapsLong.flush()
 
     // ── the coat settles ───────────────────────────────────────────────────
     // Underdamped springs on measured acceleration: the coat swings out in a
@@ -295,15 +350,21 @@ export class Kart {
       // as one crescent on one cheek and was absent on the other head, so the
       // pair read as teddy bears. This wraps the sides and stops short of the
       // back of the skull, so the silhouette says raccoon from behind too.
-      this.masks.set(i, local(0, 0.045, -0.055), rx, ry, rz, this.s.set(1.05, 0.42, 0.86))
+      // v2's band pushed out at the SIDES (z scaled to 0.86) and sat proud of
+      // the skull almost nowhere else, so head-on it read as a beret rather
+      // than as a mask across the eyes. Scaled at or above 1 on both horizontal
+      // axes it breaks the surface all the way round its own equator, which is
+      // where the eyes are.
+      this.masks.set(i, local(0, 0.035, -0.02), rx, ry, rz, this.s.set(1.06, 0.46, 1.0))
       this.muzzles.set(i, local(0, -0.075, -0.245), rx, ry, rz, this.s.set(1, 0.85, 1.2))
+      this.noses.set(i, local(0, -0.052, -0.36), rx, ry, rz, this.s.set(1, 0.8, 0.8))
       for (let e = 0; e < 2; e++) {
         const side = e === 0 ? -1 : 1
         this.ears.set(i * 2 + e, local(side * 0.185, 0.235, 0.01), rx, ry, rz,
           this.s.set(1, 1.15, 0.62))
         // The lid closes the eye by squashing it, which on a sphere with a
         // strong sky rim reads as a blink at any distance.
-        this.eyes.set(i * 2 + e, local(side * 0.115, 0.05, -0.255), rx, ry, rz,
+        this.eyes.set(i * 2 + e, local(side * 0.118, 0.042, -0.262), rx, ry, rz,
           this.s.set(1, 1 - lid * 0.9, 1))
       }
     }
@@ -312,6 +373,7 @@ export class Kart {
     this.muzzles.flush()
     this.ears.flush()
     this.eyes.flush()
+    this.noses.flush()
 
     // ── wheels: suspension travel, steer, spin ─────────────────────────────
     for (let i = 0; i < vehicle.wheels.length; i++) {

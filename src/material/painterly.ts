@@ -20,8 +20,9 @@
 import * as THREE from 'three/webgpu'
 import {
   cameraPosition, cos, cross, dFdx, dFdy, dot, exp2, float, floor, log2, luminance,
-  mix, mx_noise_float, normalWorld, normalize, positionLocal, positionWorld, pow,
-  saturate, sign, sin, smoothstep, uniform, vec2, vec3,
+  max, min, mix, modelWorldMatrix, mx_noise_float, normalLocal, normalWorld, normalize,
+  positionLocal, positionWorld, pow, saturate, sign, sin, smoothstep, uniform, vec2,
+  vec3, vec4,
 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
@@ -90,6 +91,28 @@ export interface PainterlyParams {
    * apart, so wherever the surface is anywhere near a ramp step the patch snaps
    * onto one authored stop or the next as a flat mass with a hard edge. 0 turns
    * the mechanism off and the material is back to a sum of soft octaves.
+   *
+   * Was 0.52 — half a transition width, which mathematically cannot produce a
+   * full-amplitude step, so the region mechanism rode on the gradient instead
+   * of snapping. Swept against the gradient-concentration metric:
+   *
+   *   regionStep   medStd   gradRatio   plateau%      (refs: <0.093, >11.9, >1.4)
+   *      0.52      0.0726       6.6        1.6
+   *      1.0       0.0863      10.3        3.8
+   *      1.5       0.0921      18.6        9.9   <- passes all three metrics
+   *      2.4       0.1315      22.6        8.7        medStd over ceiling
+   *
+   * LEFT AT 0.52 DELIBERATELY. Raising it to 1.5 with brushScale 9 satisfies
+   * every metric and makes the picture WORSE: the ground becomes large flat
+   * yellow blobs, a lava-lamp camouflage. The metric asks for "flat masses
+   * meeting at hard edges" and that is literally what it produced — but the
+   * references' masses follow terrain FORM and LIGHT, while the region mask is
+   * noise. Gradient concentration is a necessary condition, not a sufficient
+   * one, and tuning to it blind is how you get camouflage.
+   *
+   * The real fix is to derive the region mask from surface curvature and the
+   * light direction rather than from independent noise, so the flat masses land
+   * where a painter would put them. That is a design change, not a constant.
    */
   regionStep: number
   /**
@@ -139,6 +162,34 @@ export interface PainterlyParams {
   shadowSkyTint: number
   /** Per-asset scale on the sky ambient. */
   ambient: number
+  // ── M4: response to the deformation field ─────────────────────────────────
+  // Inert unless a `DeformHook` is passed to the constructor, so every surface
+  // that is not ground keeps exactly the shader it had.
+  /**
+   * How far this surface goes with the field, 0..1.
+   *
+   * The master switch. 0 means "a tyre leaves nothing here" — rock, bark,
+   * water — and no amount of stamping changes the pixel. 1 is the authored
+   * response at full strength.
+   */
+  deform: number
+  /** How much of the field's vertical displacement this surface actually
+   *  takes. Separate from `deform` so a surface can mark without denting. */
+  deformRelief: number
+  /**
+   * Gain on the disturbed surface's shading normal.
+   *
+   * This is the term that makes a rut read as a rut on terrain that does not
+   * have the vertices to bend. ART_BIBLE §2: "detail lives in the light, not
+   * the geometry."
+   */
+  deformNormal: number
+  /** How much of the surface's own SHADOW stop a deep mark exposes — snow's
+   *  "deep ruts expose dirt", the forest's mud under the leaf litter. */
+  deformExpose: number
+  /** Sheen on a WET mark. The one place ART_BIBLE allows specular on ground:
+   *  "specular is reserved for water, wet surfaces, ice, and vehicle paint." */
+  deformSheen: number
 }
 
 export const PAINTERLY_DEFAULTS: PainterlyParams = {
@@ -177,6 +228,44 @@ export const PAINTERLY_DEFAULTS: PainterlyParams = {
   saturationGain: 0.2,
   shadowSkyTint: 0.18,
   ambient: 1,
+  // Off by default: only surfaces that opt in through their JSON def take a
+  // tyre mark at all.
+  deform: 0,
+  deformRelief: 1,
+  deformNormal: 1,
+  deformExpose: 1,
+  deformSheen: 0.5,
+}
+
+/**
+ * What the fragment stage needs from the deformation field. M4.
+ *
+ * Declared here rather than imported from `deform/` on purpose: the material
+ * must not depend on the system that writes the field, only on the shape of
+ * what it reads. `src/deform/field.ts` implements it.
+ */
+export interface DeformSample {
+  /** 0 pristine → 1 fully disturbed, already shaped by the surface's edge
+   *  hardness. */
+  mask: Node<'float'>
+  /** Wetness / compaction, 0..1. */
+  wet: Node<'float'>
+  /** d(displacement)/d(x, z), metres per metre. Perturbs the shading normal. */
+  slope: Node<'vec2'>
+  /** Rut depth as a fraction of the field's full scale. Drives `expose`: only
+   *  a DEEP mark reaches the material underneath. */
+  depth: Node<'float'>
+  /** Per-biome albedo response, from the field's own response table. */
+  darken: Node<'float'>
+  chroma: Node<'float'>
+  expose: Node<'float'>
+}
+
+export interface DeformHook {
+  /** Signed vertical displacement in metres at a world position. Negative is a
+   *  rut; positive is the spoil thrown up along its edge. */
+  displace(worldPos: Node<'vec3'>): Node<'float'>
+  shade(worldPos: Node<'vec3'>): DeformSample
 }
 
 /**
@@ -568,9 +657,24 @@ export class PainterlyMaterial {
     saturationGain: uniform(0.4),
     shadowSkyTint: uniform(0.5),
     ambient: uniform(1),
+    deform: uniform(0),
+    deformRelief: uniform(1),
+    deformNormal: uniform(1),
+    deformExpose: uniform(1),
+    deformSheen: uniform(0.5),
   }
 
-  constructor(atmosphere: Atmosphere, params: Partial<PainterlyParams> = {}) {
+  /**
+   * @param deform M4's deformation field, for surfaces that take a tyre mark.
+   *   Optional and additive: with it null the emitted shader is byte-identical
+   *   to the one this material produced before M4, which is what keeps the
+   *   fifteen ratcheted M1 captures the same pictures.
+   */
+  constructor(
+    atmosphere: Atmosphere,
+    params: Partial<PainterlyParams> = {},
+    deform: DeformHook | null = null,
+  ) {
     this.params = { ...PAINTERLY_DEFAULTS, ...params }
     const u = this.u
     const geoN = vec3(normalWorld)
@@ -582,7 +686,39 @@ export class PainterlyMaterial {
     // separates this from a noise overlay sitting on top of clean shading.
     const brush = triplanarBrush(u.brushScale)
     const stroke = brush.value.mul(u.brushStrength)
-    const n = bumpNormal(geoN, brush.gradient, u.detailStrength.mul(brush.fineScale))
+    let n = bumpNormal(geoN, brush.gradient, u.detailStrength.mul(brush.fineScale))
+
+    // ── M4: the deformation field ────────────────────────────────────────────
+    // Sampled at the UNDISPLACED world position — `positionWorld` is derived
+    // from `positionNode`, so reading it here to decide what `positionNode`
+    // should be is circular.
+    const dfm = deform
+      ? deform.shade(vec3(modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz))
+      : null
+    if (deform) {
+      // (a) TERRAIN VERTEX SHADER displaces by the height channel.
+      //
+      // Gated on the LOCAL up-axis so the vertical wall of a shore disc is not
+      // dragged sideways by a rut on the flat beside it, and applied along
+      // object Y — every mesh that opts in is an unrotated, unscaled ground
+      // surface, which is the only case where that identity holds.
+      const disp = deform.displace(vec3(modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz))
+      const facing = smoothstep(0.45, 0.9, normalLocal.y)
+      this.material.positionNode = vec3(positionLocal.add(
+        vec3(0, disp.mul(u.deform).mul(u.deformRelief).mul(facing), 0),
+      ))
+    }
+    if (dfm) {
+      // (b) …and the FRAGMENT normal takes the fine structure the vertices
+      // cannot resolve. The ground mesh is 19 m quads and a rut is 30 cm wide:
+      // without this the mark would be a flat stain. Clamped, because one
+      // texel of a 35 cm snow rut is a 70-degree slope and an unclamped tilt
+      // turns the mark's own edge into a black rim.
+      const g = vec2(
+        dfm.slope.x.clamp(-1.6, 1.6), dfm.slope.y.clamp(-1.6, 1.6),
+      ).mul(u.deform.mul(u.deformNormal))
+      n = vec3(normalize(n.add(vec3(g.x.negate(), 0, g.y.negate()))))
+    }
 
     // ── 3-stop diffuse ramp (not raw N.L) ────────────────────────────────────
     // The cast shadow is folded into the ramp INPUT, not multiplied onto the
@@ -768,6 +904,30 @@ export class PainterlyMaterial {
     // drags around with it.
     albedo = rotateHue(albedo, flatMark(brush.height, 0.30).mul(u.brushHue))
 
+    // ── M4 (c): the disturbed material, blended in by the mask ───────────────
+    //
+    // refs/mkw/beach-wet-sand-tracks.jpg is the target and it is almost purely
+    // an ALBEDO effect: the tracks are the same sand, much darker and slightly
+    // more saturated, with a knife edge. So this darkens and grades rather than
+    // substituting a second authored colour — a track has to stay recognisably
+    // the surface it is cut into, at every hour, under every grade.
+    if (dfm) {
+      const dm = saturate(dfm.mask.mul(u.deform)).toVar()
+      // A wet mark is far darker than a dry one. This is the difference between
+      // the beach reference and a scuff in dune sand, and it is one lerp.
+      const dark = dfm.darken.mul(mix(float(0.42), float(1), dfm.wet))
+      let disturbed: Node<'vec3'> = vec3(albedo.mul(dark.oneMinus().max(0.05)))
+      // "Deep ruts expose dirt and rock" (ART_BIBLE §4, alpine). Scaled by the
+      // rut's actual DEPTH, not by the mask, so a scuff shows the surface and
+      // only a trench shows what is under it.
+      disturbed = vec3(mix(
+        disturbed, vec3(disturbed.mul(0.34)),
+        saturate(dfm.expose.mul(u.deformExpose).mul(dfm.depth.mul(2.2))),
+      ))
+      disturbed = vec3(gradeSaturation(disturbed, dfm.chroma))
+      albedo = vec3(mix(albedo, disturbed, dm))
+    }
+
     // ── light: sky ambient (coloured, lifted) + ramped direct ─────────────────
     const level = mix(float(0), u.midLevel, toMid)
     const direct = vec3(atmosphere.sunColorNode.mul(mix(level, float(1), toLit)))
@@ -817,6 +977,19 @@ export class PainterlyMaterial {
     const view = vec3(cameraPosition.sub(positionWorld).normalize())
     const rim = pow(saturate(dot(n, view).oneMinus()), u.rimPower).mul(u.rimStrength)
     color = vec3(color.add(albedo.mul(ambient).mul(rim).mul(1.5)))
+
+    // ── M4 (d): the one specular ART_BIBLE allows on ground ──────────────────
+    // "Sharp specular is reserved for water, wet surfaces, ice, and vehicle
+    // paint" (§2). A wet or compacted mark IS a wet surface, and the glint off
+    // a fresh track in wet sand is half of what makes the reference read as
+    // wet rather than merely dark. Gated on the wetness channel, so a dry
+    // scuff in dune sand gets nothing.
+    if (dfm) {
+      const half = vec3(normalize(atmosphere.nodes.sunDir.add(view)))
+      const gloss = dfm.wet.mul(dfm.mask).mul(u.deform).mul(u.deformSheen)
+      const spec = pow(saturate(dot(n, half)), float(46)).mul(gloss)
+      color = vec3(color.add(atmosphere.sunColorNode.mul(spec).mul(vis).mul(0.9)))
+    }
 
     // ── chroma FALLS with luminance (ART_BIBLE §2, corrected) ────────────────
     // This previously read `.add(1)`, i.e. saturation multiplier rising from
@@ -873,5 +1046,10 @@ export class PainterlyMaterial {
     u.saturationGain.value = p.saturationGain
     u.shadowSkyTint.value = p.shadowSkyTint
     u.ambient.value = p.ambient
+    u.deform.value = p.deform
+    u.deformRelief.value = p.deformRelief
+    u.deformNormal.value = p.deformNormal
+    u.deformExpose.value = p.deformExpose
+    u.deformSheen.value = p.deformSheen
   }
 }

@@ -7,11 +7,12 @@ import { PerfHud } from './debug/perfHud'
 import { Atmosphere } from './atmosphere/sky'
 import { buildPostChain } from './post/postChain'
 import { buildGreybox } from './world/greybox'
-import { Vehicle, type VehicleTelemetry } from './vehicle/vehicle'
+import { FEEL, Vehicle, type VehicleTelemetry } from './vehicle/vehicle'
 import { Kart } from './vehicle/kart'
 import { ChaseCamera } from './vehicle/camera'
 import { KeyboardInput, mountControlHint, type InputSource } from './vehicle/input'
 import { ScriptedInput, readVehicleOptions } from './vehicle/replay'
+import { EngineAudio } from './vehicle/audio'
 import { ContactShadow, NO_CAST_LAYER } from './vehicle/contactShadow'
 
 declare global {
@@ -109,6 +110,7 @@ async function boot() {
     chase: ChaseCamera
     input: InputSource
     shadow: ContactShadow
+    audio: EngineAudio | null
   } | null = null
 
   if (carOpts.enabled) {
@@ -146,7 +148,17 @@ async function boot() {
       ? new ScriptedInput(carOpts.script)
       : new KeyboardInput()
     if (!carOpts.script) mountControlHint()
-    car = { vehicle, kart, chase, input, shadow }
+    // MILESTONES M3, "Engine audio, pitch by speed". Never under `?shot=1`:
+    // headless Chromium has no audio device, the context would sit suspended
+    // forever, and the capture contract is byte-identical frames. `arm()` only
+    // registers the one-shot gesture listener every browser requires before an
+    // AudioContext may start — nothing is allocated until the player drives.
+    let audio: EngineAudio | null = null
+    if (!state.shot) {
+      audio = new EngineAudio()
+      audio.arm()
+    }
+    car = { vehicle, kart, chase, input, shadow, audio }
   }
 
   const pipeline = buildPostChain(renderer, scene, camera, atmosphere)
@@ -234,8 +246,10 @@ async function boot() {
       // Warmup exists to compile pipelines and settle streaming, and it is 64
       // frames — over a second of driving. Without this offset every capture
       // earlier than frame 64 is unreachable, which is most of a launch.
-      car.vehicle.update(dt, car.input.sample(clock.frame - state.warmup))
+      const drive = car.input.sample(clock.frame - state.warmup)
+      car.vehicle.update(dt, drive)
       car.kart.update(dt, clock.elapsed, car.vehicle)
+      if (dt > 0) car.audio?.update(dt, car.vehicle.telemetry, drive.throttle, FEEL.maxSpeed)
       // After the kart, before the camera: the shadow reads the same pose the
       // wheels were just placed at, and the shadow patch is scene geometry the
       // camera's terrain solve does not care about.
