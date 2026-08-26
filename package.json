@@ -14,9 +14,10 @@
     "shots:serve": "vite build && vite preview --port 4173 & sleep 3 && BASE_URL=http://127.0.0.1:4173 node tools/shots.mjs",
     "palette": "node tools/palette.mjs",
     "distinct": "node tools/distinct.mjs",
-    "gate": "npm run palette && npm run shadow && npm run structure && npm run distinct",
+    "gate": "npm run palette && npm run shadow && npm run structure && npm run hue && npm run distinct",
     "shadow": "node tools/shadow.mjs",
-    "structure": "node tools/structure.mjs"
+    "structure": "node tools/structure.mjs",
+    "hue": "node tools/hue.mjs"
   },
   "repository": {
     "type": "git",
