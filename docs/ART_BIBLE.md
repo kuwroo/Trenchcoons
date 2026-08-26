@@ -59,9 +59,28 @@ tendency is the real work.
   never near-black. Deleting this rule deletes the entire look.
 - **No PBR specular on nature.** Terrain, rock, bark, foliage are pure diffuse
   ramp. Sharp specular is reserved for water, wet surfaces, ice, and vehicle paint.
-- **Saturation increases with light.** Lit faces get *more* saturated, not
-  blown-out white. This is the single biggest departure from a physical renderer
-  and it is what makes the references glow.
+- **Light warms hue and raises value; it does NOT raise saturation.**
+  Measured within the green material family, lit vs shaded:
+
+  | reference | hue | saturation | value |
+  |---|---|---|---|
+  | genshin/grasslands | -52deg | **-0.14** | +0.40 |
+  | painterly/cliffs-tohad | -53deg | **-0.15** | +0.33 |
+  | capycastaway/water-lagoon | +18deg | **-0.17** | +0.43 |
+  | character/raccoon | -41deg | +0.08 | +0.67 |
+
+  So a lit surface rotates ~50deg toward yellow, jumps ~0.4 in value, and
+  loses ~0.15 saturation. It goes bright and pale-warm, not deeply saturated.
+
+  An earlier version of this rule said the opposite — "saturation increases
+  with light... it is what makes the references glow" — and six builder rounds
+  worked from it. It was derived from the WHOLE-IMAGE statistic, where
+  saturation does rise with luminance because bright saturated sky dominates
+  the top of the range, and then wrongly generalised to surfaces. Both are
+  true at once; only the whole-image one is what `npm run palette` measures.
+
+  The glow comes from hue warming and value range. Chasing it with saturation
+  produces the acid-green plastic look.
 - **Distance = haze + desaturation + hue shift toward sky.** Never a grey fog lerp.
 - **Big shapes, restrained detail.** Every asset reads as a clear silhouette at
   its LOD2 distance. If it needs detail to read, it's badly shaped.

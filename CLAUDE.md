@@ -29,7 +29,9 @@ water driving, and tire tracks.
 ```
 Shadows:   coloured and lifted, tinted toward sky. Never grey, never crushed.
 Specular:  water, wet surfaces, ice, vehicle paint. Never nature.
-Saturation increases with light — lit faces get more saturated, not blown white.
+Lit surfaces warm ~50deg toward yellow and jump ~0.4 in VALUE, while LOSING
+           ~0.15 saturation. Measured across the references. Do not chase glow
+           with saturation — that is what makes it look like acid plastic.
 Distance:  haze + desaturation + hue shift toward sky. Never a grey fog lerp.
 Forms:     big and simple. Detail lives in the light, not the geometry.
 Clouds:    pink and lavender, not white.
