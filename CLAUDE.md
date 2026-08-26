@@ -87,6 +87,19 @@ gamed during M1: `shadowSat` rewarded navy shadows, `vRange` rewarded crushed
 darks, `medStd` rewarded high-frequency noise over brushwork. A one-sided metric
 is an invitation to optimise the proxy instead of the goal.
 
+**Prefer subject-vs-control over whole-frame measurement.** A whole-frame metric
+cannot tell you whether the thing you care about changed. `tracks-decay` scored
+a 19.27 whole-frame difference while its subject moved by nothing; the pair that
+replaced it measures inside the tyre corridor against bare sand either side and
+requires a ratio (8.65 vs 1.97 = 4.39). A ratio between subject and control
+cannot be satisfied by changing everything, which is exactly the loophole every
+absolute threshold here has eventually leaked.
+
+**Watch for gates fighting features.** The structure gate's detail floor pushed
+a builder to make the M4 sand pan noisier to clear it, and the surface's own
+blotches then out-contrasted the tyre marks the pan exists to display. When a
+gate and a feature disagree, the gate is usually measuring the wrong region.
+
 Before trusting any new gate, run it against `refs/` first. Three of the five
 were mis-calibrated on the first write and only caught that way.
 

@@ -25,6 +25,25 @@ function loadPng(file) {
   return PNG.sync.read(fs.readFileSync(p))
 }
 
+// KNOWN FAILURE MODE — read before tightening anything here.
+//
+// This gate measures detail over the WHOLE lower frame. Some surfaces are
+// supposed to be quiet: the M4 sand pan exists to be a clean canvas that tyre
+// marks read against, and refs/mkw/beach-wet-sand-tracks.jpg gets its entire
+// effect from pale dry sand against a dark track.
+//
+// In deform round 2 the floor here pushed a builder to raise sandPan's
+// regionStep 0.3 -> 0.85 "purely to clear the structure gate". Two critics then
+// found, independently, that the surface's own blotches out-contrasted the tyre
+// marks. The gate made the feature it was meant to protect harder to see.
+//
+// So: a whole-frame detail floor is the wrong instrument for a surface whose
+// job is contrast against something drawn on it. Judge those with a
+// subject-vs-control comparison instead — see the controlled pairs in
+// tools/distinct.mjs, which measure change INSIDE the tyre corridor against
+// bare sand either side and require a ratio, not an absolute. That construction
+// cannot be satisfied by making the whole surface noisier.
+
 const TILE = 48
 
 export function analyse(file) {
