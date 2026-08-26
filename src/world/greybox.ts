@@ -13,9 +13,73 @@
 
 import * as THREE from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
-import { PainterlyMaterial } from '../material/painterly'
+import { PainterlyMaterial, type DeformHook } from '../material/painterly'
 import { surface } from '../material/defs'
 import type { Rng } from '../core/rng'
+
+/**
+ * M4's sand pan: a finely tessellated, sand-surfaced flat, laid exactly on the
+ * ground it covers, for the deformation field's captures to happen on.
+ *
+ * It exists because of a resolution mismatch the greybox cannot otherwise
+ * resolve. The ground mesh is 420 segments over 8 km — 19 m quads — and a tyre
+ * rut is 30 cm wide, so "the terrain vertex shader displaces by the height
+ * channel" is correct on that mesh and INVISIBLE on it. M2's CDLOD terrain
+ * fixes that properly; until then this is 55 cm cells over a 68 x 220 m
+ * footprint, which is enough for the displacement to read as geometry and not
+ * only as shading.
+ *
+ * It is coincident, not floating. Its vertices sample `groundAt` — the DRAWN
+ * triangle height, not the analytic field — so a finer subdivision of the same
+ * piecewise-linear surface lands exactly on it, and the only offset is a 3 cm
+ * lift to settle the depth test. Its normals come from the analytic gradient at
+ * the coarse lattice spacing, which is what `computeVertexNormals` gives the
+ * mesh underneath, so the shading is continuous across the boundary too.
+ *
+ * Built only when the deformation field is enabled, so none of the twenty
+ * ratcheted captures can see it.
+ */
+export interface SandPan {
+  x: number
+  z: number
+  halfX: number
+  halfZ: number
+}
+
+/**
+ * Where the pan is, and how far inside its edge a point sits.
+ *
+ * A superellipse rather than a rectangle: a hard rectangle of sand in a natural
+ * landscape reads as a bug. Exponent 4, so it is rectangular through the middle
+ * where the driving happens and rounded at the corners.
+ *
+ * Shared with the GROUND mesh, which has to know: see `PAN_SINK`.
+ */
+const PAN: SandPan = { x: -1000, z: 50, halfX: 60, halfZ: 130 }
+const panMargin = (x: number, z: number): number => {
+  const u = (x - PAN.x) / PAN.halfX
+  const v = (z - PAN.z) / PAN.halfZ
+  return 1 - (u * u * u * u + v * v * v * v)
+}
+/**
+ * How far the coarse ground is pushed DOWN underneath the pan, metres.
+ *
+ * Not cosmetic. The pan is a refinement of the same surface, laid 3 cm above
+ * it, and the 3 cm is only enough while both are flat: the moment the field
+ * displaces the pan into a rut, the pan drops BELOW the 19 m quad it is lying
+ * on and the coarse ground erupts through the middle of the tyre mark as a
+ * green stripe. Sinking the coarse mesh by more than the deepest rut ART_BIBLE
+ * allows (0.35 m, alpine) removes the interpenetration entirely, and because
+ * the sink ramps to zero before the pan's own edge, nothing of it is ever
+ * visible.
+ */
+const PAN_SINK = 0.6
+const panSink = (x: number, z: number): number => {
+  const t = panMargin(x, z)
+  if (t <= 0.06) return 0
+  const s = Math.min(1, (t - 0.06) / 0.36)
+  return PAN_SINK * s * s * (3 - 2 * s)
+}
 
 /** Half-extent of the ground plane, metres. */
 const GROUND_HALF = 4000
@@ -152,9 +216,18 @@ export interface Greybox {
   materials: PainterlyMaterial[]
   /** Every scattered form big enough to hide a car. */
   obstacles: Obstacle[]
+  /** M4's sand pan footprint, or null when the deformation field is off. */
+  pan: SandPan | null
 }
 
-export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
+/**
+ * @param deform M4's field. Additive: with it null nothing in the emitted
+ *   scene changes, which is what keeps the twenty ratcheted captures the same
+ *   pictures.
+ */
+export function buildGreybox(
+  atmosphere: Atmosphere, rng: Rng, deform: DeformHook | null = null,
+): Greybox {
   const group = new THREE.Group()
   group.name = 'greybox'
   const noise = makeValueNoise(rng.fork('terrain'))
@@ -234,13 +307,13 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   const materials: PainterlyMaterial[] = []
   const obstacles: Obstacle[] = []
   /** Every surface comes from a JSON def in assets/defs/surfaces. */
-  const mat = (defId: string): THREE.MeshBasicNodeMaterial => {
-    const m = new PainterlyMaterial(atmosphere, surface(defId))
+  const mat = (defId: string, hook: DeformHook | null = null): THREE.MeshBasicNodeMaterial => {
+    const m = new PainterlyMaterial(atmosphere, surface(defId), hook)
     materials.push(m)
     return m.material
   }
 
-  const meadow = mat('meadow')
+  const meadow = mat('meadow', deform)
   const water = mat('water')
   const flowers = mat('flowers')
   const rock = mat('rock')
@@ -267,7 +340,12 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
                                   // the material's vertical gradient still works
   const pos = groundGeo.attributes.position as THREE.BufferAttribute
   for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)))
+    const px = pos.getX(i)
+    const pz = pos.getZ(i)
+    // `heightAt` and `groundAt` deliberately do NOT know about the sink: the
+    // pan is the surface you can see and drive on there, and it sits at the
+    // un-sunk height. Only the hidden mesh moves.
+    pos.setY(i, heightAt(px, pz) - (deform ? panSink(px, pz) : 0))
   }
   groundGeo.computeVertexNormals()
   const ground = new THREE.Mesh(groundGeo, meadow)
@@ -597,10 +675,146 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   }
 
   // ── sand shelf, so one warm value sits in frame ────────────────────────────
-  const shelf = new THREE.Mesh(new THREE.CylinderGeometry(150, 190, 8, 26), sand)
-  shelf.position.set(-260, heightAt(-260, -380) - 2, -380)
+  // A 380 m disc anchored to ONE height sample floats. The greybox carries
+  // 150 m of relief on a 380 m wavelength, so wherever the ground falls away
+  // under the rim the shelf hangs in the air.
+  //
+  // NOT CONFIRMED as the cause of the large pale slab visible in the tracks-*
+  // captures. That artefact renders identically with the deform field off, so
+  // it is not a deformation bug, and the shelf's size and distance are about
+  // right for it — but an A/B with the shelf removed also moved the camera
+  // (spawn selection reads the obstacle set), so the comparison was invalid and
+  // the attribution is still open. This fix stands on its own regardless: a
+  // disc this size cannot be anchored to a single sample.
+  //
+  // Anchored to the MINIMUM ground height across its own footprint instead, so
+  // the rim is buried everywhere and only the crown surfaces. Sampled on a ring
+  // at the outer radius plus the centre; the disc is convex and the terrain is
+  // low-frequency, so the extremum is on the boundary.
+  const SHELF_X = -260, SHELF_Z = -380, SHELF_R = 190, SHELF_H = 8
+  let shelfFloor = heightAt(SHELF_X, SHELF_Z)
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2
+    for (const r of [SHELF_R, SHELF_R * 0.6]) {
+      const h = heightAt(SHELF_X + Math.cos(a) * r, SHELF_Z + Math.sin(a) * r)
+      if (h < shelfFloor) shelfFloor = h
+    }
+  }
+  const shelf = new THREE.Mesh(
+    new THREE.CylinderGeometry(SHELF_R * 0.79, SHELF_R, SHELF_H, 26), sand,
+  )
+  // Top of the disc a little above the lowest ground it covers, so it still
+  // reads as a shelf rather than vanishing.
+  shelf.position.set(SHELF_X, shelfFloor + SHELF_H * 0.5 - 1.5, SHELF_Z)
   shelf.frustumCulled = false
   group.add(shelf)
 
-  return { group, heightAt, groundAt, waterLevel, spawnPoint, materials, obstacles }
+  // ── M4: the sand pan ───────────────────────────────────────────────────────
+  // Last, and only when the field is on. `rng.fork` advances the parent stream,
+  // so a fork placed anywhere earlier would shift every scatter set downstream
+  // of it and rewrite twenty baselines; nothing draws RNG after this point.
+  let pan: SandPan | null = null
+  if (deform) {
+    pan = buildSandPan(group, mat('sandPan', deform), heightAt, groundAt, rng.fork('pan'))
+  }
+
+  return { group, heightAt, groundAt, waterLevel, spawnPoint, materials, obstacles, pan }
+}
+
+/**
+ * The pan itself. See `SandPan`.
+ *
+ * Site found by sweeping `heightAt` and `obstacles` for the gentlest 68 x 220 m
+ * footprint in the near world that is also clear of every scattered form: the
+ * greybox carries 150 m of relief on a 380 m wavelength and there is no flat
+ * anything in it, so 17 degrees of worst-case slope over the whole strip is the
+ * best available and the drive scripts are laid out along its gentle axis.
+ */
+function buildSandPan(
+  group: THREE.Group,
+  material: THREE.MeshBasicNodeMaterial,
+  heightAt: (x: number, z: number) => number,
+  groundAt: (x: number, z: number) => number,
+  rng: Rng,
+): SandPan {
+  const pan = PAN
+  /** Cell size, metres. Small enough for a 35 cm rut to bend real vertices. */
+  const CELL = 0.6
+  /** Settles the depth test against the coincident ground. 3 cm is a tenth of
+   *  a pixel at the distance the pan's own edge is ever seen from. */
+  const LIFT = 0.03
+  /** Finite-difference width for the normals: the coarse ground lattice, so
+   *  these match what `computeVertexNormals` produced for the mesh under it. */
+  const H = (GROUND_HALF * 2) / GROUND_SEGMENTS
+
+  const nx = Math.round((pan.halfX * 2) / CELL)
+  const nz = Math.round((pan.halfZ * 2) / CELL)
+  const vx = nx + 1
+  const vz = nz + 1
+  const pos = new Float32Array(vx * vz * 3)
+  const nor = new Float32Array(vx * vz * 3)
+  const uvs = new Float32Array(vx * vz * 2)
+  for (let j = 0; j < vz; j++) {
+    for (let i = 0; i < vx; i++) {
+      const x = pan.x - pan.halfX + (i / nx) * pan.halfX * 2
+      const z = pan.z - pan.halfZ + (j / nz) * pan.halfZ * 2
+      const o = (j * vx + i) * 3
+      pos[o] = x
+      pos[o + 1] = groundAt(x, z) + LIFT
+      pos[o + 2] = z
+      const gx = (heightAt(x + H * 0.5, z) - heightAt(x - H * 0.5, z)) / H
+      const gz = (heightAt(x, z + H * 0.5) - heightAt(x, z - H * 0.5)) / H
+      const inv = 1 / Math.hypot(gx, 1, gz)
+      nor[o] = -gx * inv
+      nor[o + 1] = inv
+      nor[o + 2] = -gz * inv
+      const u = (j * vx + i) * 2
+      uvs[u] = i / nx
+      uvs[u + 1] = j / nz
+    }
+  }
+
+  // A hard rectangle in a natural landscape reads as a bug, so the footprint is
+  // a superellipse with a seeded ripple on its radius: rectangular through the
+  // middle where the driving happens, ragged at the edge like a tide line.
+  // Ragged, like a tide line — but only within +/-0.05 of the superellipse,
+  // which is exactly the band where `panSink` is still zero. Any wider and the
+  // ground would show a step at the pan's own edge.
+  const idx: number[] = []
+  const jitter = new Float32Array(64)
+  for (let i = 0; i < jitter.length; i++) jitter[i] = rng.range(-0.05, 0.05)
+  const inside = (x: number, z: number): boolean => {
+    const a = Math.atan2((z - pan.z) / pan.halfZ, (x - pan.x) / pan.halfX)
+    const k = jitter[Math.floor(((a / (Math.PI * 2)) + 1) * 32) % 64] ?? 0
+    return panMargin(x, z) > -k
+  }
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const cx = pan.x - pan.halfX + ((i + 0.5) / nx) * pan.halfX * 2
+      const cz = pan.z - pan.halfZ + ((j + 0.5) / nz) * pan.halfZ * 2
+      if (!inside(cx, cz)) continue
+      const a = j * vx + i
+      const b = a + 1
+      const c = a + vx
+      const d = c + 1
+      idx.push(a, c, b, b, c, d)
+    }
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geo.setIndex(idx)
+  const mesh = new THREE.Mesh(geo, material)
+  mesh.name = 'sand-pan'
+  // CULLED, unlike everything else in this file. The rest of the greybox is
+  // instanced batches whose origin instance leaving the view would pop the
+  // whole batch, and the ground plane is 8 km wide and always in view. This is
+  // neither: it is one 81k-triangle mesh 120 x 260 m across, at a fixed place
+  // in the world, and the perf scenes look at it from a kilometre away. Leaving
+  // it uncullable drew it in four shadow cascades, the depth prepass and the
+  // opaque pass of every frame of every scene the field is on in.
+  group.add(mesh)
+  return pan
 }
