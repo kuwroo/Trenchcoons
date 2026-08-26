@@ -1,0 +1,20 @@
+{
+  "id": "rock",
+  "version": 1,
+  "type": "surface",
+  "notes": "ART_BIBLE 4: rock lit is a light blue, rock shadow unmistakably blue.",
+  "material": {
+    "base": "#7e9fc4",
+    "shadow": "#52719e",
+    "lit": "#b9d9f0",
+    "top": "#cfe8ff",
+    "topGain": 1.1,
+    "gradientHeight": 7,
+    "gradientStrength": 0.4,
+    "rampSoftness": 0.1,
+    "brushScale": 2.6,
+    "brushStrength": 0.55,
+    "saturationGain": 0.26,
+    "rimStrength": 0.5
+  }
+}

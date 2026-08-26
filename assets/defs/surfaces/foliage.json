@@ -1,0 +1,22 @@
+{
+  "id": "foliage",
+  "version": 1,
+  "type": "surface",
+  "notes": "Conifer tiers and bushes. Strong sky rim, no specular.",
+  "material": {
+    "base": "#37901f",
+    "shadow": "#1e5528",
+    "lit": "#9ee02a",
+    "top": "#c8ff5a",
+    "topGain": 1.2,
+    "gradientHeight": 8,
+    "gradientStrength": 0.7,
+    "rampSoftness": 0.26,
+    "brushScale": 1.8,
+    "brushStrength": 0.8,
+    "saturationGain": 0.32,
+    "rimStrength": 0.85,
+    "rimPower": 2.4,
+    "ambient": 1.05
+  }
+}

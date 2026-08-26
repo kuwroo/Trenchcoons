@@ -1,0 +1,19 @@
+{
+  "id": "water",
+  "version": 1,
+  "type": "surface",
+  "notes": "Capy Castaway lagoon placeholder until M7. No specular here.",
+  "material": {
+    "base": "#2fbfc4",
+    "shadow": "#1d7fa8",
+    "lit": "#5fe8d4",
+    "top": "#7ff5e0",
+    "topGain": 1.04,
+    "rampSoftness": 0.24,
+    "midLevel": 0.55,
+    "brushScale": 11,
+    "brushStrength": 0.35,
+    "saturationGain": 0.3,
+    "rimStrength": 0.3
+  }
+}

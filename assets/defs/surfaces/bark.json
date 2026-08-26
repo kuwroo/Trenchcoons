@@ -1,0 +1,19 @@
+{
+  "id": "bark",
+  "version": 1,
+  "type": "surface",
+  "notes": "Warm red-brown per Capy Castaway, never grey-brown.",
+  "material": {
+    "base": "#8b4a3a",
+    "shadow": "#5f3a55",
+    "lit": "#c86a3a",
+    "top": "#dd8a48",
+    "topGain": 1.12,
+    "gradientHeight": 6,
+    "gradientStrength": 0.3,
+    "brushScale": 1.1,
+    "brushStrength": 0.8,
+    "saturationGain": 0.24,
+    "rimStrength": 0.45
+  }
+}

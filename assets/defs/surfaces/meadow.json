@@ -1,0 +1,21 @@
+{
+  "id": "meadow",
+  "version": 1,
+  "type": "surface",
+  "notes": "Rolling grassland — the M1 hub surface. ART_BIBLE 4, Meadow / hub.",
+  "material": {
+    "base": "#5eb02e",
+    "shadow": "#2f6b34",
+    "lit": "#a8e02e",
+    "top": "#d8ff70",
+    "topGain": 1.06,
+    "gradientBase": -120,
+    "gradientHeight": 260,
+    "gradientStrength": 0.3,
+    "brushScale": 2.6,
+    "brushStrength": 1.45,
+    "rampSoftness": 0.15,
+    "saturationGain": 0.34,
+    "rimStrength": 0.24
+  }
+}

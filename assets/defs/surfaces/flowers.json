@@ -1,0 +1,21 @@
+{
+  "id": "flowers",
+  "version": 1,
+  "type": "surface",
+  "notes": "Violet flower masses, per the near field of cliffs-tohad.jpg.",
+  "material": {
+    "base": "#9a72d8",
+    "shadow": "#6a5aa8",
+    "lit": "#d8a8f5",
+    "top": "#e8c0ff",
+    "topGain": 1.1,
+    "gradientHeight": 4,
+    "gradientStrength": 0.6,
+    "rampSoftness": 0.26,
+    "brushScale": 1.4,
+    "brushStrength": 0.7,
+    "saturationGain": 0.32,
+    "rimStrength": 0.8,
+    "rimPower": 2.4
+  }
+}

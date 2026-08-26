@@ -1,0 +1,19 @@
+{
+  "id": "grassMound",
+  "version": 1,
+  "type": "surface",
+  "notes": "Small grass forms: mounds, verges, tufts.",
+  "material": {
+    "base": "#6cc032",
+    "shadow": "#33702f",
+    "lit": "#bce828",
+    "top": "#d8ff7a",
+    "topGain": 1.14,
+    "gradientHeight": 9,
+    "gradientStrength": 0.6,
+    "brushScale": 2.0,
+    "brushStrength": 0.75,
+    "saturationGain": 0.26,
+    "rimStrength": 0.42
+  }
+}

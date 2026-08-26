@@ -1,0 +1,17 @@
+{
+  "id": "path",
+  "version": 1,
+  "type": "surface",
+  "notes": "The master palette's path lavender (#C8B8E8).",
+  "material": {
+    "base": "#bfa8e8",
+    "shadow": "#8f7fc8",
+    "lit": "#e0cfff",
+    "top": "#e8d8ff",
+    "topGain": 1.05,
+    "brushScale": 4,
+    "brushStrength": 0.5,
+    "saturationGain": 0.26,
+    "rimStrength": 0.2
+  }
+}

@@ -41,6 +41,8 @@ export function analyse(file) {
   const n = png.width * png.height
   let sumS = 0, sumL = 0, blown = 0, nearGrey = 0, dark = 0
   const lums = []
+  // HSV *value* (max channel), which is what "N stops of range" is measured in.
+  const vals = []
   // saturation binned by luminance — tests the "saturation rises with light" rule
   const bins = Array.from({ length: 5 }, () => ({ s: 0, n: 0 }))
   // shadow pixels (darkest 15%) hue spread — tests "shadows are tinted"
@@ -51,6 +53,7 @@ export function analyse(file) {
     const [h, s, l] = rgbToHsl(r, g, b)
     sumS += s; sumL += l
     lums.push(l)
+    vals.push(Math.max(r, g, b) / 255)
     if (l > 0.93) blown++
     if (l < 0.20) dark++
     if (s < 0.08) nearGrey++
@@ -60,7 +63,9 @@ export function analyse(file) {
   }
 
   lums.sort((a, b) => a - b)
+  vals.sort((a, b) => a - b)
   const q = (p) => lums[Math.floor(lums.length * p)] ?? 0
+  const qv = (p) => vals[Math.floor(vals.length * p)] ?? 0
   const shadowS = shadowPx.length ? shadowPx.reduce((a, p) => a + p[1], 0) / shadowPx.length : 0
 
   return {
@@ -68,6 +73,8 @@ export function analyse(file) {
     meanSat: +(sumS / n).toFixed(3),
     meanLum: +(sumL / n).toFixed(3),
     p05: +q(0.05).toFixed(3), p50: +q(0.5).toFixed(3), p95: +q(0.95).toFixed(3),
+    v05: +qv(0.05).toFixed(3), v95: +qv(0.95).toFixed(3),
+    vRange: +(qv(0.95) - qv(0.05)).toFixed(3),
     blownPct: +((blown / n) * 100).toFixed(2),
     darkPct: +((dark / n) * 100).toFixed(2),
     nearGreyPct: +((nearGrey / n) * 100).toFixed(2),
@@ -92,7 +99,9 @@ function row(a) {
     String(a.shadowSat).padStart(7),
     String(a.blownPct).padStart(7),
     String(a.darkPct).padStart(6),
-    String(a.nearGreyPct).padStart(8),
+    String(a.v05).padStart(6),
+    String(a.v95).padStart(6),
+    String(a.vRange).padStart(7),
     rising.padStart(7),
     '  [' + a.satByLum.join(' ') + ']',
   ].join(' ')
@@ -104,7 +113,8 @@ const shots = targets.length ? targets
   : []
 
 console.log('file'.padEnd(34), 'mSat'.padStart(6), 'mLum'.padStart(6),
-            'shdSat'.padStart(7), 'blown%'.padStart(7), 'dark%'.padStart(6), 'grey%'.padStart(8),
+            'shdSat'.padStart(7), 'blown%'.padStart(7), 'dark%'.padStart(6),
+            'v05'.padStart(6), 'v95'.padStart(6), 'vRange'.padStart(7),
             'satRise'.padStart(7), '  sat by luminance bin')
 console.log('-'.repeat(120))
 console.log('REFERENCES')
@@ -126,8 +136,10 @@ for (const a of outStats) {
   if (a.meanSat < refSat * 0.75) problems.push(`undersaturated (${a.meanSat} vs ref ${refSat.toFixed(3)})`)
   if (a.blownPct > Math.max(refBlown * 2.5, 2)) problems.push(`washed out (${a.blownPct}% blown vs ref ${refBlown.toFixed(2)}%)`)
   if (a.nearGreyPct > 12) problems.push(`${a.nearGreyPct}% near-grey pixels`)
-  if (a.darkPct < 0.5) problems.push(`NO SHADOWS — only ${a.darkPct}% of pixels below L=0.2`)
-  else if (a.shadowSat > 0 && a.shadowSat < 0.25) problems.push(`grey shadows (shadowSat ${a.shadowSat}, ART_BIBLE requires tinted)`)
+  // The reference band, measured: cliffs-tohad 0.51, genshin/grasslands 0.46,
+  // desert-hazy 0.42. Below ~0.34 there is no terminator anywhere in frame.
+  if (a.vRange < 0.34) problems.push(`FLAT — p05..p95 value range only ${a.vRange} (refs 0.42-0.51)`)
+  if (a.shadowSat > 0 && a.shadowSat < 0.25) problems.push(`grey shadows (shadowSat ${a.shadowSat}, ART_BIBLE requires tinted)`)
   if (a.satByLum[3] < a.satByLum[1]) problems.push('saturation FALLS with light (ART_BIBLE violation)')
   console.log('  ' + a.file.padEnd(30) + (problems.length ? 'FAIL  ' + problems.join('; ') : 'ok'))
 }

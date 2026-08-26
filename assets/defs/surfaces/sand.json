@@ -1,0 +1,17 @@
+{
+  "id": "sand",
+  "version": 1,
+  "type": "surface",
+  "notes": "Capy Castaway sand is near-yellow; the shadow goes mauve, not grey.",
+  "material": {
+    "base": "#e4d47a",
+    "shadow": "#c98ba0",
+    "lit": "#ffee7a",
+    "top": "#fff29a",
+    "topGain": 1.05,
+    "brushScale": 6.5,
+    "brushStrength": 0.45,
+    "saturationGain": 0.24,
+    "rimStrength": 0.22
+  }
+}
