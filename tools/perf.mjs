@@ -7,9 +7,17 @@ const WEBGPU_ARGS = ['--use-angle=metal', '--enable-unsafe-swiftshader']
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173'
 const SECONDS = Number(process.env.PERF_SECONDS ?? 12)
 
+// `car=0` is REQUIRED. The vehicle is opt-OUT outside ?shot=1, so without it
+// the kart spawns into these scenes, the chase camera follows it, and the run
+// measures a close-up of the car instead of the composition it is named after.
+// ground-noon spawns at y=-83.8 — 84m down in the lagoon bowl — so the first
+// version of this file reported "vsync-locked 60fps" for a near-empty pit view.
 const SCENES = [
-  { name: 'ground-noon',  q: 'time=0.50&pos=280,14,760&look=-1.15,-0.12' },
-  { name: 'vista-morning', q: 'time=0.36&pos=0,180,700&look=0.6,0.34' },
+  { name: 'ground-noon',   q: 'time=0.50&pos=280,14,760&look=-1.15,-0.12&car=0' },
+  { name: 'vista-morning', q: 'time=0.36&pos=0,180,700&look=0.6,0.34&car=0' },
+  // And one scene that intentionally DOES include the car, since that is what
+  // the game actually renders while being played.
+  { name: 'driving',       q: 'time=0.36&car=1&drive=throttle:0-9999' },
 ]
 
 const browser = await chromium.launch({ headless: true, args: WEBGPU_ARGS })
