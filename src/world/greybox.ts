@@ -293,14 +293,14 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   // Anything scattered below the waterline would float or drown; the lagoon
   // has to be a hole in every scatter set, not just in the heightfield.
   const dry = (x: number, z: number): boolean => heightAt(x, z) > waterLevel + 2
-  for (let i = 0; i < 620; i++) {
+  for (let i = 0; i < 1250; i++) {
     const a = trees.range(0, Math.PI * 2)
     const r = 12 + Math.sqrt(trees.float()) * 1400
     const x = Math.cos(a) * r
     const z = Math.sin(a) * r
     if (!dry(x, z)) continue
     const y = heightAt(x, z) - 0.4
-    const h = trees.range(11, 27)
+    const h = trees.range(15, 34)
     const w = h * trees.range(0.2, 0.3)
     const spin = trees.range(0, Math.PI * 2)
 
@@ -337,9 +337,9 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
       scatter.range(-0.28, 0.28), scatter.range(0, 6.28), scatter.range(-0.28, 0.28),
     )
   }
-  for (let i = 0; i < 440; i++) {
+  for (let i = 0; i < 1000; i++) {
     const a = scatter.range(0, Math.PI * 2)
-    const r = 6 + Math.sqrt(scatter.float()) * 1100
+    const r = 6 + Math.sqrt(scatter.float()) * 1500
     const x = Math.cos(a) * r
     const z = Math.sin(a) * r
     if (!dry(x, z)) continue
@@ -351,6 +351,14 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     // well under a percent of any shot — which is why p05 of value sat at 0.62
     // against 0.48 in the references. cliffs-tohad.jpg gives its near hedges
     // real area; so does this.
+    //
+    // Count raised 440 -> 1000 and the reach 1100 -> 1500 m for the VISTA
+    // register specifically. A camera 180 m up sees its nearest ground 234 m out
+    // and nothing closer, so the near-field dark mass every reference leans on
+    // was simply not in those frames: greybox-dusk, lagoon-morning and all three
+    // atmos-* shots measured 0.0-0.3% of their pixels below HSL lightness 0.35
+    // against 2.8-11.2% across refs/. Light rig changes cannot fix that — there
+    // was nothing dark in the picture to light.
     const s = isBloom ? scatter.range(1.2, 4.0) : scatter.range(4.0, 13.0)
     const set = isBloom ? blooms : bushes
     // Clumps, not dots. A single ellipsoid at this size is a pebble; three

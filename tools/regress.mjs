@@ -22,16 +22,76 @@ const LEDGER = 'shots/.best.json'
 
 // Metric name -> how to score it. `dir` is which way is better; `band` metrics
 // are best when closest to the reference mean, so distance-to-target is scored.
+// Two of these used to be `dir: 'up'` on the RAW value, and both were the exact
+// failure mode CLAUDE.md warns about: "Every gate needs a floor AND a ceiling.
+// Three separate one-sided metrics were gamed during M1: shadowSat rewarded navy
+// shadows, vRange rewarded crushed darks, medStd rewarded high-frequency noise."
+//
+//   shadowLuma up-only ratchets the DARKEST FIFTH of every frame brighter for
+//   ever. It is the metric that a pedestal maximises, so the ledger was actively
+//   locking in the "no darks anywhere" state that round 6 was rejected for —
+//   atmos-clouds-noon's best-ever 0.527 is a frame with literally zero pixels
+//   below HSL lightness 0.35, and no correct render can ever beat it.
+//
+//   meanSat up-only ratchets saturation with no ceiling, and the references top
+//   out at 0.767 with a mean of 0.595. atmos-sunrise's best-ever 0.730 was the
+//   fluorescent-magenta round.
+//
+// Both are now scored the way `detailErr` already was: distance from the
+// reference mean, ratcheted DOWN. Same discipline, two-sided. The reference
+// means are measured from refs/ on every run rather than hardcoded.
+//
+// The other half of the same correction: NO METRIC RATCHETS PAST THE REFERENCE
+// BAND. Every error term below is measured as distance OUTSIDE the band the
+// references occupy, not distance from a point, so a shot that is already
+// inside the band scores exactly 0 and cannot be pushed further by the ledger.
+// Without that, `flatPct` down-only was ratcheting the number of dead-flat
+// tiles toward zero while the references average 2.7% and the detail critique's
+// headline finding was that our surfaces have NO plateaus — the ledger was
+// enforcing the defect.
 const METRICS = [
-  { key: 'meanSat',     from: 'palette',   dir: 'up' },
-  { key: 'shadowLuma',  from: 'shadow',    dir: 'up' },
-  { key: 'hueEntropy',  from: 'hue',       dir: 'up' },
-  { key: 'flatPct',     from: 'structure', dir: 'down' },
-  { key: 'specklePct',  from: 'structure', dir: 'down' },
-  { key: 'detailErr',   from: 'structure', dir: 'down' },
+  { key: 'satErr',        from: 'palette',   dir: 'down' },
+  { key: 'shadowLumaErr', from: 'shadow',    dir: 'down' },
+  { key: 'hueEntropy',    from: 'hue',       dir: 'up' },
+  { key: 'flatErr',       from: 'structure', dir: 'down' },
+  { key: 'specklePct',    from: 'structure', dir: 'down' },
+  { key: 'detailErr',     from: 'structure', dir: 'down' },
 ]
 
-const REF_DETAIL = 0.0688 // structure gate reference mean
+/** Distance outside [lo, hi]; zero anywhere inside it. */
+const outside = (v, lo, hi) => +Math.max(0, Math.max(lo - v, v - hi)).toFixed(4)
+
+// Measured off refs/ at import time, so these cannot drift away from the images
+// the gates are calibrated on.
+const PALETTE_REFS = [
+  'refs/painterly/cliffs-tohad.jpg',
+  'refs/capycastaway/water-lagoon.webp',
+  'refs/genshin/grasslands.jpg',
+  'refs/character/raccoon-artstyle-capycastaway.jpg',
+]
+const SHADOW_REFS = [
+  'refs/painterly/cliffs-tohad.jpg',
+  'refs/capycastaway/water-lagoon.webp',
+  'refs/genshin/grasslands.jpg',
+  'refs/painterly/desert-hazy.jpeg',
+]
+const mean = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(xs.length, 1)
+const STRUCT_REFS = [
+  'refs/painterly/cliffs-tohad.jpg',
+  'refs/capycastaway/water-lagoon.webp',
+  'refs/genshin/grasslands.jpg',
+  'refs/painterly/desert-hazy.jpeg',
+  'refs/snow/snow.avif',
+]
+const span = (xs) => [Math.min(...xs), Math.max(...xs)]
+const satS = PALETTE_REFS.filter(fs.existsSync).map((f) => palette.analyse(f).meanSat)
+const shadS = SHADOW_REFS.filter(fs.existsSync).map((f) => shadow.analyse(f).shadowLuma)
+const structS = STRUCT_REFS.filter(fs.existsSync).map((f) => structure.analyse(f))
+const SAT_BAND = span(satS)
+const SHADOW_BAND = span(shadS)
+const DETAIL_BAND = span(structS.map((r) => r.medStd))
+const FLAT_BAND = span(structS.map((r) => r.flatPct))
+const REF_SPECKLE = mean(structS.map((r) => r.specklePct))
 
 function collect() {
   const shots = fs.existsSync('shots')
@@ -45,19 +105,23 @@ function collect() {
     const st = structure.analyse(p)
     const hu = hue.analyse(p)
     out[f] = {
-      meanSat: pa.meanSat,
-      shadowLuma: sh.shadowLuma,
+      satErr: outside(pa.meanSat, SAT_BAND[0], SAT_BAND[1]),
+      shadowLumaErr: outside(sh.shadowLuma, SHADOW_BAND[0], SHADOW_BAND[1]),
       hueEntropy: hu.entropy,
-      flatPct: st.flatPct,
-      specklePct: st.specklePct,
-      // Distance from the reference detail band centre — over and under are
-      // both failures, so a single signed value would be misleading.
-      detailErr: +Math.abs(st.medStd - REF_DETAIL).toFixed(4),
+      flatErr: outside(st.flatPct, FLAT_BAND[0], FLAT_BAND[1]),
+      specklePct: +Math.max(0, st.specklePct - REF_SPECKLE).toFixed(4),
+      // Distance OUTSIDE the reference detail band — over and under are both
+      // failures, so a single signed value would be misleading.
+      detailErr: outside(st.medStd, DETAIL_BAND[0], DETAIL_BAND[1]),
     }
   }
   return out
 }
 
+const fmt = (b) => `${b[0].toFixed(3)}-${b[1].toFixed(3)}`
+console.log(`reference bands: meanSat ${fmt(SAT_BAND)}  shadowLuma ${fmt(SHADOW_BAND)}`
+  + `  medStd ${fmt(DETAIL_BAND)}  flat% ${fmt(FLAT_BAND)}  speckle% ${REF_SPECKLE.toFixed(3)}`)
+console.log('(all *Err metrics are distance OUTSIDE the band; inside scores 0)')
 const cur = collect()
 const accept = process.argv.includes('--accept')
 const prev = fs.existsSync(LEDGER) ? JSON.parse(fs.readFileSync(LEDGER, 'utf8')) : {}

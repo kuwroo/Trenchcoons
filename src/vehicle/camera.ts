@@ -81,7 +81,24 @@ const RIG = {
    * clips the car's lower half instead, which is the cheaper failure.
    */
   maxLift: 4.2,
+  /**
+   * Room the camera keeps around a scattered form, metres.
+   *
+   * The sightline solve only knows about the ground. In a gulley it answered
+   * correctly and still put two hillsides and a rock instance through the near
+   * plane across the left third of the frame, because a 9 m rock is not
+   * terrain. `world.obstacles` already lists every scattered form big enough to
+   * hide a car; the arm is pulled in until it is outside all of them.
+   */
+  obstaclePad: 1.6,
 } as const
+
+/** Just enough of `world.obstacles` to keep the camera out of the shrubbery. */
+export interface CameraObstacle {
+  x: number
+  z: number
+  r: number
+}
 
 /**
  * Framing overrides. CAPTURE ONLY — nothing in gameplay sets these.
@@ -132,6 +149,7 @@ export class ChaseCamera {
     private readonly camera: THREE.PerspectiveCamera,
     private readonly heightAt: HeightField,
     framing: ChaseFraming = {},
+    private readonly obstacles: readonly CameraObstacle[] = [],
   ) {
     this.frameYaw = framing.yaw ?? 0
     this.frameArm = clamp(framing.arm ?? 1, 0.35, 3)
@@ -170,7 +188,8 @@ export class ChaseCamera {
     // clearance solve below still runs against wherever the camera ends up.
     if (this.frameYaw !== 0) _dir.applyAxisAngle(_up, this.frameYaw)
 
-    const arm = this.arm.step(dt, RIG.arm + RIG.armSpeed * speedNorm) * this.frameArm
+    let arm = this.arm.step(dt, RIG.arm + RIG.armSpeed * speedNorm) * this.frameArm
+    arm = Math.max(arm * 0.42, this.clearOfScatter(car, arm))
 
     // Velocity lookahead. The car leads the frame into a corner.
     outLook.copy(car)
@@ -209,6 +228,29 @@ export class ChaseCamera {
     }
   }
 
+
+  /**
+   * Longest arm along `_dir` that keeps the camera outside every scattered
+   * form. Solves the ray-circle entry point rather than testing the endpoint,
+   * so an arm that grows past a bush cannot step through it in one frame.
+   */
+  private clearOfScatter(car: THREE.Vector3, arm: number): number {
+    let limit = arm
+    for (const o of this.obstacles) {
+      const rr = o.r + RIG.obstaclePad
+      const dx = o.x - car.x
+      const dz = o.z - car.z
+      // Distance along the BACKWARD arm direction. Anything the car is driving
+      // toward is in front of the camera and irrelevant.
+      const t = -(dx * _dir.x + dz * _dir.z)
+      if (t <= 0 || t - rr > limit) continue
+      const perpSq = dx * dx + dz * dz - t * t
+      if (perpSq >= rr * rr) continue
+      const entry = t - Math.sqrt(rr * rr - perpSq)
+      if (entry < limit) limit = entry
+    }
+    return limit
+  }
 
   private apply(): void {
     const cam = this.camera

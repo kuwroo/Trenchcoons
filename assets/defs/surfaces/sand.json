@@ -2,19 +2,19 @@
   "id": "sand",
   "version": 1,
   "type": "surface",
-  "notes": "Capy Castaway sand is near-yellow; the shadow goes mauve, not grey. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free.",
+  "notes": "Capy Castaway sand is near-yellow; the shadow goes mauve, not grey. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
   "material": {
     "base": "#e4d47a",
     "shadow": "#c98ba0",
-    "lit": "#ffee7a",
+    "lit": "#fff9d1",
     "top": "#fff29a",
     "topGain": 1.05,
-    "brushScale": 3.0,
+    "brushScale": 3,
     "brushStrength": 0.8,
     "saturationGain": 0.24,
     "rimStrength": 0.22,
-    "gradientBase": -3.0,
-    "gradientHeight": 6.0,
+    "gradientBase": -3,
+    "gradientHeight": 6,
     "gradientStrength": 0.2
   }
 }

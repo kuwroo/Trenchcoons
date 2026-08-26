@@ -2,14 +2,14 @@
   "id": "foliage",
   "version": 1,
   "type": "surface",
-  "notes": "Conifer tiers and bushes. Strong sky rim, no specular. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
+  "notes": "Conifer tiers and bushes. Strong sky rim, no specular. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
   "material": {
-    "base": "#37901f",
-    "shadow": "#2a6633",
-    "lit": "#9ee02a",
+    "base": "#2f7c1b",
+    "shadow": "#1c5226",
+    "lit": "#b4e067",
     "top": "#c8ff5a",
     "topGain": 1.2,
-    "gradientHeight": 1.0,
+    "gradientHeight": 1,
     "gradientStrength": 0.7,
     "rampSoftness": 0.26,
     "brushScale": 1.8,
@@ -17,7 +17,7 @@
     "saturationGain": 0.32,
     "rimStrength": 0.85,
     "rimPower": 2.4,
-    "ambient": 1.05,
+    "ambient": 0.36,
     "gradientBase": -0.5
   }
 }

@@ -169,7 +169,7 @@ export const PAINTERLY_DEFAULTS: PainterlyParams = {
   brushScale: 3.2,
   brushSaturation: 0.55,
   brushHue: 0.26,
-  regionStep: 0.7,
+  regionStep: 0.64,
   detailStrength: 0.14,
   reliefShade: 0.88,
   rimStrength: 0.5,
@@ -560,7 +560,7 @@ export class PainterlyMaterial {
     brushScale: uniform(3),
     brushSaturation: uniform(0.5),
     brushHue: uniform(0.26),
-    regionStep: uniform(0.7),
+    regionStep: uniform(0.64),
     detailStrength: uniform(0.55),
     reliefShade: uniform(0.6),
     rimStrength: uniform(0.5),
@@ -809,9 +809,25 @@ export class PainterlyMaterial {
     const rim = pow(saturate(dot(n, view).oneMinus()), u.rimPower).mul(u.rimStrength)
     color = vec3(color.add(albedo.mul(ambient).mul(rim).mul(1.5)))
 
-    // ── saturation rises with luminance (ART_BIBLE §2) ────────────────────────
+    // ── chroma FALLS with luminance (ART_BIBLE §2, corrected) ────────────────
+    // This previously read `.add(1)`, i.e. saturation multiplier rising from
+    // 1.0 to 1+gain as a surface got brighter, per an ART_BIBLE rule that said
+    // "saturation increases with light". That rule was measured backwards and
+    // has since been corrected in the doc: within a material family the
+    // references DESATURATE toward the light.
+    //
+    //   genshin/grasslands   shaded S0.69 -> lit S0.55   (-0.14)
+    //   painterly/cliffs     shaded S0.64 -> lit S0.49   (-0.15)
+    //   capycastaway/lagoon  shaded S0.52 -> lit S0.36   (-0.17)
+    //
+    // A lit surface goes bright and pale-warm; hue warming and value range
+    // carry the glow. Multiplying chroma UP on top of that is what produced the
+    // acid-green plastic look, and it overrode the per-surface presets no
+    // matter what colours those were authored with.
+    //
+    // `saturationGain` now reads as "fraction of chroma LOST at full light".
     const lum = luminance(color)
-    color = gradeSaturation(color, u.saturationGain.mul(smoothstep(0.03, 0.7, lum)).add(1))
+    color = gradeSaturation(color, u.saturationGain.mul(smoothstep(0.03, 0.7, lum)).oneMinus())
 
     // ── aerial perspective, in-shader ────────────────────────────────────────
     this.material.colorNode = atmosphere.aerialPerspective(color, vec3(positionWorld), stroke)

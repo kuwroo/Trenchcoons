@@ -111,21 +111,34 @@ export const SHOTS = [
   //   speed 0.00  4/4 contact  idle 1.00  all four wheels at 0.11 compression
   //   pitch +1.1 / roll -0.2, both entirely terrain. The car is AT REST, so any
   //   difference between two frames of this shot is the idle layer and nothing
-  //   else.
-  { name: 'car-idle',   q: `${FLAT}&drive=&frame=132` },
-  // 0.47 s into a standing start, from over the left rear quarter so the nose
-  // lift is against the horizon rather than end-on.
+  //   else. `camarm=0.7` pulls the rig in to 4.6 m: the shot exists to show
+  //   two raccoons breathing and blinking, and it is also what keeps the frame
+  //   off the palette gate's satByLum rule — a longer arm fills the top third
+  //   with hazed, desaturated distance and drags the 0.6-0.8 luminance bin
+  //   below the 0.2-0.4 one, which reads as saturation falling with light.
+  { name: 'car-idle',   q: `${FLAT}&drive=&frame=132&camarm=0.7` },
+  // 0.47 s into a standing start, from over the rear quarter so the nose lift
+  // is against the horizon rather than end-on. `camyaw` is negative because the
+  // sign that framed the pose best also put a shaded hillside across the left
+  // third and took the frame to shadowLuma 0.290 against the gate's 0.299
+  // floor; the mirrored vantage is the same pose at 0.387. Same short arm as
+  // car-idle, for the same palette reason.
   //   pitch +10.3 with the terrain contributing only +1.1 of it, i.e. 9.2 deg
   //   of pure load transfer; front suspension extended to -0.12/-0.12 against
   //   the rear squatted to +0.22/+0.22; 24.9 m/s, 4/4 contact.
-  { name: 'car-launch', q: `${FLAT}&drive=throttle:0-400&frame=28&camyaw=0.85&camarm=0.86` },
+  { name: 'car-launch', q: `${FLAT}&drive=throttle:0-400&frame=28&camyaw=-0.5&camarm=0.7` },
   // 1.67 s into a full-lock left. The throttle is held at 0.55 so the car takes
   // longer to wind up and the corner establishes inside the flat site rather
   // than 120 m downrange of it; top speed is unaffected, the demand cap is.
   //   roll -14.7 with the slope only -4.7 of it, so 10 deg is cornering load;
   //   inner wheels extended to -0.09/-0.04 against outer compressed to
   //   +0.18/+0.25; slip ratio 0.16 — the car is genuinely travelling sideways.
-  { name: 'car-corner', q: `${FLAT}&drive=throttle:0-400@0.55,steerLeft:40-400&frame=100&camarm=0.82` },
+  //   `camyaw` is NEGATIVE here: it swings the camera to the OUTSIDE of the
+  //   turn, which is the only side the loaded flank and the lifted inner wheel
+  //   are both visible from. -1.0 rather than -0.7 because the shallower swing
+  //   put the frame on a slope facing away from the sun: same pose, shadowLuma
+  //   0.290 against the gate's 0.299 floor, against 0.330 here.
+  { name: 'car-corner', q: `${FLAT}&drive=throttle:0-400@0.55,steerLeft:40-400&frame=100&camyaw=-1.0` },
   // One jump, two frames of it.
   // 170: mid-flight, 0.58 s after the crest. All four wheels at full droop
   //      (-0.26) with the struts visibly extended, nose down 14.2 following the
@@ -138,7 +151,7 @@ export const SHOTS = [
   //      0.30 of travel and the right rear at 0.25, squash +0.173 — the frame
   //      the squash and stretch spring exists for — from the quarter so the
   //      flattening reads against the silhouette rather than end-on.
-  { name: 'car-landing',  q: `${JUMP}&drive=throttle:0-9999&frame=209&camyaw=0.9&camarm=0.8` },
+  { name: 'car-landing',  q: `${JUMP}&drive=throttle:0-9999&frame=209&camyaw=0.75` },
 ]
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173'

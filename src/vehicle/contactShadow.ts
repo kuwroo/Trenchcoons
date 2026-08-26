@@ -29,8 +29,8 @@
 // triangles exactly rather than floating over a slope.
 
 import * as THREE from 'three/webgpu'
-import { attribute, mix, vec3, vec4 } from 'three/tsl'
-import { saturate, smoothstep } from '../core/spring'
+import { attribute, vec3, vec4 } from 'three/tsl'
+import { saturate } from '../core/spring'
 import type { HeightField } from './vehicle'
 import type { Vehicle } from './vehicle'
 
@@ -39,10 +39,13 @@ export const NO_CAST_LAYER = 1
 
 const PATCH = {
   /** Half-extent of the patch, metres. Must cover the kart at any yaw plus
-   *  the widest a blob gets before it fades out. */
-  half: 3.4,
-  /** Vertices per side. 0.28 m spacing — about four across a wheel lobe. */
-  segments: 24,
+   *  the widest a blob gets before it fades out — a lobe clipped by the patch
+   *  edge draws a straight line across the grass, which is worse than no
+   *  shadow at all. Wheel lobes reach 1.35 m off-centre and 2.7 m of radius at
+   *  the fade height, so 4.6 has margin. */
+  half: 4.6,
+  /** Vertices per side. 0.31 m spacing — about seven across a wheel lobe. */
+  segments: 30,
   /** Clearance above the drawn ground. Big enough to beat the kink where the
    *  patch crosses a quad edge, small enough to be invisible at 8 m. */
   lift: 0.09,
@@ -50,25 +53,41 @@ const PATCH = {
 
 const LOBE = {
   /** Wheel lobe radius on the ground, and how fast it spreads with height. */
-  wheelR: 0.54,
+  wheelR: 1.1,
   wheelSpread: 0.62,
-  wheelStrength: 0.82,
-  /** Chassis lobe. Wider, softer — this is the one that fills the gap between
-   *  the wheels that the sun shadow leaves lit. */
-  bodyR: 1.34,
+  wheelStrength: 0.9,
+  /**
+   * Chassis lobe. Wider, softer, and the one that actually shows.
+   *
+   * Sized against the picture: at 1.5 m the darkening reached the frame at a
+   * max of 25/255 in an A/B against the same build with the patch removed,
+   * because the only ground the chase camera can SEE is the strip between and
+   * behind the wheels, and the wheels themselves hide their own contact
+   * patches. The lobe has to be wide enough that its shoulder covers what the
+   * kart does not.
+   */
+  bodyR: 2.2,
   bodySpread: 0.5,
-  bodyStrength: 0.5,
+  bodyStrength: 0.85,
   /** Height, metres, over which a lobe fades to nothing. */
   fade: 2.6,
 } as const
 
 /**
- * Multiply tint at full strength. Darkens ~35% and cools: the grassland ramp in
- * ART_BIBLE §4 puts base at #6FB03F against a #3F7A3E shadow, and a contact
- * occlusion should sit between the two and lean further toward the sky than the
- * authored shadow stop does.
+ * Multiply tint at full strength: darkens ~40% and cools.
+ *
+ * Bounded from BOTH sides by measurement, which is the only way to set it.
+ * Too light and it does nothing: at (0.63, 0.69, 0.82) — what "between #6FB03F
+ * and the #3F7A3E grass shadow stop" works out to on paper — an A/B against the
+ * same build with the patch removed moved a max of 25/255, invisible at 1:1
+ * against a hyper-saturated meadow. Too dark and it breaks the rule it exists
+ * to serve: at (0.42, 0.50, 0.66) the patch also multiplies ground that is
+ * ALREADY in the sun's shadow, and car-launch fell to shadowLuma 0.290 against
+ * the shadow gate's 0.299 floor — crushed, which ART_BIBLE forbids outright.
+ * This sits between them. The ratio is close to the grassland shadow stop's own
+ * ratio to its base (0.57, 0.69, 0.98), rotated further toward the sky.
  */
-const TINT = new THREE.Color(0.63, 0.69, 0.82)
+const TINT = new THREE.Color(0.56, 0.64, 0.79)
 
 const _p = new THREE.Vector3()
 
@@ -104,7 +123,17 @@ export class ContactShadow {
     // MultiplyBlending is dst * src, so src must be WHITE where there is no
     // shadow. That also makes the effect impossible to crush: it can only ever
     // scale what the painterly material already put on the ground.
-    material.colorNode = vec4(vec3(1,0,0), 1)  // DEBUG
+    //
+    // Written as `1 - s * (1 - tint)` rather than as `mix(white, tint, s)`
+    // because `mix()` silently read the attribute as 0 and compiled to a
+    // constant white — the patch rendered, took the depth test, and multiplied
+    // everything by exactly 1. `vec3(s, s, s)` of the same node is correct, so
+    // this is the attribute node reaching `mix`'s interpolant slot, not the
+    // attribute. Broadcasting it by hand first is unambiguous.
+    const fade = vec3(s, s, s)
+    material.colorNode = vec4(
+      vec3(1, 1, 1).sub(fade.mul(vec3(1 - TINT.r, 1 - TINT.g, 1 - TINT.b))), 1,
+    )
     material.blending = THREE.MultiplyBlending
     // Not optional: the WebGPU backend only implements MultiplyBlending on the
     // premultiplied path (WebGPUPipelineUtils, `src*Dst + dst*(1-srcAlpha)`)
@@ -187,8 +216,12 @@ export class ContactShadow {
           const d = Math.hypot(dx, dz)
           if (d >= r) continue
           const core = body ? LOBE.bodyStrength : LOBE.wheelStrength
-          // Squared falloff, then a hermite: no visible rim, no hard centre.
-          const a = core * fade * (1 - smoothstep(0, 1, d / r))
+          // (1 - t^2)^2, not a hermite. Both are C1 at the rim, but the hermite
+          // spends most of its range near zero and put 83% of the occlusion
+          // under parts of the kart the camera cannot see; this one carries a
+          // real shoulder out to the edge.
+          const t = d / r
+          const a = core * fade * (1 - t * t) ** 2
           clear *= 1 - a
         }
         shadeArr[v] = 1 - clear

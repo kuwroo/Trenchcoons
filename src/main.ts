@@ -140,7 +140,7 @@ async function boot() {
     // owns the camera, so nothing else is using it.
     vehicle.spawn(sx, sz, carOpts.yaw ?? state.look[0])
     shadow.update(vehicle)
-    const chase = new ChaseCamera(camera, world.groundAt, carOpts.framing)
+    const chase = new ChaseCamera(camera, world.groundAt, carOpts.framing, world.obstacles)
     chase.reset(vehicle)
     const input: InputSource = carOpts.script
       ? new ScriptedInput(carOpts.script)

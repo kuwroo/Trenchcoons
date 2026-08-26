@@ -318,7 +318,18 @@ export class Atmosphere {
     // explicit azimuthal term is the honest reconstruction of what the integral
     // dropped, and it is what makes low-sun frames sculptural instead of flat.
     const facing = dot(n, this.nodes.sunAzimuth).mul(0.5).add(0.5)
-    const gain = mix(float(1), mix(float(1.34), float(1.72), facing), this.ambientDirNode)
+    // Widened from 1.34..1.72 to 1.02..2.06 — same mean, twice the spread.
+    //
+    // The mean is what a shot's darkest-fifth average measures and the SPREAD is
+    // what puts pixels in its tail, and the low-sun frames needed the second
+    // without losing the first: greybox-sunrise sat at 0.04% of its pixels below
+    // HSL lightness 0.35 (references 2.8-11.2%) while its darkest fifth was
+    // already at the shadow gate's floor. Every global knob moves both numbers
+    // the same way; only contrast moves them apart. A dawn sky really is a
+    // narrow bright band, so a slope facing it against one facing away is a
+    // factor of two, not a factor of 1.3 — this is the honest number, not a
+    // wider one for the sake of range.
+    const gain = mix(float(1), mix(float(1.02), float(2.06), facing), this.ambientDirNode)
     // ── and a CEILING on how chromatic the fill is allowed to be ─────────────
     //
     // The last stage, and the one whose absence cost the dawn frames their value

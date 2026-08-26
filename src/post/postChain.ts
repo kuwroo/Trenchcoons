@@ -97,10 +97,10 @@ export const POST_DEFAULTS: PostSettings = {
   // Down from 1.24. The toe was compensating for a light rig that had no range
   // of its own; now that the key runs ~2 stops over the fill, a toe on top of
   // it just crushes the shadow stop the ramp worked to author.
-  toneGamma: 1.30,
-  satBase: 1.86,
+  toneGamma: 1.27,
+  satBase: 1.98,
   satHighlight: 0.45,
-  satShadow: 0.80,
+  satShadow: 0.95,
   // A whisper, and 0.075 was not one; 0.048 is.
   //
   // 0.048 rather than 0.034 now that the frames underneath it are exposed rather
@@ -125,7 +125,7 @@ export const POST_DEFAULTS: PostSettings = {
   // now directional (see `ambientDirectional` in tod.ts) and the low-sun fill
   // has a real floor, so "never crushed" is paid for multiplicatively, by light
   // that shades, instead of additively by a constant that cannot.
-  shadowLift: 0.014,
+  shadowLift: 0.021,
   chromaStrength: 0.27,
   chromaScale: 0.45,
   // "Very slight", per ART_BIBLE §7, and 0.2 was not: it multiplied the frame

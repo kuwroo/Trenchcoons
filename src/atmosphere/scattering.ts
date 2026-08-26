@@ -145,14 +145,18 @@ export const MARK_SIGMA = 0.17
  * 6 px over an 8 px extrema spacing, i.e. three quarters of the half-period was
  * transition and only a quarter was flat. That is a soft lobe with a slightly
  * crisper edge, not the flat-topped mark this function's name promises. Capping
- * the widening at 3x the authored width keeps the silhouette guard (a quad
- * straddling a depth discontinuity still gets three times the smoothing) while
- * leaving the interior of every mark actually flat.
+ * the widening at 1.8x the authored width keeps the silhouette guard (a quad
+ * straddling a depth discontinuity still gets nearly twice the smoothing) while
+ * leaving the interior of every mark actually flat. Swept: 3.0x left the near
+ * field at 3.7% of pixels carrying a |grad luma| over 0.12 against a reference
+ * band of 5.8-14.0%, 1.8x takes it to 5.5% at the same per-tile variance and the
+ * same 0.00-0.01% isolated-pixel rate (references 0.00-0.07%), so the extra edge
+ * is real boundary rather than aliasing.
  */
 export function flatMark(x: Node<'float'>, half = 0.13): Node<'float'> {
   const w = float(half * MARK_SIGMA)
     .max(dFdx(x).abs().max(dFdy(x).abs()).mul(0.9))
-    .min(Math.min(3.0 * half, 1.1) * MARK_SIGMA)
+    .min(Math.min(1.8 * half, 1.1) * MARK_SIGMA)
   return smoothstep(w.negate(), w, x).mul(2).sub(1)
 }
 

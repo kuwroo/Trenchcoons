@@ -2,14 +2,14 @@
   "id": "flowers",
   "version": 1,
   "type": "surface",
-  "notes": "Violet flower masses, per the near field of cliffs-tohad.jpg. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
+  "notes": "Violet flower masses, per the near field of cliffs-tohad.jpg. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
   "material": {
     "base": "#9a72d8",
     "shadow": "#6a5aa8",
-    "lit": "#c47cff",
+    "lit": "#dbafff",
     "top": "#e8c0ff",
     "topGain": 1.1,
-    "gradientHeight": 2.0,
+    "gradientHeight": 2,
     "gradientStrength": 0.6,
     "rampSoftness": 0.26,
     "brushScale": 1.4,
@@ -17,6 +17,6 @@
     "saturationGain": 0.32,
     "rimStrength": 0.8,
     "rimPower": 2.4,
-    "gradientBase": -1.0
+    "gradientBase": -1
   }
 }
