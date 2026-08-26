@@ -1,0 +1,23 @@
+{
+  "id": "hub",
+  "version": 1,
+  "type": "surface",
+  "notes": "Wheel hubs and the suspension struts. Split out of `cardboard` because sharing it made the four hub discs the BRIGHTEST pixels on the whole vehicle in any shaded frame — cardboard's #c8974f base plus rimStrength 0.55 punched two saturated orange discs out of the dark tyres in car-corner and pulled the eye off the characters. Same warm cardboard family, two stops down in value and with the rim almost off, so the hub reads as the hole in the middle of a wheel rather than as a light source. Still not neutral (ART_BIBLE 2).",
+  "material": {
+    "base": "#7a5636",
+    "shadow": "#4e3624",
+    "lit": "#a37a4d",
+    "top": "#b58c5c",
+    "topGain": 1.03,
+    "gradientBase": -0.3,
+    "gradientHeight": 0.6,
+    "gradientStrength": 0.3,
+    "brushScale": 0.26,
+    "brushStrength": 0.5,
+    "brushSaturation": 0.4,
+    "rimStrength": 0.18,
+    "rimPower": 3.0,
+    "saturationGain": 0.22,
+    "shadowSkyTint": 0.28
+  }
+}

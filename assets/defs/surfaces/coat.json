@@ -1,0 +1,22 @@
+{
+  "id": "coat",
+  "version": 1,
+  "type": "surface",
+  "notes": "The trenchcoat. MILESTONES lists the coat as an open reference gap, so this is a decision, not a reading: a desaturated teal from the master palette's cool half (sky #3FA9F5 / sea turquoise #2FD5C8) rather than a tan. A tan coat on a tan box loses the second raccoon entirely at silhouette distance, and the cool mass is also what keeps a car-filled frame off the palette gate's one-hue failure mode.",
+  "material": {
+    "base": "#3f7d8c",
+    "shadow": "#2b5a72",
+    "lit": "#74b6bf",
+    "top": "#96d2d6",
+    "topGain": 1.08,
+    "gradientBase": -0.34,
+    "gradientHeight": 0.7,
+    "gradientStrength": 0.45,
+    "brushScale": 0.44,
+    "brushStrength": 0.6,
+    "brushSaturation": 0.5,
+    "rimStrength": 0.75,
+    "saturationGain": 0.3,
+    "shadowSkyTint": 0.22
+  }
+}

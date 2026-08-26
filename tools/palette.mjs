@@ -48,10 +48,14 @@ export function analyse(file) {
   // shadow pixels (darkest 15%) hue spread — tests "shadows are tinted"
   const shadowPx = []
 
+  let d25 = 0, d35 = 0, minL = 1
   for (let i = 0; i < png.data.length; i += 4) {
     const r = png.data[i], g = png.data[i + 1], b = png.data[i + 2]
     const [h, s, l] = rgbToHsl(r, g, b)
     sumS += s; sumL += l
+    if (l < minL) minL = l
+    if (l < 0.25) d25++
+    if (l < 0.35) d35++
     lums.push(l)
     vals.push(Math.max(r, g, b) / 255)
     if (l > 0.93) blown++
@@ -67,6 +71,12 @@ export function analyse(file) {
   const q = (p) => lums[Math.floor(lums.length * p)] ?? 0
   const qv = (p) => vals[Math.floor(vals.length * p)] ?? 0
   const shadowS = shadowPx.length ? shadowPx.reduce((a, p) => a + p[1], 0) / shadowPx.length : 0
+  // ── how many darks are there AT ALL ──────────────────────────────────────
+  // Diagnostic, added because `shadowSat` cannot be read without it. A frame
+  // with no pixels under HSL lightness 0.35 reports shadowSat 0.000, which
+  // looked like "unmeasured" and was in fact "this picture has no shadows".
+  // Reference band, measured over the four files above plus refs/snow:
+  //   minL 0.002-0.157   %L<0.25 0.11-2.42   %L<0.35 2.8-11.2
 
   return {
     file: path.basename(file),
@@ -79,6 +89,11 @@ export function analyse(file) {
     darkPct: +((dark / n) * 100).toFixed(2),
     nearGreyPct: +((nearGrey / n) * 100).toFixed(2),
     shadowSat: +shadowS.toFixed(3),
+    /** How many pixels the shadowSat average is taken over, as a % of frame. */
+    shadowPoolPct: +((shadowPx.length / n) * 100).toFixed(2),
+    minL: +minL.toFixed(3),
+    below25Pct: +((d25 / n) * 100).toFixed(2),
+    below35Pct: +((d35 / n) * 100).toFixed(2),
     satByLum: bins.map((b) => +(b.n ? b.s / b.n : 0).toFixed(3)),
   }
 }
@@ -103,7 +118,9 @@ function row(a) {
     String(a.meanLum).padStart(6),
     String(a.shadowSat).padStart(7),
     String(a.blownPct).padStart(7),
-    String(a.darkPct).padStart(6),
+    String(a.minL).padStart(6),
+    String(a.below25Pct).padStart(7),
+    String(a.below35Pct).padStart(7),
     String(a.v05).padStart(6),
     String(a.v95).padStart(6),
     String(a.vRange).padStart(7),
@@ -118,7 +135,8 @@ const shots = targets.length ? targets
   : []
 
 console.log('file'.padEnd(34), 'mSat'.padStart(6), 'mLum'.padStart(6),
-            'shdSat'.padStart(7), 'blown%'.padStart(7), 'dark%'.padStart(6),
+            'shdSat'.padStart(7), 'blown%'.padStart(7), 'minL'.padStart(6),
+            '%L<.25'.padStart(7), '%L<.35'.padStart(7),
             'v05'.padStart(6), 'v95'.padStart(6), 'vRange'.padStart(7),
             'satRise'.padStart(7), '  sat by luminance bin')
 console.log('-'.repeat(120))
@@ -136,6 +154,7 @@ for (const a of outStats) console.log(row(a))
 console.log('\nreference mean saturation: ' + refSat.toFixed(3) +
             '   reference mean blown%: ' + refBlown.toFixed(2))
 console.log('VERDICT (per shot):')
+let failed = 0
 for (const a of outStats) {
   const problems = []
   if (a.meanSat < refSat * 0.75) problems.push(`undersaturated (${a.meanSat} vs ref ${refSat.toFixed(3)})`)
@@ -144,9 +163,33 @@ for (const a of outStats) {
   // The reference band, measured: cliffs-tohad 0.51, genshin/grasslands 0.46,
   // desert-hazy 0.42. Below ~0.34 there is no terminator anywhere in frame.
   if (a.vRange < 0.34) problems.push(`FLAT — p05..p95 value range only ${a.vRange} (refs 0.42-0.51)`)
-  if (a.shadowSat > 0 && a.shadowSat < 0.25) problems.push(`grey shadows (shadowSat ${a.shadowSat}, ART_BIBLE requires tinted)`)
+  // An EMPTY shadow pool is a failure, not an exemption.
+  //
+  // This read `if (a.shadowSat > 0 && ...)` for six rounds, and the guard was
+  // load-bearing in the wrong direction: a frame with no pixel under HSL
+  // lightness 0.35 reports shadowSat exactly 0.000 and therefore skipped the
+  // tinted-shadow check entirely. Five shots held that exemption at the end of
+  // round 6 — atmos-clouds-noon, atmos-dusk-sunward, atmos-golden-sunward,
+  // greybox-sunrise and lagoon-morning — i.e. they passed "shadows are tinted"
+  // by having no shadows at all, which is the one thing ART_BIBLE §2 says the
+  // look cannot survive. Every reference carries 2.8-11.2% of its pixels below
+  // that line. Enforcing the verdict this file already intends is not a new
+  // threshold; the 0.25 below is exactly as it was written.
+  if (a.below35Pct < 0.05) {
+    problems.push(`NO SHADOW PIXELS AT ALL — ${a.below35Pct}% of the frame below HSL L 0.35, so shadowSat is measured over nothing (refs carry 2.8-11.2%)`)
+  } else if (a.shadowSat < 0.25) {
+    problems.push(`grey shadows (shadowSat ${a.shadowSat} over ${a.shadowPoolPct}% of frame, ART_BIBLE requires tinted)`)
+  }
   if (a.satByLum[3] < a.satByLum[1]) problems.push('saturation FALLS with light (ART_BIBLE violation)')
+  if (problems.length) failed++
   console.log('  ' + a.file.padEnd(30) + (problems.length ? 'FAIL  ' + problems.join('; ') : 'ok'))
 }
+// This script printed FAIL verdicts and exited 0 for four rounds — the only tool
+// in tools/ with no exit code — so `npm run gate` reported green while palette
+// was failing 9 of 13 shots, which is precisely how a 6 -> 9 palette regression
+// shipped under a green gate. Enforcing the verdicts this file already prints is
+// not a new threshold; every number above is exactly as it was written.
+console.log(failed ? `\n${failed} shot(s) failing palette gate` : '\nall shots pass palette gate')
+process.exit(failed ? 1 : 0)
 
 }

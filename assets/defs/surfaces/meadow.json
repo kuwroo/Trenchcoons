@@ -5,7 +5,7 @@
   "notes": "Rolling grassland \u2014 the M1 hub surface. ART_BIBLE 4, Meadow / hub.",
   "material": {
     "base": "#5eb02e",
-    "shadow": "#3f7a3e",
+    "shadow": "#4b8f50",
     "lit": "#a8e02e",
     "top": "#d8ff70",
     "topGain": 1.06,

@@ -23,7 +23,10 @@ import {
 import type { Node } from 'three/webgpu'
 import { cloudLayer } from './clouds'
 import { SunShadow } from './sunShadow'
-import { boostSaturation, setSaturation, skyRadiance, sunDisc, type SkyNodes } from './scattering'
+import {
+  boostSaturation, clampChroma, flatMark, setSaturation, skyRadiance, sunDisc,
+  type SkyNodes,
+} from './scattering'
 import {
   SKY_INTENSITY, SKY_LUM_GAMMA, TAU_MIE, TAU_RAYLEIGH, evaluateSky, linearFromHex, makeSkyState,
   type SkyState,
@@ -35,10 +38,31 @@ const IRR_W = 48
 const IRR_H = 24
 const DOME_RADIUS = 11_000
 const IRR_SAMPLES = 32
-/** How hard the surface's stroke field modulates the haze it is seen through. */
-const HAZE_BRUSH = 0.38
-/** Amplitude of the direction-locked brush on the sky dome. */
-const SKY_BRUSH = 0.44
+/**
+ * How hard the surface's stroke field modulates the haze it is seen through.
+ *
+ * Raised from 0.38. `mix(faded, haze, f)` scales the surface's own contribution
+ * by (1 - f), so at the f ~0.8 a low-sun vista reaches the strokes arrive at a
+ * fifth strength and the hazed middle distance goes back to being a slab: the
+ * four hazed frames measured per-tile detail 0.018-0.024 against a 0.031 floor
+ * while the clear ones sat at 0.053-0.064. cliffs-tohad and desert-hazy both
+ * lose CONTRAST with distance and keep their marks — a painter hazes by laying
+ * thinner paint, not by wiping the canvas — so the haze has to carry roughly as
+ * much of the brush as the surface did.
+ */
+const HAZE_BRUSH = 0.70
+/**
+ * Amplitude of the direction-locked brush on the sky dome.
+ *
+ * Down from 0.44 because the field it multiplies is now STEPPED (see `flatMark`):
+ * a bimodal +/-1 field at 0.44 is a 44% value swing, where the smooth version it
+ * replaced was spread over the noise's own 0.17 sigma and delivered about 8%.
+ * 0.16 holds the visible amplitude roughly where it was and spends it on
+ * boundaries instead of on gradients, which is the whole point — a gouache sky is
+ * laid in with a flat brush and the analytic gradient underneath it is the one
+ * part of these frames with no mark-making in it at all.
+ */
+const SKY_BRUSH = 0.21
 
 /** Deterministic Fibonacci sphere — no Math.random anywhere in generation. */
 function fibonacciSphere(n: number): THREE.Vector3[] {
@@ -121,6 +145,8 @@ export class Atmosphere {
   readonly gradeSatNode = uniform(1)
   /** See `rampScale` in tod.ts. Read by the painterly material. */
   readonly rampScaleNode = uniform(1)
+  /** See `rampShadowGain` in tod.ts. Read by the painterly material. */
+  readonly rampShadowGainNode = uniform(1)
   /** See `shadowStrength` in tod.ts. */
   private readonly shadowStrengthNode = uniform(1)
 
@@ -229,9 +255,15 @@ export class Atmosphere {
     // Kept to a few percent of value, and squashed horizontally so it reads as
     // the long flat strokes both painterly references lay their skies in with.
     const sb = vec3(dir.mul(9.5))
-    const skyBrush = mx_noise_float(vec3(sb.x, sb.y.mul(2.3), sb.z))
-      .mul(0.66)
-      .add(mx_noise_float(vec3(sb.x.mul(2.1).add(9.1), sb.y.mul(4.8), sb.z.mul(2.1))).mul(0.34))
+    // Both octaves go through the same real threshold the surface brush does.
+    // Without it this was a soft gradient wash: atmos-clouds-noon is 40-55% sky
+    // and measured per-tile detail 0.022 with 12.4% of its gated tiles dead
+    // flat, i.e. half of every frame was smooth plastic no gate could see.
+    const skyBrush = flatMark(mx_noise_float(vec3(sb.x, sb.y.mul(2.3), sb.z)))
+      .mul(0.62)
+      .add(flatMark(
+        mx_noise_float(vec3(sb.x.mul(2.1).add(9.1), sb.y.mul(4.8), sb.z.mul(2.1))),
+      ).mul(0.38))
     const painted = vec3(mix(sky, clouds.color, clouds.alpha)
       .mul(skyBrush.mul(SKY_BRUSH).add(1).max(0.2)))
     mat.colorNode = vec3(painted.add(disc))
@@ -287,7 +319,23 @@ export class Atmosphere {
     // dropped, and it is what makes low-sun frames sculptural instead of flat.
     const facing = dot(n, this.nodes.sunAzimuth).mul(0.5).add(0.5)
     const gain = mix(float(1), mix(float(1.34), float(1.72), facing), this.ambientDirNode)
-    return vec3(tinted.mul(gain))
+    // ── and a CEILING on how chromatic the fill is allowed to be ─────────────
+    //
+    // The last stage, and the one whose absence cost the dawn frames their value
+    // structure. Everything above — the LUT's own `ambientSat`, the `ambientWarm`
+    // hue rotation, its 1.25 boost — controls the ambient's HUE and its LEVEL,
+    // and nothing controls the ratio between its peak channel and its
+    // luminance. At a horizon sun that ratio ran to ~2.7, so the fill was
+    // effectively a single-channel blue light: it lit the peak channel (which is
+    // HSV value, which is what tools/palette.mjs measures range in) about three
+    // times as hard as it lit the luminance the shadow gate measures. The result
+    // reads as cobalt plastic and measures as a frame with no darks.
+    //
+    // Physically this is also the honest direction: a hemispherical integral over
+    // a sky plus a ground bounce cannot be as chromatic as any single sky
+    // direction, and `clampChroma` holds luminance exactly, so it costs the fill
+    // no energy at all — only its excess purity.
+    return clampChroma(vec3(tinted.mul(gain)), this.ambientChromaNode)
   }
 
   /** Sky radiance looking along `dir`. From the LUT. */
@@ -382,6 +430,7 @@ export class Atmosphere {
     this.ambientWarmNode.value = s.ambientWarm
     this.ambientDirNode.value = s.ambientDirectional
     this.shadowTintBoostNode.value = s.shadowTintBoost
+    this.ambientChromaNode.value = s.ambientChroma
     this.hazeSatNode.value = s.hazeSat
     this.nodes.skySaturation.value = s.skySaturation
     this.nodes.skySatHorizon.value = s.skySatHorizon
@@ -392,6 +441,7 @@ export class Atmosphere {
     this.gradeTintNode.value.copy(s.gradeTint)
     this.gradeSatNode.value = s.gradeSat
     this.rampScaleNode.value = s.rampScale
+    this.rampShadowGainNode.value = s.rampShadowGain
     this.shadowStrengthNode.value = s.shadowStrength
     this.lutsDirty = true
   }

@@ -5,7 +5,7 @@
   "notes": "The DARK ANCHOR. Every landscape reference leans on one: cliffs-tohad.jpg's near hedges, grasslands.jpg's conifer masses, water-lagoon.webp's palm shade. Without something authored genuinely dark the frame has no bottom to its value range \u2014 measured p05 of HSV value sat at 0.62 against 0.48 in the references \u2014 and 'lifted shadows' degenerates into 'no darks at all'. So this def is deliberately 2.5 stops under the meadow it sits on, and it stays chromatic (deep emerald, not black) the way ART_BIBLE 2 requires. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
   "material": {
     "base": "#1f5a2b",
-    "shadow": "#245549",
+    "shadow": "#1c4440",
     "lit": "#4f9a2e",
     "top": "#78b83c",
     "topGain": 1.15,

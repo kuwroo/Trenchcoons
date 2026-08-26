@@ -25,7 +25,9 @@ import {
 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
-import { boostSaturation, gradeSaturation, setSaturation } from '../atmosphere/scattering'
+import {
+  boostSaturation, clampChroma, flatMark, gradeSaturation, rotateHue, setSaturation,
+} from '../atmosphere/scattering'
 
 /**
  * Everything an asset definition is allowed to say about its surface.
@@ -62,6 +64,34 @@ export interface PainterlyParams {
   brushScale: number
   /** How much of the brush signal goes into saturation vs value. */
   brushSaturation: number
+  /**
+   * Hue swing of one brush mark, RADIANS at full stroke.
+   *
+   * The axis the brush overlay was missing. `albedo * (stroke*0.72+1)` inside
+   * `setSaturation` moves VALUE and SATURATION and nothing else, so adjacent
+   * marks came out as the same colour at two brightnesses. Measured, the
+   * circular standard deviation of hue in the near-field foreground was 14.4deg
+   * against 41.3 in genshin/grasslands, 53.9 in capycastaway/water-lagoon and
+   * 82.6 in painterly/cliffs-tohad: in the references adjacent marks are
+   * different COLOURS.
+   *
+   * Driven from the RELIEF field rather than from the stroke field, so the hue
+   * boundaries do not sit on top of the value boundaries — a painter reloading
+   * with a slightly different mix does not change colour exactly where the
+   * value changes. 0.26 rad = 15deg on the meadow, which reads as yellow-green
+   * against blue-green.
+   */
+  brushHue: number
+  /**
+   * How far the coarse region mask shifts the ramp thresholds, in units of
+   * `rampSoftness`. See `region` in `BrushField`.
+   *
+   * 1.0 means the two sides of a region boundary sit a full transition width
+   * apart, so wherever the surface is anywhere near a ramp step the patch snaps
+   * onto one authored stop or the next as a flat mass with a hard edge. 0 turns
+   * the mechanism off and the material is back to a sum of soft octaves.
+   */
+  regionStep: number
   /**
    * Micro-relief. The brush field re-read as a height field and folded into the
    * shading normal — no geometry is displaced.
@@ -138,6 +168,8 @@ export const PAINTERLY_DEFAULTS: PainterlyParams = {
   brushStrength: 0.55,
   brushScale: 3.2,
   brushSaturation: 0.55,
+  brushHue: 0.26,
+  regionStep: 0.7,
   detailStrength: 0.14,
   reliefShade: 0.88,
   rimStrength: 0.5,
@@ -167,24 +199,20 @@ export const PAINTERLY_DEFAULTS: PainterlyParams = {
  * world-locked — so it never crawls, never aliases, and is present at 3 m and
  * at 3 km.
  *
- * 20 px, not 8. At 8 px the field was technically above Nyquist and still wrong:
- * a 3-stop ramp reading a normal that turns over every four pixels aliases into
- * dotted stipple along every ridge, and the surface read as combed fur rather
- * than as brushwork. The references' marks are big — a stroke in cliffs-tohad is
- * 15-40 px at 1200 px wide — and a bigger mark also raises per-tile variance for
- * the same amplitude, because less of it averages out inside the tile.
+ * 13 px. Not 8, which put the relief normal's turnover at four pixels and
+ * stippled every ridge; and not 20, which was chosen while the mark was a soft
+ * lobe. Now that `shapeMark` is a real threshold the two numbers interact: a
+ * boundary is a fixed couple of pixels wide, so the mark's PERIOD sets how much
+ * of the surface reads as edge rather than as interior. At 20 px the output
+ * carried 4x-downsample coherence 0.92-0.97 against a reference band of
+ * 0.75-0.94 — the variation was surviving a 4x reduction almost intact, i.e. it
+ * was low-frequency form rather than stroke-scale brushwork. A stroke in
+ * cliffs-tohad is 15-40 px at 1200 px wide, which is 20-53 px at our 1600, but
+ * those are the LARGEST marks in the picture and there is finer work inside
+ * them; the macro octave covers that end of the range and this number should
+ * cover the other.
  */
-const STROKE_PX = 20
-
-/**
- * World period of the unfaded macro octave, in units of `brushScale`.
- *
- * The LOD ladder tops out around 8x the finest octave, which at a gameplay
- * camera is ~20 m — small enough that a vista frame would lose the big patches
- * of value the references break their masses into. This one is never
- * LOD-selected: it is low-frequency enough that it cannot alias at any range.
- */
-const MACRO_STEP = 24
+const STROKE_PX = 13
 
 /**
  * Normalisation so `brushStrength` means what its docstring says.
@@ -198,13 +226,27 @@ const MACRO_STEP = 24
  * and no amount of turning the authored knob up could reach the references
  * because the knob tops out well before the signal does.
  *
- * 1.03 puts the composite at roughly sigma 0.055, i.e. brushStrength 1.0 is a
- * +/-14% swing in value at one sigma and the authored range 0.35..1.45 spans
- * "barely there" to "clearly gouache", which is what ART_BIBLE §3 asks the knob
- * to mean. It also fixes the relief layer, which reads the same field: at the
- * old amplitude the normal was being tilted by ~7 degrees, which is invisible.
+ * 0.36, down from 1.03, and the change is a direct consequence of `shapeMark`
+ * becoming a real step. A stepped octave is BIMODAL: its samples sit at +/-1
+ * rather than spreading with the noise's own sigma, so the same weights now
+ * produce a composite around sigma 0.6 instead of 0.055 — eleven times the
+ * amplitude, which is confetti, and well past the structure gate's ceiling.
+ *
+ * What the number is set by: the mark contrast needed for a real EDGE. A step
+ * across a mark boundary changes the albedo by 2 x gain x brushStrength x 0.72,
+ * and display luma responds at roughly (1/2.2) of the relative linear change, so
+ * landing meadow's boundaries near the references' |grad luma| ~0.12 at a
+ * display level of ~0.6 wants a linear step of ~0.44, i.e. a composite sigma near
+ * 0.21. 0.36 x (the ~0.6 the stepped weights give) is that. Because a stepped
+ * field is bounded — the three weights sum to exactly 1, so |value| <= 1 — this
+ * also removes the long tails the smooth version had, and with them the albedo
+ * floor's clamping.
+ *
+ * Note the asymmetry with the OLD number: the same measured amplitude now buys
+ * far more edge, because a bimodal field puts all of its variation at its
+ * boundaries instead of spreading it smoothly across the mark.
  */
-const BRUSH_GAIN = 1.03
+const BRUSH_GAIN = 0.52
 
 /**
  * Radians of stroke rotation per octave. Irrational multiple of pi/2 so no two
@@ -227,38 +269,67 @@ function hexToLinear(hex: number, out: THREE.Vector3): THREE.Vector3 {
  * Deliberately ONE tap. The second, stretched tap the previous version added
  * existed to give a stroke internal grain at a fixed world frequency; the LOD
  * ladder below now supplies that grain as a real octave, at a controlled
- * projected size, so paying for it twice bought nothing. Three ladder octaves
- * plus the macro octave is 12 triplanar taps, and the relief layer adds 4 more:
- * 16 noise evaluations per fragment, down from the previous 18. Measured at 60
- * fps vsync-locked with p99 19.4 ms at 1600x900 (tools/perf.mjs).
+ * projected size, so paying for it twice bought nothing. `triplanarBrush`
+ * evaluates three ladder rungs (shared across TWO cross-faded bands) plus one
+ * macro octave, i.e. 12 triplanar taps, and the relief layer adds 4 more: 16
+ * noise evaluations per fragment, down from the previous 18.
  */
-function brushStroke(p: Node<'vec2'>, spin: Node<'float'>): Node<'float'> {
+function brushStroke(p: Node<'vec2'>, rung: Node<'float'>): Node<'float'> {
   // Every octave is turned by its own angle. Without this every octave
   // squashes along the same axis and they stack into long parallel streaks — the
   // surface reads as combed fur, not as brushwork. The angle is a function of
   // the octave's ABSOLUTE rung, not its index in the ladder, so it survives the
   // LOD handover: rung n's octave has the same orientation whether it is being
   // used as band 0's top or band 1's bottom.
+  const spin = rung.mul(SPIN_STEP)
   const c = cos(spin)
   const s = sin(spin)
-  const q = vec2(p.x.mul(c).sub(p.y.mul(s)), p.x.mul(s).add(p.y.mul(c)))
-  return mx_noise_float(vec3(q.x, q.y.mul(0.36), 0.0))
+  // Three more things vary per rung, and they are the fix for the "paisley".
+  //
+  // Until this round the ONLY thing that changed between octaves was the
+  // rotation: every mark in the build was one `mx_noise_float` tap squashed 0.36
+  // on the same axis through the same z-slice, so every stamp in every frame was
+  // the same silhouette at a different size and angle. At 1:1 that reads as
+  // wallpaper — the same comma/teardrop glyph tiling the whole lower frame — and
+  // it was the loudest "this is procedural" tell left in the picture.
+  //
+  //   squash  0.30..0.66  how elongated the mark is across its own axis
+  //   shear   +/-0.35     how much it leans, INDEPENDENT of the rotation, so a
+  //                       long mark and a fat one at the same angle are still
+  //                       different shapes rather than the same one turned
+  //   slice   3.7 / rung  a different z-plane of the 3D gradient noise, which
+  //                       is a genuinely different field, not a transform of
+  //                       the same one
+  //
+  // All three are functions of the ABSOLUTE rung for the same reason the spin
+  // is, and all three are free: no extra noise taps, just different arguments
+  // to the one that was already there.
+  const squash = float(0.48).add(sin(rung.mul(2.399)).mul(0.18))
+  const shear = sin(rung.mul(1.771)).mul(0.35)
+  const slice = rung.mul(3.7)
+  const qx = p.x.mul(c).sub(p.y.mul(s))
+  const qy = p.x.mul(s).add(p.y.mul(c))
+  return mx_noise_float(vec3(qx.add(qy.mul(shear)), qy.mul(squash), slice))
 }
 
 /**
- * A flat-topped mark rather than a smooth blob.
+ * A flat-topped mark rather than a smooth blob — and, since this round, actually
+ * one. See `flatMark` in scattering.ts.
  *
- * Raw gradient noise is a maze of soft lobes: turned up it reads as worms, and
- * that was the honest complaint about the first version of this pass. Gouache
- * does not do soft lobes — it lays down a patch of one value with a crisp
- * boundary. Pushing each octave through a soft step gives exactly that: flat
- * interiors, defined edges, still band-limited (the step's width is a constant
- * fraction of the octave's own amplitude, so nothing new is introduced above the
- * octave's frequency).
+ * The version that shipped for four rounds was `smoothstep(-0.34, 0.34, x)` on a
+ * raw `mx_noise_float` tap. That is not a step, it is a gain of about 4.4x: the
+ * tap's standard deviation is ~0.17, so over 99% of samples land INSIDE the
+ * transition band and never reach either flat end. Every mark came out as a soft
+ * noise lobe with no boundary anywhere, which is why the frames measured 4-7x
+ * fewer luma edges than refs/ while still landing inside the per-tile variance
+ * band the structure gate measures. Variance cannot separate a 40 px soft blob
+ * from a brush mark; edge density can, and it is now reported by
+ * tools/structure.mjs so the next round can see it.
+ *
+ * Aliased to the shared helper rather than duplicated because the sky dome's
+ * brush had the identical bug and needs the identical fix.
  */
-function shapeMark(x: Node<'float'>): Node<'float'> {
-  return smoothstep(-0.34, 0.34, x).mul(2).sub(1)
-}
+const shapeMark = flatMark
 
 /** A brush field, plus the relief and scale the normal-detail layer needs. */
 interface BrushField {
@@ -278,6 +349,28 @@ interface BrushField {
    * tracks its own wavelength.
    */
   fineScale: Node<'float'>
+  /**
+   * HARD region mask, ~[-1, 1] and bimodal, at roughly 100 screen pixels.
+   *
+   * Not another addend. This is the fix for the thing that made every surface
+   * read as airbrush no matter how hard the fine octaves were stepped: a
+   * weighted SUM of three stepped fields whose boundaries land in three
+   * different places can never be flat anywhere and can never make a
+   * full-height jump anywhere. Measured on the previous build, the lower 28% of
+   * shots/near-noon.png had 1.1% of its pixels inside a 5x5 patch flat to within
+   * 0.010 luma, against 7.8-38.8% across the references, while its MEDIAN
+   * gradient ran 1.4-3.2x the references and its 99th percentile ran half
+   * theirs. More wobble everywhere and less contrast anywhere is the numeric
+   * signature of an airbrush.
+   *
+   * So the coarse octave stops being a value addend and becomes a SELECTOR: it
+   * shifts the lighting ramp's thresholds across a whole patch, so the patch
+   * lands on the next authored colour stop as one flat mass with one boundary
+   * around it. That is what a loaded flat brush does, and it is the only
+   * mechanism in the material that can produce a plateau and a full-amplitude
+   * edge at the same time.
+   */
+  region: Node<'float'>
 }
 
 /**
@@ -343,11 +436,13 @@ function triplanarBrush(scale: Node<'float'>): BrushField {
   const wx = w.x.div(wsum)
   const wy = w.y.div(wsum)
   const wz = w.z.div(wsum)
-  const octave = (s: Node<'float'>, spin: Node<'float'>): Node<'float'> => {
+  const octave = (
+    s: Node<'float'>, rung: Node<'float'>, half = 0.13,
+  ): Node<'float'> => {
     const q = vec3(pw.div(s))
-    return shapeMark(brushStroke(vec2(q.z, q.y), spin)).mul(wx)
-      .add(shapeMark(brushStroke(vec2(q.x, q.z), spin)).mul(wy))
-      .add(shapeMark(brushStroke(vec2(q.x, q.y), spin)).mul(wz))
+    return shapeMark(brushStroke(vec2(q.z, q.y), rung), half).mul(wx)
+      .add(shapeMark(brushStroke(vec2(q.x, q.z), rung), half).mul(wy))
+      .add(shapeMark(brushStroke(vec2(q.x, q.y), rung), half).mul(wz))
   }
 
   // Metres per screen pixel on this surface. Clamped against `dist` because at
@@ -357,25 +452,64 @@ function triplanarBrush(scale: Node<'float'>): BrushField {
   const dist = pw.sub(cameraPosition).length()
   const texel = dFdx(pw).length().max(dFdy(pw).length())
     .min(dist.mul(0.022)).max(1e-5)
-  const lod = log2(texel.mul(STROKE_PX).div(scale.max(1e-3))).max(0)
+  // Floored at -4, not at 0, and that clamp was a bug rather than a safety rail.
+  //
+  // `.max(0)` makes STROKE_PX a CEILING with no floor: the ladder can climb to
+  // coarser octaves at distance but can never descend below the authored
+  // `brushScale`, so anything nearer than one stroke-width of it gets a single
+  // giant blob. At a gameplay camera the near ground wants marks around 0.05 m
+  // to project at 20 px, while `meadow` authors 3.6 m — six rungs away — so the
+  // whole near field came out as 60-200 px of soft green camo, all the same size
+  // and all combed the same diagonal. That is the worst surface in the build and
+  // it is the one the player's own camera is pointed at.
+  //
+  // Descending is safe BY CONSTRUCTION, which is the point of selecting by
+  // projected size: whatever rung is chosen, its period on screen is ~STROKE_PX,
+  // so a finer octave can never alias — the aliasing risk is a world-locked
+  // octave FIXED too fine, which is what the ladder exists to avoid. -4 gives
+  // meadow a 0.22 m finest mark, which covers a 3.5 m camera down to a couple of
+  // metres, and keeps the authored scale meaningful at vista range.
+  const lod = log2(texel.mul(STROKE_PX).div(scale.max(1e-3))).max(-4)
   const rung = floor(lod)
   const f = lod.sub(rung)
   const s0 = scale.mul(exp2(rung))
-  const o0 = octave(s0, rung.mul(SPIN_STEP))
-  const o1 = octave(s0.mul(2), rung.add(1).mul(SPIN_STEP))
-  const o2 = octave(s0.mul(4), rung.add(2).mul(SPIN_STEP))
+  const o0 = octave(s0, rung)
+  const o1 = octave(s0.mul(2), rung.add(1))
+  const o2 = octave(s0.mul(4), rung.add(2))
   // Two bands sharing three evaluations. Each band cross-fades one rung up as
   // `f` runs 0->1, so at the handover band k is exactly what band k-1 was and
   // nothing pops.
   const band0 = mix(o0, o1, f)
   const band1 = mix(o1, o2, f)
-  const macro = octave(scale.mul(MACRO_STEP), float(1.9))
-  const value = band0.mul(0.40)
-    .add(band1.mul(0.32))
-    .add(macro.mul(0.28))
+  // The coarse rung. Three rungs above the finest, so ~8 x STROKE_PX ~= 100
+  // screen pixels — the size of the flat masses the references break a hillside
+  // into, and the size the critique measured our plateaus as needing to be.
+  //
+  // It replaces the old `macro` octave, which was a fixed 24 x brushScale in
+  // WORLD units (86 m on the meadow) and therefore covered the whole frame at a
+  // gameplay camera and a few pixels at vista range. Selecting it off the same
+  // ladder as everything else keeps its projected size constant, which is the
+  // property the whole ladder exists for. Same tap count as before: this octave
+  // is paid for by the macro one it replaces.
+  //
+  // Stepped much harder than the paint octaves (0.05 sigma against 0.13): this
+  // one is a region mask, and a region either is or is not.
+  const region = mix(
+    octave(s0.mul(8), rung.add(3), 0.05),
+    octave(s0.mul(16), rung.add(4), 0.05),
+    f,
+  )
+  // Renormalised, because the coarse octave has left the sum. Two stepped,
+  // decorrelated fields at 0.44/0.36 carry the same composite sigma the three
+  // at 0.40/0.32/0.28 did, so `brushStrength` keeps the meaning its docstring
+  // gives it and the structure gate's medStd band is unmoved.
+  const value = band0.mul(0.44)
+    .add(band1.mul(0.36))
     .mul(BRUSH_GAIN)
   const relief = reliefField(pw, vec3(normalWorld), s0, f)
-  return { value, gradient: relief.gradient, height: relief.height, fineScale: s0 }
+  return {
+    value, gradient: relief.gradient, height: relief.height, fineScale: s0, region,
+  }
 }
 
 /**
@@ -425,6 +559,8 @@ export class PainterlyMaterial {
     brushStrength: uniform(0.5),
     brushScale: uniform(3),
     brushSaturation: uniform(0.5),
+    brushHue: uniform(0.26),
+    regionStep: uniform(0.7),
     detailStrength: uniform(0.55),
     reliefShade: uniform(0.6),
     rimStrength: uniform(0.5),
@@ -454,7 +590,16 @@ export class PainterlyMaterial {
     // pick the authored SHADOW colour (a teal-green for grass), not keep the lit
     // lime and merely lose its key. Driving the ramp is what makes the cast
     // shadow coloured rather than just darker.
-    const ndotl = dot(n, atmosphere.nodes.sunDir)
+    // The coarse region mask, converted into a shift of the ramp's INPUT.
+    //
+    // Offsetting N.L rather than the two thresholds separately is deliberate:
+    // it moves the whole 3-stop ramp for that patch by one amount, so a region
+    // reads as "this whole mass is one step further into the light / into the
+    // shade" rather than as two independent boundaries that can land in
+    // different places. Scaled by the ramp's own softness so it means the same
+    // thing at every authored cel-hardness.
+    const regionShift = brush.region.mul(u.rampSoftness).mul(u.regionStep).toVar()
+    const ndotl = dot(n, atmosphere.nodes.sunDir).add(regionShift)
     const vis = atmosphere.sunVisibility(vec3(positionWorld))
     // Thresholds track the sun's height. See `rampScale` in tod.ts: compared
     // against a raw N.L, an absolute 0.30 shadow threshold puts EVERY surface
@@ -468,7 +613,11 @@ export class PainterlyMaterial {
     // so scaling that threshold too makes every slope within ~10deg of the sun
     // go to the LIT stop at once and the frame blows to fluorescent yellow.
     // Lit stays a high, rare bar; only genuinely sun-facing faces reach it.
+    // The shadow step gets an extra multiplier at a high sun — see
+    // `rampShadowGain` in tod.ts. Without it the noon frames never select the
+    // shadow stop at all and the bottom half of the value range is unused.
     const scaleLow = atmosphere.rampScaleNode
+    const scaleShadow = scaleLow.mul(atmosphere.rampShadowGainNode)
     // 0.22, down from 0.45. The LIT stop is meant to be a rare, high bar, and at
     // a raking sun the 0.45 blend dropped its threshold to N.L 0.54 — so on a
     // hilly vista every slope within ~30deg of the sun jumped to the lit lime at
@@ -493,9 +642,8 @@ export class PainterlyMaterial {
     const softScale = mix(float(1), scaleLow, 0.55)
     const softLow = u.rampSoftness.mul(softScale)
     const softHigh = u.rampSoftness.mul(mix(float(1), scaleHigh, 0.55))
-    const litMid = smoothstep(
-      u.rampShadow.mul(scaleLow).sub(softLow), u.rampShadow.mul(scaleLow).add(softLow), ndotl,
-    )
+    const shadowT = u.rampShadow.mul(scaleShadow).toVar()
+    const litMid = smoothstep(shadowT.sub(softLow), shadowT.add(softLow), ndotl)
     const litTop = smoothstep(
       u.rampMid.mul(scaleHigh).sub(softHigh), u.rampMid.mul(scaleHigh).add(softHigh), ndotl,
     )
@@ -526,16 +674,64 @@ export class PainterlyMaterial {
     // cheapest possible ambient occlusion (the field is already computed for the
     // gradient) and it is the term that gives a shadow mass internal modelling
     // rather than leaving it a flat slab.
-    const reliefAO = brush.height.mul(u.reliefShade).add(1).max(0.2)
+    // Stepped, like the albedo marks, and for the same reason. This term is a
+    // smooth noise field multiplying the ambient at +/-50%, so on a bright frame
+    // it is one of the largest signals on the surface — and a soft gradient here
+    // washes out hard-edged marks underneath it no matter how crisp they are.
+    // The near ground read as airbrushed green camouflage largely because of
+    // this layer. A patch of shade with an edge is also the more painterly
+    // object: the references' hillsides are made of flat masses, not of haze.
+    //
+    // The relief's GRADIENT stays smooth — see `bumpNormal`. Only the occlusion
+    // is thresholded, because a stepped gradient would fold a discontinuity into
+    // the shading normal and stipple every boundary.
+    // 0.26, not 0.55: a stepped field is bimodal, so the same nominal amplitude
+    // puts every dark patch at the FULL depth instead of spreading a Gaussian
+    // over it, and the darkest fifth of the near-field frames fell to Rec.709
+    // luma 0.25-0.29 against the 0.299 floor tools/shadow.mjs sets off the
+    // references. Patches with edges, at a shallower depth.
+    // Half-width 0.55 sigma rather than the albedo's 0.13: a patch with an edge,
+    // but a softer edge than a paint mark has. This term drives the ambient, and
+    // a razor boundary in the FILL lands on top of every ramp terminator in the
+    // frame — on a hard-edged prop that reads as a chewed silhouette, not as a
+    // brush stroke.
+    const reliefAO = flatMark(brush.height, 0.55).mul(u.reliefShade.mul(0.26)).add(1).max(0.2)
+    // Held in a variable. The ambient is read by the shadow stop, the light sum
+    // and the rim, and TSL re-emits an expression's whole subtree on every read
+    // — see `clampChroma` in scattering.ts for what that cost when it went
+    // unnoticed. This is one texture fetch and one hue rotation, not four.
     const ambient = vec3(atmosphere.skyIrradiance(n)
-      .mul(atmosphere.ambientGainNode).mul(u.ambient).mul(reliefAO))
+      .mul(atmosphere.ambientGainNode).mul(u.ambient).mul(reliefAO)).toVar()
     // The sky's hue at unit luminance — what "tinted toward the sky" means.
-    const skyHue = vec3(ambient.div(luminance(ambient).max(1e-4)))
+    //
+    // Clamped, because "at unit luminance" is where the dawn frames went wrong.
+    // Rec.709 weights blue at 0.0722, so dividing a near-pure-blue ambient by
+    // its own luminance returns a blue channel ~2.7x larger than 1 — and that
+    // number then multiplies the shadow stop's luminance and becomes the shadow
+    // ALBEDO. The authored green grass shade came out navy, and because HSV
+    // value is the peak channel, the whole frame's value range went with it. The
+    // reference shade keeps the albedo's own hue with a cool cast: grasslands'
+    // grass shadow is hue 124, still green. `ambientChroma` is tighter than the
+    // fill's own cap for the same reason the docstring on `shadowSkyTint` gives
+    // — the references cool their shade, they do not recolour it.
+    const skyHue = vec3(ambient.div(luminance(ambient).max(1e-4))).toVar()
 
     // ── albedo: three authored colours, selected by the ramp ──────────────────
+    // The sky-hued alternative to the authored shadow colour, at the SAME
+    // luminance so the rotation costs no lightness — then chroma-capped, which
+    // is the fix for the navy shade. See `clampChroma` in scattering.ts: the
+    // unit-luminance normalisation above hands back a blue channel up to 2.7x
+    // its own luminance at dawn, `boostSaturation` widens that further, and the
+    // product with `shadowSkyTint` x `shadowTintBoost` (0.18 x 3.2 = 0.58 at a
+    // horizon sun) puts most of that into the shadow albedo. Capping the ratio
+    // keeps the shade unmistakably sky-tinted and stops it being single-channel.
+    const skyShadow = clampChroma(
+      boostSaturation(vec3(skyHue.mul(luminance(u.shadow))), 1.2),
+      atmosphere.ambientChromaNode,
+    )
     const shadowStop = vec3(mix(
       u.shadow,
-      boostSaturation(vec3(skyHue.mul(luminance(u.shadow))), 1.2),
+      skyShadow,
       saturate(u.shadowSkyTint.mul(atmosphere.shadowTintBoostNode)),
     ))
     let albedo: Node<'vec3'> = vec3(mix(shadowStop, u.base, toMid))
@@ -556,6 +752,12 @@ export class PainterlyMaterial {
       vec3(albedo.mul(stroke.mul(0.72).add(1).max(0.12))),
       stroke.mul(u.brushSaturation).mul(0.75).add(1).max(0.15),
     ))
+    // ── and a HUE axis, from a source decorrelated from the value one ─────────
+    // See `brushHue`. The relief height is already computed four times per
+    // fragment for the normal layer, so this costs one hue rotation and nothing
+    // else, and because it is a different field from `stroke` the colour
+    // boundaries do not sit on top of the value boundaries.
+    albedo = rotateHue(albedo, brush.height.mul(u.brushHue).mul(u.brushStrength))
 
     // ── light: sky ambient (coloured, lifted) + ramped direct ─────────────────
     const level = mix(float(0), u.midLevel, toMid)
@@ -582,10 +784,30 @@ export class PainterlyMaterial {
     // lighting, and — because `albedo` already carries the brush — the rim now
     // carries the stroke pattern instead of erasing it. It stays sky-COLOURED,
     // which is the part ART_BIBLE §3 actually asks for.
+    // Weighted by the albedo ITSELF, not by its luminance, and that is the
+    // second half of the same bug fix.
+    //
+    // Scaling a sky-coloured wash by `luminance(albedo)` bounds its SIZE by the
+    // surface but leaves its HUE untouched, so on a grazing view — which is the
+    // whole frame from a 3.5 m camera — every shaded pixel received a large
+    // additive dose of raw sky. Measured on shots/near-dusk.png that put the
+    // shaded near ground at hue 225-237 with green at 0.51 of the peak channel,
+    // i.e. indigo, against hue 173-191 and green at 0.85-1.00 of peak in every
+    // reference's darks. ART_BIBLE §2 is explicit that the references "cool
+    // their shade, they do not recolour it" — grasslands' grass shadow is still
+    // GREEN at hue 124 — and a wash that carries none of the albedo's own
+    // colour cannot obey that rule at any strength.
+    //
+    // Multiplying by the albedo makes the term what it physically is: more of
+    // the sky reflected by THIS surface at a grazing angle. It stays
+    // sky-COLOURED (the ambient is the sky irradiance LUT) without overwriting
+    // the material's identity, it still carries the brush, and because the
+    // authored `lit` stops are far brighter than the `shadow` stops it now
+    // reads strongest exactly where a rim should — on the bright side of a
+    // silhouette rather than across a shadow mass.
     const view = vec3(cameraPosition.sub(positionWorld).normalize())
     const rim = pow(saturate(dot(n, view).oneMinus()), u.rimPower).mul(u.rimStrength)
-    const rimWeight = saturate(luminance(albedo).mul(2.6))
-    color = vec3(color.add(ambient.mul(rim).mul(rimWeight).mul(0.85)))
+    color = vec3(color.add(albedo.mul(ambient).mul(rim).mul(1.5)))
 
     // ── saturation rises with luminance (ART_BIBLE §2) ────────────────────────
     const lum = luminance(color)
@@ -617,6 +839,8 @@ export class PainterlyMaterial {
     u.brushStrength.value = p.brushStrength
     u.brushScale.value = p.brushScale
     u.brushSaturation.value = p.brushSaturation
+    u.brushHue.value = p.brushHue
+    u.regionStep.value = p.regionStep
     u.detailStrength.value = p.detailStrength
     u.reliefShade.value = p.reliefShade
     u.rimStrength.value = p.rimStrength

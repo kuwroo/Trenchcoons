@@ -87,10 +87,71 @@ class InstanceSet {
   }
 }
 
+/**
+ * Footprint of a scattered form, for anything that needs to know where the
+ * world is already occupied.
+ *
+ * Added for M3. The greybox scatters bushes up to 13 m across and rocks up to
+ * 9 m, and the first chase-camera capture spawned the car inside one: the shot
+ * was four fifths dark bush with two raccoon ears over the top, and nothing in
+ * the harness could tell that from a lighting bug. A spawn point is only
+ * reproducible if "is this spot clear" is answerable, and the scatter is the
+ * only thing that knows.
+ *
+ * Circles in the XZ plane, world space. M4's deform stamping and M5's prop
+ * collision want the same list.
+ */
+export interface Obstacle {
+  x: number
+  z: number
+  /** Horizontal radius, metres. */
+  r: number
+}
+
 export interface Greybox {
   group: THREE.Group
+  /** The analytic heightfield. What the ground MESH was sampled from. */
   heightAt: (x: number, z: number) => number
+  /**
+   * The height of the ground you can actually see, i.e. of the rendered
+   * triangles rather than of the function they were sampled from.
+   *
+   * These differ by metres and anything that has to sit ON the ground must use
+   * this one. The ground plane is 420 segments over 8 km, so a quad is 19 m
+   * across, while the heightfield's finest octave has a 46 m wavelength: linear
+   * interpolation across a quad departs from the analytic surface by up to
+   * ~4 m in the middle. M3's first landing capture showed the kart buried to
+   * its rim in a hillside for exactly this reason — the suspension was resting
+   * perfectly on a surface that was not being drawn.
+   *
+   * Exact, not approximate. Bilinear over the same lattice was the first
+   * attempt and it is still wrong, because a quad is not a bilinear patch — it
+   * is TWO TRIANGLES, and the two only agree when the quad has no twist.
+   * Sampling the twist term `h00 + h11 - h10 - h01` around the M3 spawns gives
+   * a bilinear-vs-triangle disagreement of up to 1.69 m, against a 0.4 m wheel
+   * radius: two wheel diameters of buried or hovering, i.e. exactly the failure
+   * the function was added to remove, just less often. This one interpolates on
+   * the real triangulation, so the residual is identically zero everywhere.
+   * M2's CDLOD terrain replaces both.
+   */
+  groundAt: (x: number, z: number) => number
+  /** Surface of the lagoon, world Y. Anything below this is underwater. */
+  waterLevel: number
+  /**
+   * Nearest point to (x, z) that a vehicle can legitimately be put down on:
+   * dry, not inside a scattered form, and gentle enough that the car will not
+   * spawn pinned against its own roll clamp.
+   *
+   * Added because nothing validated a spawn and both perf scenes proved it —
+   * `pos=280,14,760` put the kart at groundAt = -83.8, i.e. 84 m down inside
+   * the lagoon bowl with the chase camera in the pit beside it, and the vista
+   * scene parked it at 28.6 degrees of roll wedged between two hillsides. Both
+   * runs then reported a healthy 60 fps for a picture of nothing.
+   */
+  spawnPoint: (x: number, z: number) => [number, number]
   materials: PainterlyMaterial[]
+  /** Every scattered form big enough to hide a car. */
+  obstacles: Obstacle[]
 }
 
 export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
@@ -121,10 +182,57 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   const heightAt = (x: number, z: number): number =>
     baseHeight(x, z) - bowl(x, z) * LAGOON.depth
 
+  // Lattice of the ground mesh below. Must stay in step with the geometry.
+  const GRID = (GROUND_HALF * 2) / GROUND_SEGMENTS
+  /**
+   * Height of the DRAWN triangle under (x, z).
+   *
+   * `PlaneGeometry` emits, per quad (ix, iy), the index pairs (a, b, d) and
+   * (b, c, d) where a = (ix, iy), b = (ix, iy+1), c = (ix+1, iy+1) and
+   * d = (ix+1, iy). After the `rotateX(-PI/2)` below, iy maps to +z, so in the
+   * quad-local coordinates (tx along +x, tz along +z) those two triangles are
+   *
+   *   lower: h00, h01, h10   — the half with tx + tz <= 1
+   *   upper: h01, h11, h10   — the half with tx + tz >= 1
+   *
+   * Each is planar, so the interpolant is affine in (tx, tz) and the barycentric
+   * weights collapse to the two differences below. Verified against a
+   * `THREE.Raycaster` fired at the real ground mesh: over 5120 off-lattice
+   * samples around both car spawns, both capture points and the perf spawn,
+   * bilinear disagrees with the drawn triangle by up to 1.68 m and this by
+   * 1.8e-5 m — which is float32 vertex storage, not interpolation. Against
+   * float64 lattice coordinates the residual is 1.2e-12 m.
+   */
+  const groundAt = (x: number, z: number): number => {
+    const fx = (x + GROUND_HALF) / GRID
+    const fz = (z + GROUND_HALF) / GRID
+    const i = Math.floor(fx)
+    const j = Math.floor(fz)
+    const tx = fx - i
+    const tz = fz - j
+    const x0 = i * GRID - GROUND_HALF
+    const z0 = j * GRID - GROUND_HALF
+    const x1 = x0 + GRID
+    const z1 = z0 + GRID
+    if (tx + tz <= 1) {
+      // Lower triangle: origin at h00, edges toward h10 (+x) and h01 (+z).
+      const h00 = heightAt(x0, z0)
+      return h00
+        + (heightAt(x1, z0) - h00) * tx
+        + (heightAt(x0, z1) - h00) * tz
+    }
+    // Upper triangle: origin at h11, edges toward h01 (-x) and h10 (-z).
+    const h11 = heightAt(x1, z1)
+    return h11
+      + (heightAt(x0, z1) - h11) * (1 - tx)
+      + (heightAt(x1, z0) - h11) * (1 - tz)
+  }
+
   // Partly filled, so a rim of shore shows all the way round.
   const waterLevel = baseHeight(LAGOON.x, LAGOON.z) - LAGOON.depth * 0.46
 
   const materials: PainterlyMaterial[] = []
+  const obstacles: Obstacle[] = []
   /** Every surface comes from a JSON def in assets/defs/surfaces. */
   const mat = (defId: string): THREE.MeshBasicNodeMaterial => {
     const m = new PainterlyMaterial(atmosphere, surface(defId))
@@ -197,6 +305,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     const spin = trees.range(0, Math.PI * 2)
 
     trunks.push(p.set(x, y + h * 0.21, z), sc.set(w * 0.55, h * 0.42, w * 0.55), 0, spin, 0)
+    obstacles.push({ x, z, r: w })
     const n = trees.int(3, 4)
     for (let t = 0; t < n; t++) {
       const f = t / n
@@ -221,6 +330,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     const z = Math.sin(a) * r
     if (!dry(x, z)) continue
     const s = scatter.range(1.6, 9)
+    obstacles.push({ x, z, r: s * 1.7 })
     rocks.push(
       p.set(x, heightAt(x, z) - s * 0.28, z),
       sc.set(s * scatter.range(0.9, 1.7), s * scatter.range(0.5, 0.95), s * scatter.range(0.9, 1.7)),
@@ -248,6 +358,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     // the near hedges in cliffs-tohad.jpg actually are — and area is the whole
     // point of the dark anchor.
     const lobes = isBloom ? 1 : 3
+    obstacles.push({ x, z, r: s * (isBloom ? 1.45 : 2.6) })
     for (let k = 0; k < lobes; k++) {
       const j = k === 0 ? 0 : s * 0.85
       const ja = scatter.range(0, 6.28)
@@ -322,6 +433,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     const w = cliffs.range(28, 74)
     const x = Math.cos(a) * r
     const z = Math.sin(a) * r
+    obstacles.push({ x, z, r: w * 1.2 })
     cliffSet.push(
       p.set(x, heightAt(x, z) + h * 0.3, z),
       sc.set(w, h, w * cliffs.range(0.7, 1.3)), 0, cliffs.range(0, 6.28), 0,
@@ -386,11 +498,101 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   lagoon.name = 'lagoon'
   group.add(lagoon)
 
+  // ── spawn validation ───────────────────────────────────────────────────────
+  // Deliberately built AFTER the scatter, so `obstacles` is complete. Draws no
+  // RNG, so the seeded stream is untouched and every existing capture is
+  // bit-identical.
+  const SPAWN = {
+    /** Clearance above the waterline. A kart is 0.74 m to the axle line. */
+    freeboard: 2.5,
+    /**
+     * Steepest ground a spawn may sit on, radians.
+     *
+     * 0.16 (9 deg), not the 0.5 the pose clamp allows: a spawn is where the
+     * PARKED captures happen, and the first validated spawn still put the idle
+     * kart at 13.4 degrees of static roll, which photographs as a car abandoned
+     * on a hillside rather than as a car at rest.
+     */
+    maxSlope: 0.16,
+    /** Extra room around a scattered form, metres. Half a kart plus a margin. */
+    margin: 3.5,
+    /** Search rings, metres. Beyond ~120 m a "spawn here" request is a typo. */
+    rings: [0, 9, 18, 30, 45, 64, 88, 120],
+    perRing: 16,
+  } as const
+
+  /**
+   * Worst tilt the kart's plane fit can report here, for ANY heading, radians.
+   *
+   * Two earlier versions were both too generous. Max over +/-x and +/-z lets a
+   * purely diagonal slope through at sqrt(2) times the threshold; a central
+   * -difference gradient then under-reports whenever the footprint straddles a
+   * triangle edge, and it does, because the ground quads are 19 m and the kart
+   * is 2.7 m. Both accepted a spawn the vehicle then sat on at 12.6 deg.
+   *
+   * A ring of the kart's own half-diagonal bounds it directly: the plane fit is
+   * an average of contact heights, so no heading can produce more tilt than the
+   * extreme pair on that ring.
+   */
+  const FOOTPRINT = 1.35
+  const slopeAt = (x: number, z: number): number => {
+    let lo = Infinity
+    let hi = -Infinity
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2
+      const h = groundAt(x + Math.cos(a) * FOOTPRINT, z + Math.sin(a) * FOOTPRINT)
+      if (h < lo) lo = h
+      if (h > hi) hi = h
+    }
+    return Math.atan((hi - lo) / (2 * FOOTPRINT))
+  }
+
+  const clearOfScatter = (x: number, z: number): boolean => {
+    for (const o of obstacles) {
+      const rr = o.r + SPAWN.margin
+      const dx = x - o.x
+      const dz = z - o.z
+      if (dx * dx + dz * dz < rr * rr) return false
+    }
+    return true
+  }
+
+  const spawnPoint = (x: number, z: number): [number, number] => {
+    // Scored so that a world with no perfect answer still gets the least bad
+    // one rather than the caller's drowned original.
+    let best: [number, number] = [x, z]
+    let bestScore = -Infinity
+    for (const r of SPAWN.rings) {
+      const n = r === 0 ? 1 : SPAWN.perRing
+      for (let i = 0; i < n; i++) {
+        // Fixed angles, no RNG: the same request must always answer the same.
+        const a = (i / n) * Math.PI * 2 + r * 0.37
+        const px = x + Math.cos(a) * r
+        const pz = z + Math.sin(a) * r
+        // Water is a DISC, not a global plane. Testing `groundAt < waterLevel`
+        // everywhere rejected a perfectly dry meadow 1.5 km from the lagoon
+        // whose only crime was sitting below the lagoon's surface height.
+        const inLagoon = Math.hypot(px - LAGOON.x, pz - LAGOON.z) < LAGOON.r
+        const depth = inLagoon
+          ? groundAt(px, pz) - (waterLevel + SPAWN.freeboard)
+          : 1
+        const slope = slopeAt(px, pz)
+        const clear = clearOfScatter(px, pz)
+        if (depth > 0 && slope < SPAWN.maxSlope && clear) return [px, pz]
+        const score = Math.min(depth, 0) * 3
+          - Math.max(0, slope - SPAWN.maxSlope) * 40
+          - (clear ? 0 : 25) - r * 0.02
+        if (score > bestScore) { bestScore = score; best = [px, pz] }
+      }
+    }
+    return best
+  }
+
   // ── sand shelf, so one warm value sits in frame ────────────────────────────
   const shelf = new THREE.Mesh(new THREE.CylinderGeometry(150, 190, 8, 26), sand)
   shelf.position.set(-260, heightAt(-260, -380) - 2, -380)
   shelf.frustumCulled = false
   group.add(shelf)
 
-  return { group, heightAt, materials }
+  return { group, heightAt, groundAt, waterLevel, spawnPoint, materials, obstacles }
 }

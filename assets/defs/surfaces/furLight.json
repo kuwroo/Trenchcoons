@@ -1,0 +1,22 @@
+{
+  "id": "furLight",
+  "version": 1,
+  "type": "surface",
+  "notes": "Muzzle and ear insides. The pale counter-shape that makes the dark mask read as a mask (ART_BIBLE 6: 'the mask reads as a strong dark shape').",
+  "material": {
+    "base": "#dcb98c",
+    "shadow": "#a3805a",
+    "lit": "#f6e0bd",
+    "top": "#fff0d8",
+    "topGain": 1.05,
+    "gradientBase": -0.16,
+    "gradientHeight": 0.32,
+    "gradientStrength": 0.4,
+    "brushScale": 0.2,
+    "brushStrength": 0.55,
+    "brushSaturation": 0.42,
+    "rimStrength": 0.8,
+    "saturationGain": 0.28,
+    "shadowSkyTint": 0.22
+  }
+}

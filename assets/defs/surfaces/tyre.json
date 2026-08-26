@@ -1,0 +1,23 @@
+{
+  "id": "tyre",
+  "version": 1,
+  "type": "surface",
+  "notes": "ART_BIBLE 2 forbids neutral grey anywhere, and a tyre is where a renderer most wants to put it. Authored blue-grey with a blue shadow and a strong sky rim: the rim is what makes a 12-sided cylinder read as round without specular.",
+  "material": {
+    "base": "#3f4c60",
+    "shadow": "#2a3c56",
+    "lit": "#6d7f96",
+    "top": "#8d9fb4",
+    "topGain": 1.05,
+    "gradientBase": -0.4,
+    "gradientHeight": 0.8,
+    "gradientStrength": 0.35,
+    "brushScale": 0.24,
+    "brushStrength": 0.42,
+    "brushSaturation": 0.3,
+    "rimStrength": 0.85,
+    "rimPower": 2.4,
+    "saturationGain": 0.3,
+    "shadowSkyTint": 0.3
+  }
+}

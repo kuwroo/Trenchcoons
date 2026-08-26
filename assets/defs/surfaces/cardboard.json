@@ -1,0 +1,24 @@
+{
+  "id": "cardboard",
+  "version": 1,
+  "type": "surface",
+  "notes": "ART_BIBLE 6: 'The cardboard box is a strong asset: matte, fibrous, warm neutral against every biome palette.' brushScale is deliberately the smallest in the project (0.5m) — cardboard fibre is the one surface in the game whose grain is genuinely finer than a brush stroke, and the LOD ladder in painterly.ts keeps it at a constant projected size so it does not alias at any range. Shadow is authored WARM and cooled at runtime by shadowSkyTint, per the rule that shadows rotate toward the live sky hue rather than being baked cool.",
+  "material": {
+    "base": "#c8974f",
+    "shadow": "#8a5b34",
+    "lit": "#efc47f",
+    "top": "#f7ddab",
+    "topGain": 1.06,
+    "gradientBase": -0.55,
+    "gradientHeight": 1.2,
+    "gradientStrength": 0.42,
+    "brushScale": 0.5,
+    "brushStrength": 0.62,
+    "brushSaturation": 0.45,
+    "detailStrength": 0.18,
+    "reliefShade": 0.9,
+    "rimStrength": 0.55,
+    "saturationGain": 0.24,
+    "shadowSkyTint": 0.22
+  }
+}

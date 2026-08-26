@@ -2,7 +2,7 @@
   "id": "bark",
   "version": 1,
   "type": "surface",
-  "notes": "Warm red-brown per Capy Castaway, never grey-brown. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
+  "notes": "Warm red-brown per Capy Castaway, never grey-brown. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free.",
   "material": {
     "base": "#8b4a3a",
     "shadow": "#6b4560",
@@ -12,7 +12,7 @@
     "gradientHeight": 1.0,
     "gradientStrength": 0.3,
     "brushScale": 1.1,
-    "brushStrength": 0.8,
+    "brushStrength": 0.95,
     "saturationGain": 0.24,
     "rimStrength": 0.45,
     "gradientBase": -0.5

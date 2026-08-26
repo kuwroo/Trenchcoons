@@ -64,8 +64,26 @@ const ATLAS_W = TILE * CASCADES
  * up and its frame bottom lands ~19 m out; 8 m is already generous.
  */
 const SHADOW_NEAR = 8
-/** Furthest shadowed view distance. Past this, aerial perspective carries it. */
-const SHADOW_FAR = 900
+/**
+ * Furthest shadowed view distance.
+ *
+ * 2400 m, up from 900. "Past this, aerial perspective carries it" was true when
+ * the haze target ran at nearly full sky brightness — everything beyond the last
+ * cascade dissolved anyway, so whether it was lit or shaded did not show. With
+ * the haze gain cut (see `hazeGain` in tod.ts) distant terrain keeps its own
+ * value again, and 900 m put the entire VISTA register outside the shadow map:
+ * the camera in shots/greybox-*.png sits 180 m up and its nearest ground is
+ * 234 m out, so all but the bottom sliver of those frames was rendered fully
+ * lit at every hour. Measured, greybox-dusk and greybox-sunrise carried 0.00%
+ * of their pixels below HSL lightness 0.35 against 2.8-11.2% in every reference
+ * — a horizon sun over rolling hills with no cast shadow anywhere in it.
+ *
+ * The cost is resolution, and the header's formula says exactly how much: the
+ * worst-case screen pixels per shadow texel goes as the SPLIT RATIO, which at
+ * four cascades over 8..2400 m is 4.4 rather than 3.26. That is ~5.4 px instead
+ * of ~4 px before the PCF kernel, which the 13-tap disc absorbs.
+ */
+const SHADOW_FAR = 2400
 /** Depth the slab spans along the light ray, metres. */
 const DEPTH = 8000
 /**

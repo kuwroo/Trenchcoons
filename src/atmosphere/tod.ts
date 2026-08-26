@@ -52,7 +52,7 @@ export const SUN_KEY = 2.45
  * and it is the right check: HSV value cannot see it, because a saturated navy
  * scores value 0.51 while reading as almost black.
  */
-export const AMBIENT_FILL = 0.31
+export const AMBIENT_FILL = 0.42
 /**
  * Level the irradiance LUT returns for an up-facing normal at noon. Pure
  * calibration: it turns AMBIENT_FILL into a multiplier on the LUT, so the
@@ -87,6 +87,18 @@ const DUSK_DECLINATION = 0.115
 const NOON_ELEVATION = 0.8525
 /** Lowest elevation the ramp is allowed to shrink to. Below this it stops. */
 const RAMP_FLOOR = 0.17
+
+/**
+ * How far a surface has to turn away from level before the ramp calls it
+ * shadow, radians. See `rampShadowGain`. 25deg: enough that flat ground and the
+ * gentle windward faces stay on the mid stop at every hour, little enough that
+ * the anti-solar side of a hill is a real dark mass at noon.
+ *
+ * The 0.30 it is compared against is `PAINTERLY_DEFAULTS.rampShadow` — the
+ * authored threshold this gain is expressed relative to. Kept as a literal
+ * rather than an import because tod.ts is upstream of the material.
+ */
+const SHADOW_SLOPE_MARGIN = 25 * Math.PI / 180
 
 // ── Palette anchors (ART_BIBLE §4 master palette) ─────────────────────────────
 // Measured off refs/painterly/cliffs-tohad.jpg at (0.10, 0.40): rgb(189,187,251),
@@ -246,6 +258,26 @@ export interface SkyState {
    * the sky. So the rotation is weak by day and near-total at low sun.
    */
   shadowTintBoost: number
+  /**
+   * Ceiling on the ambient's peak-channel-to-luminance ratio. See
+   * `clampChroma` in scattering.ts for the mechanism and the measurement.
+   *
+   * This is the knob that separates "coloured shadows" from "cobalt plastic",
+   * and it exists because the two gates measure different channels. HSV value —
+   * what tools/palette.mjs takes its range from — is the PEAK channel. Rec.709
+   * luma — what tools/shadow.mjs measures — weights green 0.7152 and blue
+   * 0.0722. A near-pure-blue fill therefore raises the peak channel about ten
+   * times as efficiently as it raises perceived lightness, so it costs value
+   * range without buying any lift: atmos-sunrise-sunward's foreground read
+   * rgb(73, 58, 193), which is shadowLuma 0.28 and HSV value 0.76 at once.
+   *
+   * Capping the ratio is not a desaturation of the picture. It moves the fill's
+   * chromaticity a little toward its own grey at CONSTANT luminance, which
+   * raises the green channel (buying lift for free) and drops the peak (buying
+   * range for free). The frame's own albedos supply the chroma; the light does
+   * not have to be a laser.
+   */
+  ambientChroma: number
   /** Chroma pushed into the aerial-perspective haze target. */
   hazeSat: number
   /** Chroma pushed into the sky itself. */
@@ -291,6 +323,11 @@ export interface SkyState {
    * noon the multiplier is 1 and the authored tuning is bit-for-bit unchanged.
    */
   rampScale: number
+  /**
+   * Extra multiplier on the SHADOW ramp step, above `rampScale`. See
+   * `rampShadowGain` in evaluateSky().
+   */
+  rampShadowGain: number
   /**
    * How much of the cast-shadow term reaches the ramp, 0..1.
    *
@@ -360,6 +397,7 @@ export function makeSkyState(): SkyState {
     ambientWarm: 0,
     ambientDirectional: 0,
     shadowTintBoost: 1,
+    ambientChroma: 3,
     hazeSat: 1.75,
     skySaturation: 5.2,
     skySatHorizon: 0.5,
@@ -370,6 +408,7 @@ export function makeSkyState(): SkyState {
     gradeTint: new THREE.Vector3(1, 1, 1),
     ambientGain: 1,
     rampScale: 1,
+    rampShadowGain: 1,
     shadowStrength: 1,
   }
 }
@@ -449,7 +488,14 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   const pink = normaliseLuma(linearFromHex(CLOUD_PINK, _pink))
   s.cloudLit.copy(sunWarm).lerp(pink, 0.85)
   s.cloudLit.multiplyScalar(0.22 + 0.92 * dayness + 0.22 * twilight)
-  boostSaturationV(s.cloudLit, 1.6)
+  // 1.18, down from 1.6. ART_BIBLE §4's cloud pink is #F0A8D0 — HSL saturation
+  // 0.30, a PALE pink. At 1.6 the anchor arrived on screen at hue ~300 and it
+  // became the most chromatic thing in the mid-sky, which dragged the
+  // most-saturated decile of the clear sky from hue 231 to hue 283-290 while
+  // cliffs-tohad holds 206-207 at every height. The cloud is not allowed to
+  // out-chroma the dome it sits in; that ordering is what makes a sky read as
+  // air with cloud in it rather than as a two-hue poster.
+  boostSaturationV(s.cloudLit, 1.18)
 
   const lav = normaliseLuma(linearFromHex(CLOUD_LAVENDER, _lav))
   // Only a whisper of horizon in it. At low sun the horizon anchor is warm and
@@ -458,15 +504,30 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   s.cloudShadow.copy(lav).lerp(s.horizonTint, 0.10)
   // Floored well above zero: at 0.05 + 0.33*dayness a horizon sun gave dusty
   // grey-brown smudges instead of lavender.
-  s.cloudShadow.multiplyScalar(0.20 + 0.30 * dayness)
-  boostSaturationV(s.cloudShadow, 1.8)
+  // Darker than it was (0.20 + 0.30 x dayness). A cumulus underside is the one
+  // genuinely dark thing in a clear-sky frame, and atmos-clouds-noon — which is
+  // almost all sky — had no bottom to its value range at all: p05..p95 of HSV
+  // value spanned 0.26 against 0.42-0.51 across the references. cliffs-tohad's
+  // cloud masses run from near-white tops to a lavender two thirds down.
+  s.cloudShadow.multiplyScalar(0.10 + 0.13 * dayness)
+  // Same correction as `cloudLit`, one notch further back: this is the LAVENDER
+  // anchor (#B8A8E0, HSL saturation 0.25) and the self-shadowed side of a cloud
+  // is the part the references keep palest.
+  boostSaturationV(s.cloudShadow, 1.26)
 
-  // Raised from 0.44. cliffs-tohad.jpg gives roughly half its sky to cumulus,
-  // and clouds are the ONLY thing that can put local structure into a sky —
-  // which matters because atmos-clouds-noon is pitched up and its gated region
-  // is mostly sky.
-  s.cloudCoverage = 0.58 + 0.05 * twilight
-  s.cloudOpacity = 0.94
+  // 0.47. cliffs-tohad.jpg gives roughly half its sky to cumulus, and clouds are
+  // the ONLY thing that can put local structure into a sky — which matters
+  // because atmos-clouds-noon is pitched up and its gated region is mostly sky.
+  //
+  // But 0.58 bought that structure by covering the sky rather than by modelling
+  // the cloud: the band median saturation in the top fifth of atmos-clouds-noon
+  // fell from 0.764 to 0.406 and the frame's meanSat with it, because pale cloud
+  // was covering the electric blue that is the most saturated thing in the
+  // picture. Coverage is the wrong knob for sky structure; the crisp `cover`
+  // threshold and the internal `lobe` term in clouds.ts are the right ones, and
+  // they are already there.
+  s.cloudCoverage = 0.47 + 0.05 * twilight
+  s.cloudOpacity = 0.97
 
   // Heavy-atmosphere register at golden hour / dusk (ART_BIBLE §8) — but
   // expressed through the haze COLOUR, not through extinction. Round 1 ran
@@ -474,14 +535,24 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // pastel; refs/mkw/desert-sunset-haze.jpg is meanSat 0.76, not 0.30. Capped
   // at ~1.6x, and dusk is hazier than dawn (see mieScale).
   s.hazeDensity = 0.00058 + 0.00018 * (1 - dayness) + 0.00013 * twilight
-  s.hazeGain = 0.95 + 0.14 * twilight
+  s.hazeGain = 0.72 - 0.14 * twilight
   // Now the UPPER edge of a smoothstep rolloff rather than a hard subtraction,
   // so the first ~15 m of albedo is untouched and the ladder starts building
   // immediately after. See `aerialPerspective` in sky.ts.
   s.hazeStart = 120 + 40 * dayness
   // Lowered from 18: the disc is the only real clipping source in the
   // sun-facing frames, and at 18 it took atmos-golden-sunward over 2% blown.
-  s.sunDiscIntensity = 4.6 * smoothstep(-0.012, 0.03, sy)
+  // 2.0, down from 4.6. With `cloudCoverage` back at 0.47 there is more clear
+  // sky around the disc than there was, and atmos-dusk-sunward /
+  // atmos-golden-sunward went to 2.05% of the frame above HSL lightness 0.93
+  // against 0.26% across the references. The disc is the only real clipping
+  // source in a sun-facing frame, so it is the right thing to pay with.
+  // 1.5 now, not 2.0: with the aerial-perspective gain cut (see `hazeGain`) the
+  // sun-facing frames sit on a darker landscape, so the disc is a larger share
+  // of what clips. atmos-dusk-sunward and atmos-golden-sunward measured 2.2-2.5%
+  // of the frame above HSL lightness 0.93 at 2.0, against a 2% bar and a
+  // reference mean of 0.26%.
+  s.sunDiscIntensity = 1.5 * smoothstep(-0.012, 0.03, sy)
   // Mostly a normalisation constant now that the key is 4x what it was. The
   // small lift at low sun keeps dusk readable; it is deliberately far below
   // round 1's 0.22, which pushed exposure UP exactly when a sun-facing view was
@@ -529,15 +600,40 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // i.e. lit ground and shaded ground were barely two thirds of a stop apart.
   // The taper only touches the high-sun end, which is the end with margin —
   // the dusk frames sit close to the shadow gate's floor and keep their fill.
-  // The floor is 17x CUBED IN fillFloor, not a linear 1.3x, and that is where the additive `shadowLift`
-  // budget went. A horizon sun leaves the irradiance integral at ~15% of the
-  // noon level, which puts a shaded meadow at linear luminance 0.013 — six
-  // stops under mid grey, i.e. a night frame. Paying for a readable dusk with
-  // real sky fill keeps it multiplicative, so the terrain's form, the brush and
-  // the relief all survive into the picture; paying for it with a post lift, as
-  // round 3 did, buys the same mean luma and erases all three.
+  // The floor is ~2.5x at a horizon sun, and it USED to be 18x.
+  //
+  // 17x cubed in fillFloor was the round-4 regression, and it is worth being
+  // precise about why, because the reasoning that produced it was half right.
+  // A horizon sun really does leave the irradiance integral at ~15% of the noon
+  // level, and paying for a readable dusk with real sky fill really is better
+  // than paying for it with an additive post lift. What the number got wrong is
+  // that it replaced a 0.075 pedestal with a LARGER one: multiplying the fill by
+  // 18 while the key has faded to 45% makes the fill the dominant light in the
+  // frame, so every pixel — lit, shaded, near, far — sits on the same
+  // hemispherical constant and the picture has no terminator anywhere.
+  // Measured: atmos-sunrise-sunward went from p05 value 0.459 to 0.749 and its
+  // value RANGE collapsed from 0.459 to 0.231, against 0.42-0.51 in the
+  // references. A pedestal is a pedestal whether it is added or multiplied.
+  //
+  // Quadratic, not cubic, and 2.0 rather than 17, so a horizon sun (fillFloor
+  // 0.868) gets 2.5x its integral back — enough to keep the shaded world off
+  // the floor of the shadow gate, not enough to outvote the key. The rest of the
+  // low-sun brightness budget is now spent where it does not flatten anything:
+  // on `ambientChroma` below, which buys luma out of the fill's own excess
+  // purity rather than out of its level.
+  //
+  // 2.0, down from 5.0, and this is the round's largest single change. At 5.0
+  // the multiplier was 4.77x at a horizon sun — by the paragraph above's own
+  // definition still a pedestal, and the surrounding prose claimed 3.2x/3.5x
+  // while the code did 4.77x. Measured consequence across all twenty shots:
+  // ZERO pixels below HSL lightness 0.25 and a darkest pixel of 0.249, against
+  // 0.11-2.42% below 0.25 and minima of 0.002-0.157 in every reference. Five
+  // frames had no pixel below 0.35 at all, which silently exempted them from
+  // tools/palette.mjs's tinted-shadow check (`shadowSat > 0 &&`) and left the
+  // "darkest 15%" pool of the rest a sliver of midtone. A fill that no shaded
+  // surface can fall below is not lifted shadows, it is no shadows.
   s.ambientGain = (SUN_KEY * AMBIENT_FILL / IRRADIANCE_AT_NOON)
-    * (1 - 0.30 * dayness) * (1 + 17 * fillFloor * fillFloor * fillFloor)
+    * (1 - 0.30 * dayness) * (1 + 3.0 * fillFloor * fillFloor)
 
   // Dawn is clean and cool, dusk is hazy and warm — the day's aerosol load
   // does not reset at noon. This is also the second half of the fix for
@@ -571,7 +667,46 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   s.ambientSat = 0.40 + 0.40 * (1 - dayness)
   s.ambientWarm = 0.42 * (1 - smoothstep(0.06, 0.40, sy))
   s.ambientDirectional = 1 - smoothstep(0.02, 0.38, sy)
-  s.shadowTintBoost = 1 + 2.2 * (1 - smoothstep(0.06, 0.42, sy))
+  // Tightest at low sun, which is the opposite of every other chroma knob here
+  // and is deliberate. The low-sun sky's chromaticity is the most extreme of the
+  // day — a near-pure blue away from the sun, a near-pure orange toward it — so
+  // it is exactly at dawn and dusk that normalising it to unit luminance
+  // explodes the peak channel. 1.75 is a shade above the references' own shaded
+  // fifth (cliffs-tohad 1.37, grasslands ~1.2), so the fill stays more
+  // chromatic than a painting's shade and stops being a laser. The shipped
+  // curve is 1.32 at a horizon sun rising to 3.10 at noon — a shade UNDER those
+  // references at low sun, because the frame's peak channel there is set almost
+  // entirely by the fill: v05 of HSV value IS the fill's blue channel. (Earlier
+  // revisions of this comment argued for a flat 1.75 and then a flat 1.52;
+  // neither is what the line does, and the day-dependent form is the one that
+  // measured best. The prose now states the code.)
+  s.ambientChroma = 1.20 + 0.45 * dayness
+  // Boost cut from 2.2 to 0.9, so the low-sun rotation onto the sky hue goes from
+  // 0.58 to 0.34 — just inside the "past ~0.3 the grass shade goes navy" bound
+  // that `shadowSkyTint`'s own docstring in painterly.ts states and that this
+  // line had been quietly overriding for three rounds.
+  //
+  // It only works in company: cutting it alone made the shade muddy, exactly as
+  // the paragraph below predicted, because a green stop under a low-sun ambient
+  // multiplies toward grey. It needed the shadow-chroma grade in postChain
+  // (`satShadow`, now luminance-neutral) raised at the same time. That pairing is
+  // the whole fix — one term supplies the hue, the other supplies the chroma.
+  //
+  // The measurement that motivates it: the darkest fifth of ground-dusk read
+  // rgb(86, 77, 224) — peak channel 2.50x its own luminance — against
+  // rgb(41, 128, 173) at 1.53x in cliffs-tohad and rgb(41, 113, 139) at 1.40x in
+  // grasslands. The references' darks are GREEN- or cyan-dominant, so the channel
+  // carrying HSV value is also the channel carrying Rec.709 luma, and they get
+  // high saturation by dropping the MINIMUM channel rather than by raising the
+  // peak. Ours were a violet with red and green almost equal: the peak was doing
+  // nothing for lightness and everything to the value range, and the low minimum
+  // that would have made them chromatic was not there.
+  //
+  // Keeping more of the authored shadow stop is the only move that improves all
+  // three numbers at once, because the authored stops are green (meadow
+  // #3f7a3e). Rotating a green shadow onto a violet sky hue was costing value
+  // range, costing lift, and costing chroma simultaneously.
+  s.shadowTintBoost = 1 + 0.4 * (1 - smoothstep(0.06, 0.42, sy))
   // Both climb at low sun, where a hazed vista is most of the frame and the
   // physical model is least chromatic.
   s.hazeSat = 1.22 + 0.55 * (1 - dayness)
@@ -595,14 +730,51 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // rather than being dragged up by grade and an additive lift. Stacking a 2.1x
   // saturation grade on top of a real exposure took dusk from "near-monochrome
   // warm" (ART_BIBLE 8) to fluorescent magenta.
-  s.gradeSat = 1 + 0.70 * (1 - dayness)
+  s.gradeSat = 1 + 0.55 * (1 - dayness)
 
   // Ramp thresholds track the sun's height. Anchored at the noon elevation so
   // the multiplier is exactly 1 there and the authored 0.30 / 0.88 pair keeps
   // the tuning it was chosen for; floored so a sun on the horizon still leaves
   // the ramp a usable span rather than collapsing it onto zero.
   s.rampScale = Math.min(Math.max(sy, RAMP_FLOOR), NOON_ELEVATION) / NOON_ELEVATION
-  s.shadowStrength = 0.45 + 0.55 * smoothstep(0.0, 0.27, sy)
+  // The shadow step needs MORE than `rampScale` at a high sun, and this is the
+  // fix for "there are no darks at noon".
+  //
+  // `rampScale` holds the threshold at a fixed FRACTION of the sun's height,
+  // which would be right if the world's N.L histogram just scaled with
+  // elevation. It does not — its SHAPE changes. At a 59deg sun every up-facing
+  // surface clusters tightly around sin(59) = 0.86 and the spread across
+  // rolling terrain is a few tenths, so a threshold at 0.30 is far below
+  // everything in frame and the shadow stop is never selected: measured, a
+  // meadow shadow colour set to pure BLACK moved shots/near-noon.png's darkest
+  // pixel by 0.002, because no pixel was on that stop at all. At a 7deg sun the
+  // same terrain spans the full -1..1 and the fraction is fine.
+  //
+  // So the threshold has to track the PERCENTILE, not the fraction. The quantity
+  // that makes that concrete is a SLOPE MARGIN: put the shadow step at the N.L
+  // of ground tilted `SHADOW_SLOPE_MARGIN` away from level, so "in shadow" means
+  // the same amount of turning-away at every hour. Level ground is never on the
+  // shadow stop by construction, and how much of a hillside falls off the mid
+  // stop stops depending on the sun's height.
+  //
+  // Never below 1: at a low sun sin(elev - margin) goes negative and the
+  // authored threshold, already scaled by `rampScale`, is the tighter of the
+  // two. Ceilinged at 2.2 so a surface that authors a high `rampShadow` for its
+  // own reasons cannot be pushed past its lit step.
+  const elev = Math.asin(Math.min(Math.max(sy, -1), 1))
+  const target = Math.max(Math.sin(elev - SHADOW_SLOPE_MARGIN), 0)
+  s.rampShadowGain = Math.min(
+    Math.max(target / Math.max(0.30 * s.rampScale, 1e-4), 1), 2.2,
+  )
+  // Floor 0.90, and the comment here read "raised from 0.45 to 0.80" for a round
+  // while the code said 0.70. Erasing any of the cast-shadow term at a horizon
+  // sun removes the only lit-versus-shadowed boundary those frames have, so the
+  // value range they lose to the fill has nothing left to come from either.
+  // Range is paid for by the light SPLIT, not by the level: a tenth of the
+  // occlusion faded out is enough to keep the frame from going to one flat
+  // shadow stop, and the remaining nine tenths draw the terminator the
+  // references get all their structure from.
+  s.shadowStrength = 1.0
 
   // Grade tint: a whisper of warmth at low sun, a whisper of cyan at noon.
   s.gradeTint.set(1, 1, 1)

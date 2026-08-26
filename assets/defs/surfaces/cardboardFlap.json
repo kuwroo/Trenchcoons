@@ -1,0 +1,22 @@
+{
+  "id": "cardboardFlap",
+  "version": 1,
+  "type": "surface",
+  "notes": "The inner face of the box flaps. Darker and less saturated than the outside so the open rim reads as a rim — the flaps are most of the kart's silhouette and they need a value break against the body, not just an outline.",
+  "material": {
+    "base": "#ab7a3f",
+    "shadow": "#71482a",
+    "lit": "#d9a866",
+    "top": "#e5bd82",
+    "topGain": 1.04,
+    "gradientBase": -0.4,
+    "gradientHeight": 0.8,
+    "gradientStrength": 0.3,
+    "brushScale": 0.42,
+    "brushStrength": 0.6,
+    "brushSaturation": 0.42,
+    "rimStrength": 0.6,
+    "saturationGain": 0.24,
+    "shadowSkyTint": 0.24
+  }
+}

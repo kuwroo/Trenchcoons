@@ -104,6 +104,38 @@ export function analyse(file) {
   const q = (p) => stds[Math.floor(stds.length * p)] ?? 0
   const flat = stds.filter((s) => s < 0.012).length / Math.max(stds.length, 1)
 
+  // ── edge density ───────────────────────────────────────────────────────
+  // Per-tile variance cannot tell a 40 px soft blob from a brush mark: a 48 px
+  // tile's standard deviation is maximised by soft lobes just as well as by
+  // paint, and round 5 went straight through that hole — medStd landed inside
+  // the reference band while the frames carried 4-7x fewer real edges than the
+  // references and read as airbrushed camouflage.
+  //
+  // What separates them is where the variation SITS. Painted detail is mostly
+  // the boundaries of discrete forms, so its gradient histogram has a heavy
+  // tail; a smooth noise field spreads the same variance thinly and has none.
+  // Measured over the same lower 60%, central differences on luma:
+  //
+  //   refs   >0.06: 7.0-16.1%   >0.12: 2.3-9.9%
+  //   round5 >0.06: 1.3-5.5%    >0.12: 0.27-2.1%
+  //
+  // Reported, NOT gated. It has not been through the "run it against refs/
+  // first" discipline as a threshold — the numbers above are one pass over five
+  // images — and CLAUDE.md is explicit that a gate needs both a floor and a
+  // ceiling before it can be trusted. This column exists so the next round can
+  // see the hole rather than fall through it.
+  let e06 = 0, e12 = 0, eN = 0
+  for (let y = y0 + 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const gx = lum[y * W + x + 1] - lum[y * W + x - 1]
+      const gy = lum[(y + 1) * W + x] - lum[(y - 1) * W + x]
+      const g = Math.sqrt(gx * gx + gy * gy)
+      eN++
+      if (g > 0.06) e06++
+      if (g > 0.12) e12++
+    }
+  }
+
   // Edge coherence: fraction of edge pixels that repeat at the same x on the
   // row above. NOT a staircase detector — that was the intent, but references
   // score HIGHER (0.58-0.65) than our output, because coherent edges are what
@@ -131,6 +163,9 @@ export function analyse(file) {
     coherence: +(med4 / Math.max(q(0.5), 1e-6)).toFixed(3),
     specklePct: +((speckle / Math.max(considered, 1)) * 100).toFixed(2),
     flatPct: +(flat * 100).toFixed(1),
+    // Fraction of lower-60% pixels carrying a real luma edge. Diagnostic only.
+    edge06Pct: +((e06 / Math.max(eN, 1)) * 100).toFixed(2),
+    edge12Pct: +((e12 / Math.max(eN, 1)) * 100).toFixed(2),
     stepRatio: total > 500 ? +(repeats / total).toFixed(3) : 0,
   }
 }
@@ -159,11 +194,14 @@ const row = (a) => [
   String(a.flatPct).padStart(8),
   String(a.coherence).padStart(10),
   String(a.specklePct).padStart(9),
+  String(a.edge06Pct).padStart(8),
+  String(a.edge12Pct).padStart(8),
 ].join(' ')
 
 console.log('file'.padEnd(34), 'medStd'.padStart(8), 'p10Std'.padStart(8),
-            'flat%'.padStart(8), 'coherence'.padStart(10), 'speckle%'.padStart(9))
-console.log('-'.repeat(76))
+            'flat%'.padStart(8), 'coherence'.padStart(10), 'speckle%'.padStart(9),
+            'edg.06%'.padStart(8), 'edg.12%'.padStart(8))
+console.log('-'.repeat(94))
 console.log('REFERENCES')
 const refs = REFS.map(analyse)
 for (const a of refs) console.log(row(a))
@@ -178,7 +216,11 @@ console.log('\nOUTPUT')
 const outs = shots.map(analyse)
 for (const a of outs) console.log(row(a))
 
+const refE06 = mean(refs.map((r) => r.edge06Pct))
+const refE12 = mean(refs.map((r) => r.edge12Pct))
+
 console.log(`\nreference mean: medStd ${refMedStd.toFixed(4)}, flat% ${refFlat.toFixed(1)}, coherence ${refCoh.toFixed(3)}, speckle% ${refSpeck.toFixed(2)}`)
+console.log(`reference edge density (DIAGNOSTIC, not gated): >0.06 ${refE06.toFixed(2)}%, >0.12 ${refE12.toFixed(2)}%`)
 console.log('VERDICT (per shot):')
 let failed = 0
 for (const a of outs) {

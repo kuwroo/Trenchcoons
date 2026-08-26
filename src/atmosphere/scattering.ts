@@ -10,7 +10,9 @@
 // saturated than refs/painterly/cliffs-tohad.jpg. ART_BIBLE §1: painterly, not
 // photoreal — hex values are anchors, not law.
 
-import { dot, float, luminance, mix, pow, saturate, smoothstep, vec3 } from 'three/tsl'
+import {
+  cos, dFdx, dFdy, dot, float, luminance, mix, pow, saturate, sin, smoothstep, vec3,
+} from 'three/tsl'
 import type { Node, UniformNode, Vector3 } from 'three/webgpu'
 import { MIE_G } from './tod'
 
@@ -81,11 +83,108 @@ export function setSaturation(c: Node<'vec3'>, amount: Node<'float'> | number): 
  * anything already inside it untouched.
  */
 export function clampChroma(c: Node<'vec3'>, maxRatio: Node<'float'> | number): Node<'vec3'> {
-  const l = luminance(c).max(1e-5)
-  const peak = c.r.max(c.g).max(c.b)
+  // `toVar()`, and it is load-bearing rather than tidy. TSL builds an expression
+  // TREE, not a DAG: every re-read of an argument re-emits the whole subtree that
+  // produced it. This operator reads `c` five times, and the thing it is called
+  // on is the ambient — itself a texture fetch, a hue rotation, a saturation
+  // boost and a directional gain. Written without a variable it took the sky
+  // irradiance subtree from one copy to thirty-odd inside the painterly material,
+  // the generated WGSL blew up, and the page never reached `__ready` at all (no
+  // error, just a compile that never finished). Nothing else in src/ needed this
+  // yet because nothing else re-read a node this deep this many times.
+  const v = vec3(c).toVar()
+  const l = luminance(v).max(1e-5).toVar()
+  const peak = v.r.max(v.g).max(v.b)
   const limit = typeof maxRatio === 'number' ? float(maxRatio) : maxRatio
   const k = saturate(limit.sub(1).mul(l).div(peak.sub(l).max(1e-5)))
-  return vec3(mix(vec3(l, l, l), c, k))
+  return vec3(mix(vec3(l, l, l), v, k))
+}
+
+/**
+ * Standard deviation of one `mx_noise_float` tap. Measured, not nominal: the
+ * nominal range is [-1, 1] and the actual spread is a sixth of that.
+ */
+export const MARK_SIGMA = 0.17
+
+/**
+ * Push a noise tap through a real threshold, so it comes out as a flat-topped
+ * mark with a defined boundary instead of a soft lobe.
+ *
+ * Shared by the surface brush (painterly.ts) and the sky dome's own brush
+ * (sky.ts), because they had the same bug: a `smoothstep` whose half-width was
+ * two to three times the noise's sigma is not a step at all, it is a gain of
+ * about 4x, and 99% of samples never reach either flat end. That is why the
+ * frames measured 4-7x fewer luma edges than refs/ while sitting inside the
+ * per-tile variance band — a 48 px tile's standard deviation is maximised by
+ * soft 40 px blobs just as happily as by paint.
+ *
+ * `half` is in units of sigma, and 0.13 is the second attempt at it. 0.30 was
+ * still too wide to read as paint: a mark whose period is 40 px and whose
+ * transition is 6 px of that is a soft-edged blob, and a scanline through the
+ * near ground came back as a chain of 8 px ramps with a peak gradient of 0.10
+ * per 2 px against 0.16 in refs/genshin/grasslands.jpg. At 0.13 roughly nine
+ * tenths of the field saturates and the boundary is as narrow as the screen
+ * gradient below will let it be. Gouache lays down a patch of one value and
+ * stops; this is the cheapest expression of that.
+ *
+ * The transition is widened by the field's OWN projected screen gradient, never
+ * by a constant: a crisp threshold on a world-locked function is exactly what
+ * turns into stipple once the function runs faster than the pixel grid, and one
+ * pixel of width is the cheapest correct antialias. Taking the derivative of the
+ * noise VALUE is safe where taking it of `positionWorld` is not (see
+ * `reliefField` in painterly.ts) — a quad straddling two triangles returns a
+ * large derivative rather than a meaningless one, and erring wide only makes a
+ * mark soft, while erring narrow makes it alias.
+ *
+ * The CEILING is relative to the authored width now, and that is a bug fix.
+ * At a flat `1.1 * MARK_SIGMA` the guard sat eight times above the authored
+ * 0.13, so the derivative term — which the LOD ladder holds at ~0.2-0.5 sigma on
+ * EVERY pixel of every frame, not just at silhouettes, because the ladder
+ * deliberately keeps one octave period at STROKE_PX — was free to run the full
+ * way up. Measured consequence: marks in the near field had a 10-90% rise of
+ * 6 px over an 8 px extrema spacing, i.e. three quarters of the half-period was
+ * transition and only a quarter was flat. That is a soft lobe with a slightly
+ * crisper edge, not the flat-topped mark this function's name promises. Capping
+ * the widening at 3x the authored width keeps the silhouette guard (a quad
+ * straddling a depth discontinuity still gets three times the smoothing) while
+ * leaving the interior of every mark actually flat.
+ */
+export function flatMark(x: Node<'float'>, half = 0.13): Node<'float'> {
+  const w = float(half * MARK_SIGMA)
+    .max(dFdx(x).abs().max(dFdy(x).abs()).mul(0.9))
+    .min(Math.min(3.0 * half, 1.1) * MARK_SIGMA)
+  return smoothstep(w.negate(), w, x).mul(2).sub(1)
+}
+
+/**
+ * Rotate a linear-RGB colour's hue by `angle` radians, at (approximately)
+ * constant luminance.
+ *
+ * The YIQ rotation matrix, folded into three dot products. Used by the brush
+ * overlay: ART_BIBLE's references vary the HUE of adjacent marks, not just
+ * their value — circular hue std in the near field of genshin/grasslands is
+ * 41deg and of painterly/cliffs-tohad 82deg, against 14deg in our output before
+ * this existed. A value-and-saturation-only brush cannot get there at any
+ * amplitude, because it only ever produces one colour at several brightnesses.
+ *
+ * Cheap on purpose — nine multiply-adds, no trig beyond the one sin/cos pair,
+ * and no conversion in and out of a polar space. It is not perfectly
+ * luminance-preserving for extreme chroma, which is why the caller keeps the
+ * angle small.
+ */
+export function rotateHue(c: Node<'vec3'>, angle: Node<'float'>): Node<'vec3'> {
+  const u = cos(angle)
+  const w = sin(angle)
+  const r = c.r.mul(float(0.299).add(u.mul(0.701)).add(w.mul(0.168)))
+    .add(c.g.mul(float(0.587).sub(u.mul(0.587)).add(w.mul(0.330))))
+    .add(c.b.mul(float(0.114).sub(u.mul(0.114)).sub(w.mul(0.497))))
+  const g = c.r.mul(float(0.299).sub(u.mul(0.299)).sub(w.mul(0.328)))
+    .add(c.g.mul(float(0.587).add(u.mul(0.413)).add(w.mul(0.035))))
+    .add(c.b.mul(float(0.114).sub(u.mul(0.114)).add(w.mul(0.292))))
+  const b = c.r.mul(float(0.299).sub(u.mul(0.300)).add(w.mul(1.250)))
+    .add(c.g.mul(float(0.587).sub(u.mul(0.588)).sub(w.mul(1.050))))
+    .add(c.b.mul(float(0.114).add(u.mul(0.886)).sub(w.mul(0.203))))
+  return vec3(r, g, b).max(0)
 }
 
 /**
