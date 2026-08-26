@@ -228,6 +228,14 @@ export interface SkyState {
    */
   ambientWarm: number
   /**
+   * How directional the sky ambient is made, 0..1. See `skyIrradiance` in
+   * sky.ts: the 32-sample hemisphere integral returns an essentially isotropic
+   * result at low sun, and an isotropic ambient cannot shade anything, so every
+   * dawn and dusk frame came back formless. 0 at noon, where the integral is
+   * genuinely near-isotropic and correct.
+   */
+  ambientDirectional: number
+  /**
    * Multiplier on each material's `shadowSkyTint`.
    *
    * The authored shadow hue and the sky hue agree at noon — both cool — so the
@@ -283,6 +291,23 @@ export interface SkyState {
    * noon the multiplier is 1 and the authored tuning is bit-for-bit unchanged.
    */
   rampScale: number
+  /**
+   * How much of the cast-shadow term reaches the ramp, 0..1.
+   *
+   * With the sun ON the horizon every shadow in the world is hundreds of metres
+   * long, so the cascade returns "occluded" for essentially every pixel and the
+   * 3-stop ramp collapses onto its shadow stop across the whole frame — one
+   * violet slab, measured at a 1% value spread per 48px tile in
+   * atmos-sunrise-sunward and greybox-sunrise. Physically that is correct and
+   * pictorially it is nothing: at that elevation there is no lit-versus-shadowed
+   * distinction left for a shadow map to draw, only terrain form, and holding
+   * the occlusion at full strength hides the form too.
+   *
+   * So the occluder fades out over the last couple of degrees. Above ~6deg —
+   * which includes the golden-hour and dusk shots, whose long raking shadows are
+   * the point of them — it is exactly 1 and nothing changes.
+   */
+  shadowStrength: number
 }
 
 const _sunT = new THREE.Vector3()
@@ -333,6 +358,7 @@ export function makeSkyState(): SkyState {
     mieScale: 1,
     ambientSat: 0.55,
     ambientWarm: 0,
+    ambientDirectional: 0,
     shadowTintBoost: 1,
     hazeSat: 1.75,
     skySaturation: 5.2,
@@ -344,6 +370,7 @@ export function makeSkyState(): SkyState {
     gradeTint: new THREE.Vector3(1, 1, 1),
     ambientGain: 1,
     rampScale: 1,
+    shadowStrength: 1,
   }
 }
 
@@ -377,7 +404,11 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // Direct sun. The lower edge is wide enough that a sun ON the horizon still
   // delivers ~45% of the key — round 1 faded it to 0.16 there, which is why
   // greybox-dusk had no lit side on anything.
-  const lux = SUN_KEY * smoothstep(-0.16, 0.15, sy)
+  // The lower edge reaches further below the horizon than it did. At sy = 0 the
+  // old window delivered 48% of the key, which combined with a fully-occluded
+  // world (see `shadowStrength`) left the sunrise shots with no lit side on
+  // anything and roughly half the local contrast of every other hour.
+  const lux = SUN_KEY * smoothstep(-0.30, 0.14, sy)
   s.sunColor.copy(_sunT).multiplyScalar(1 / peak).multiplyScalar(lux)
 
   // Hue anchors. Pale lavender horizon by day, the sun's own warmth at low sun; the
@@ -430,7 +461,11 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   s.cloudShadow.multiplyScalar(0.20 + 0.30 * dayness)
   boostSaturationV(s.cloudShadow, 1.8)
 
-  s.cloudCoverage = 0.44 + 0.05 * twilight
+  // Raised from 0.44. cliffs-tohad.jpg gives roughly half its sky to cumulus,
+  // and clouds are the ONLY thing that can put local structure into a sky —
+  // which matters because atmos-clouds-noon is pitched up and its gated region
+  // is mostly sky.
+  s.cloudCoverage = 0.58 + 0.05 * twilight
   s.cloudOpacity = 0.94
 
   // Heavy-atmosphere register at golden hour / dusk (ART_BIBLE §8) — but
@@ -456,7 +491,21 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // atmos-golden-sunward because the disc was at intensity 18 underneath it.
   // Without any lift the low-sun frames sit at Rec.709 shadow luma 0.25 against
   // a 0.32 floor even for the hazy-desert reference — genuinely crushed.
-  s.exposure = BASE_EXPOSURE * (1 + 0.08 * (1 - dayness))
+  // The low-sun boost is 0.44 linear plus 0.32 cubic, not a flat 0.08.
+  //
+  // tools/structure.mjs measures ABSOLUTE luma standard deviation, and sRGB is
+  // compressive, so the same relative brush contrast on a frame sitting at
+  // display 0.32 produces roughly half the measured detail of one sitting at
+  // 0.55 — every landscape reference sits at the latter. The low-sun frames were
+  // not under-textured relative to the daylight ones so much as under-EXPOSED,
+  // and the honest fix for an under-exposed frame is exposure.
+  // Two terms, and the cubic one is the point: the frames that are genuinely
+  // under-exposed are the ones with the sun ON the horizon, not golden hour.
+  // A single linear term big enough to lift a 0deg sun also lifted the 7deg
+  // frames past the structure gate's ceiling, because a brighter frame carries
+  // more ABSOLUTE local contrast for the same relative brushwork.
+  const night = 1 - dayness
+  s.exposure = BASE_EXPOSURE * (1 + 0.44 * night + 0.32 * night * night * night)
   // Sky fill, ~2 stops under the key. Held FLAT across the day: raising it at
   // low sun (round 1 went to 1.81 as the key bottomed out) is what removed the
   // lit side from every dusk frame. Only true night gets a lift, so the world
@@ -466,7 +515,13 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // gone too the shaded world falls to Rec.709 luma ~0.26 against a 0.32 floor
   // set by the hazy-desert reference. Scaling the LUT keeps the lift
   // multiplicative and sky-hued, which an additive post lift does not.
-  const fillFloor = 1 - smoothstep(-0.10, 0.24, sy)
+  // The window reaches to 0.34, not 0.24. Golden hour and dusk sit at 7-22 deg,
+  // i.e. INSIDE the range where the irradiance integral has already collapsed,
+  // and the narrower window gave them almost none of the floor: ground-dusk came
+  // back at Rec.709 shadow luma 0.217 against the 0.299 the reference cohort
+  // sets, which is "crushed", which is the one thing ART_BIBLE 2 says the look
+  // cannot survive.
+  const fillFloor = 1 - smoothstep(-0.10, 0.34, sy)
   // Tapered by dayness, not flat. A clear noon sky really is a smaller fraction
   // of the key than a low one, and the flat version is what left the noon
   // frames with no bottom to their value range: their darkest fifth measured
@@ -474,8 +529,15 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // i.e. lit ground and shaded ground were barely two thirds of a stop apart.
   // The taper only touches the high-sun end, which is the end with margin —
   // the dusk frames sit close to the shadow gate's floor and keep their fill.
+  // The floor is 17x CUBED IN fillFloor, not a linear 1.3x, and that is where the additive `shadowLift`
+  // budget went. A horizon sun leaves the irradiance integral at ~15% of the
+  // noon level, which puts a shaded meadow at linear luminance 0.013 — six
+  // stops under mid grey, i.e. a night frame. Paying for a readable dusk with
+  // real sky fill keeps it multiplicative, so the terrain's form, the brush and
+  // the relief all survive into the picture; paying for it with a post lift, as
+  // round 3 did, buys the same mean luma and erases all three.
   s.ambientGain = (SUN_KEY * AMBIENT_FILL / IRRADIANCE_AT_NOON)
-    * (1 - 0.30 * dayness) * (1 + 1.30 * fillFloor)
+    * (1 - 0.30 * dayness) * (1 + 17 * fillFloor * fillFloor * fillFloor)
 
   // Dawn is clean and cool, dusk is hazy and warm — the day's aerosol load
   // does not reset at noon. This is also the second half of the fix for
@@ -508,6 +570,7 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // ambient through at full strength is how you get that rather than mud.
   s.ambientSat = 0.40 + 0.40 * (1 - dayness)
   s.ambientWarm = 0.42 * (1 - smoothstep(0.06, 0.40, sy))
+  s.ambientDirectional = 1 - smoothstep(0.02, 0.38, sy)
   s.shadowTintBoost = 1 + 2.2 * (1 - smoothstep(0.06, 0.42, sy))
   // Both climb at low sun, where a hazed vista is most of the frame and the
   // physical model is least chromatic.
@@ -528,13 +591,18 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // larger nominal amount costs far less hue rotation and far less lightness in
   // the pixels tools/shadow.mjs measures, so the two gates are no longer pulling
   // against each other as hard as they were.
-  s.gradeSat = 1 + 1.15 * (1 - dayness)
+  // Pulled back from 1.15 now that the low-sun frames are actually EXPOSED
+  // rather than being dragged up by grade and an additive lift. Stacking a 2.1x
+  // saturation grade on top of a real exposure took dusk from "near-monochrome
+  // warm" (ART_BIBLE 8) to fluorescent magenta.
+  s.gradeSat = 1 + 0.70 * (1 - dayness)
 
   // Ramp thresholds track the sun's height. Anchored at the noon elevation so
   // the multiplier is exactly 1 there and the authored 0.30 / 0.88 pair keeps
   // the tuning it was chosen for; floored so a sun on the horizon still leaves
   // the ramp a usable span rather than collapsing it onto zero.
   s.rampScale = Math.min(Math.max(sy, RAMP_FLOOR), NOON_ELEVATION) / NOON_ELEVATION
+  s.shadowStrength = 0.45 + 0.55 * smoothstep(0.0, 0.27, sy)
 
   // Grade tint: a whisper of warmth at low sun, a whisper of cyan at noon.
   s.gradeTint.set(1, 1, 1)

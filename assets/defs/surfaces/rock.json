@@ -2,19 +2,20 @@
   "id": "rock",
   "version": 1,
   "type": "surface",
-  "notes": "ART_BIBLE 4: rock lit is a light blue, rock shadow unmistakably blue.",
+  "notes": "ART_BIBLE 4: rock lit is a light blue, rock shadow unmistakably blue. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
   "material": {
     "base": "#7e9fc4",
-    "shadow": "#52719e",
-    "lit": "#b9d9f0",
+    "shadow": "#6f86a8",
+    "lit": "#9ed3ff",
     "top": "#cfe8ff",
     "topGain": 1.1,
-    "gradientHeight": 7,
-    "gradientStrength": 0.4,
+    "gradientHeight": 2.0,
+    "gradientStrength": 0.45,
     "rampSoftness": 0.1,
     "brushScale": 2.6,
     "brushStrength": 0.55,
     "saturationGain": 0.26,
-    "rimStrength": 0.5
+    "rimStrength": 0.5,
+    "gradientBase": -1.0
   }
 }

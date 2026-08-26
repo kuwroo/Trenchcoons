@@ -83,6 +83,11 @@ export function analyse(file) {
   }
 }
 
+// Only run the CLI when invoked directly. These modules are imported by
+// tools/regress.mjs, and unguarded top-level output would fire on import.
+const IS_MAIN = import.meta.url === `file://${process.argv[1]}`
+if (IS_MAIN) {
+
 const REFS = [
   'refs/painterly/cliffs-tohad.jpg',
   'refs/capycastaway/water-lagoon.webp',
@@ -142,4 +147,6 @@ for (const a of outStats) {
   if (a.shadowSat > 0 && a.shadowSat < 0.25) problems.push(`grey shadows (shadowSat ${a.shadowSat}, ART_BIBLE requires tinted)`)
   if (a.satByLum[3] < a.satByLum[1]) problems.push('saturation FALLS with light (ART_BIBLE violation)')
   console.log('  ' + a.file.padEnd(30) + (problems.length ? 'FAIL  ' + problems.join('; ') : 'ok'))
+}
+
 }

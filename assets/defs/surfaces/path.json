@@ -6,7 +6,7 @@
   "material": {
     "base": "#bfa8e8",
     "shadow": "#8f7fc8",
-    "lit": "#e0cfff",
+    "lit": "#cdb0ff",
     "top": "#e8d8ff",
     "topGain": 1.05,
     "brushScale": 4,

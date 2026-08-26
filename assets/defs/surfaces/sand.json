@@ -2,7 +2,7 @@
   "id": "sand",
   "version": 1,
   "type": "surface",
-  "notes": "Capy Castaway sand is near-yellow; the shadow goes mauve, not grey.",
+  "notes": "Capy Castaway sand is near-yellow; the shadow goes mauve, not grey. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
   "material": {
     "base": "#e4d47a",
     "shadow": "#c98ba0",
@@ -12,6 +12,9 @@
     "brushScale": 6.5,
     "brushStrength": 0.45,
     "saturationGain": 0.24,
-    "rimStrength": 0.22
+    "rimStrength": 0.22,
+    "gradientBase": -3.0,
+    "gradientHeight": 6.0,
+    "gradientStrength": 0.2
   }
 }

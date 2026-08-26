@@ -135,6 +135,11 @@ export function analyse(file) {
   }
 }
 
+// Only run the CLI when invoked directly. These modules are imported by
+// tools/regress.mjs, and unguarded top-level output would fire on import.
+const IS_MAIN = import.meta.url === `file://${process.argv[1]}`
+if (IS_MAIN) {
+
 const REFS = [
   'refs/painterly/cliffs-tohad.jpg',
   'refs/capycastaway/water-lagoon.webp',
@@ -201,3 +206,5 @@ for (const a of outs) {
 }
 console.log(failed ? `\n${failed} shot(s) failing structure gate` : '\nall shots pass structure gate')
 process.exit(failed ? 1 : 0)
+
+}

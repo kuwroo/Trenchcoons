@@ -142,6 +142,14 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   const bush = mat('bush')
   const bark = mat('bark')
   const sand = mat('sand')
+  // Mountains had no material of their own at all — the distant ridge was
+  // drawn with the same `rock` def as the pebbles at the player's feet, so a
+  // 380 m peak got a preset authored for a 3 m boulder and read as a flat
+  // untextured cone. ART_BIBLE 4 wants exposed rock reading DARK against a
+  // pale summit; `mountain` authors that, with a tall vertical gradient so the
+  // cap catches the light and the base sinks into the haze.
+  const mountain = mat('mountain')
+  const tuft = mat('scrub')
 
   // ── ground ────────────────────────────────────────────────────────────────
   const groundGeo = new THREE.PlaneGeometry(
@@ -177,7 +185,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   // Anything scattered below the waterline would float or drown; the lagoon
   // has to be a hole in every scatter set, not just in the heightfield.
   const dry = (x: number, z: number): boolean => heightAt(x, z) > waterLevel + 2
-  for (let i = 0; i < 420; i++) {
+  for (let i = 0; i < 620; i++) {
     const a = trees.range(0, Math.PI * 2)
     const r = 12 + Math.sqrt(trees.float()) * 1400
     const x = Math.cos(a) * r
@@ -206,7 +214,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   const bushes = new InstanceSet()
   const blooms = new InstanceSet()
   const scatter = rng.fork('scatter')
-  for (let i = 0; i < 320; i++) {
+  for (let i = 0; i < 520; i++) {
     const a = scatter.range(0, Math.PI * 2)
     const r = 8 + Math.sqrt(scatter.float()) * 1500
     const x = Math.cos(a) * r
@@ -219,7 +227,7 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
       scatter.range(-0.28, 0.28), scatter.range(0, 6.28), scatter.range(-0.28, 0.28),
     )
   }
-  for (let i = 0; i < 620; i++) {
+  for (let i = 0; i < 440; i++) {
     const a = scatter.range(0, Math.PI * 2)
     const r = 6 + Math.sqrt(scatter.float()) * 1100
     const x = Math.cos(a) * r
@@ -251,6 +259,59 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     }
   }
 
+  // ── scrub tufts: the small-form layer every reference has and we did not ───
+  //
+  // refs/painterly/desert-hazy.jpeg is the most instructive shot on the board
+  // for this: its SAND is almost perfectly smooth, and it still measures the
+  // highest local detail of any reference (medStd 0.0799, zero dead-flat tiles).
+  // All of that comes from small dark forms — scrub, sticks, rock shards —
+  // scattered densely through the near and middle distance. cliffs-tohad does
+  // the same with hedges and flower clumps. Surface brushwork alone cannot
+  // substitute for it, and it has one property no shading trick has: a
+  // silhouette reads at EVERY hour, so it holds a frame together at a horizon
+  // sun exactly as well as at noon.
+  //
+  // Small, dense, and biased toward the camera-visible band rather than spread
+  // evenly to the horizon, so the near field gets real texture without turning
+  // the vista into soup.
+  const tufts = new InstanceSet()
+  const tuftRng = rng.fork('tufts')
+  for (let i = 0; i < 1200; i++) {
+    const a = tuftRng.range(0, Math.PI * 2)
+    // Two overlapping bands: a dense inner ring and a thinner reach outward.
+    const inner = tuftRng.float() < 0.62
+    const r = inner
+      ? 6 + Math.sqrt(tuftRng.float()) * 620
+      : 300 + Math.sqrt(tuftRng.float()) * 1700
+    const x = Math.cos(a) * r
+    const z = Math.sin(a) * r
+    if (!dry(x, z)) continue
+    const s = tuftRng.range(1.1, 3.4)
+    tufts.push(
+      p.set(x, heightAt(x, z) - s * 0.5, z),
+      sc.set(s * tuftRng.range(0.85, 1.3), s * tuftRng.range(0.75, 1.15), s * tuftRng.range(0.85, 1.3)),
+      0, tuftRng.range(0, 6.28), 0,
+    )
+  }
+  // Offset copy of the ground camera's neighbourhood: the shot list puts two
+  // cameras at (280, ., 760) and one at (100, ., -560), and a scatter centred on
+  // the world origin leaves both of them standing in a thin patch.
+  for (const [cx, cz] of [[280, 760], [100, -560]] as const) {
+    for (let i = 0; i < 1050; i++) {
+      const a = tuftRng.range(0, Math.PI * 2)
+      const r = 4 + Math.sqrt(tuftRng.float()) * 520
+      const x = cx + Math.cos(a) * r
+      const z = cz + Math.sin(a) * r
+      if (!dry(x, z)) continue
+      const s = tuftRng.range(1.0, 3.0)
+      tufts.push(
+        p.set(x, heightAt(x, z) - s * 0.5, z),
+        sc.set(s * tuftRng.range(0.85, 1.3), s * tuftRng.range(0.75, 1.15), s * tuftRng.range(0.85, 1.3)),
+        0, tuftRng.range(0, 6.28), 0,
+      )
+    }
+  }
+
   // ── a cliff mass, for the cream/lavender half of the palette ───────────────
   const cliffSet = new InstanceSet()
   const cliffs = rng.fork('cliffs')
@@ -270,9 +331,9 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
   // ── distant ridge: the aerial-perspective test target ──────────────────────
   const ridgeSet = new InstanceSet()
   const ridge = rng.fork('ridge')
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 130; i++) {
     const a = ridge.range(0, Math.PI * 2)
-    const r = ridge.range(2500, 3800)
+    const r = ridge.range(2400, 3800)
     const h = ridge.range(160, 380)
     const w = h * ridge.range(1.0, 2.0)
     const x = Math.cos(a) * r
@@ -281,6 +342,22 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
       p.set(x, heightAt(x, z) + h * 0.3, z),
       sc.set(w, h, w * ridge.range(0.7, 1.4)), 0, ridge.range(0, 6.28), 0,
     )
+    // Shoulders. A single cone is a triangle; three overlapping cones of
+    // different heights read as a massif, which is what gives the Genshin and
+    // desert references a broken skyline instead of a row of pyramids.
+    const spurs = ridge.int(2, 3)
+    for (let k = 0; k < spurs; k++) {
+      const sa = ridge.range(0, 6.28)
+      const sd = w * ridge.range(0.4, 0.85)
+      const sh = h * ridge.range(0.42, 0.78)
+      const sw = sh * ridge.range(0.9, 1.7)
+      const sx = x + Math.cos(sa) * sd
+      const sz = z + Math.sin(sa) * sd
+      ridgeSet.push(
+        p.set(sx, heightAt(sx, sz) + sh * 0.3, sz),
+        sc.set(sw, sh, sw * ridge.range(0.7, 1.4)), 0, ridge.range(0, 6.28), 0,
+      )
+    }
   }
 
   for (const m of [
@@ -290,7 +367,8 @@ export function buildGreybox(atmosphere: Atmosphere, rng: Rng): Greybox {
     bushes.bake(bushGeo, bush, 'bushes'),
     blooms.bake(bushGeo, flowers, 'flowers'),
     cliffSet.bake(cliffGeo, cliff, 'cliffs'),
-    ridgeSet.bake(ridgeGeo, rock, 'ridge'),
+    ridgeSet.bake(ridgeGeo, mountain, 'ridge'),
+    tufts.bake(bushGeo, tuft, 'tufts'),
   ]) if (m) group.add(m)
 
   // ── lagoon: turquoise water over a cream shore ─────────────────────────────

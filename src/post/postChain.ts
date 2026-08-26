@@ -46,6 +46,13 @@ export interface PostSettings {
    * emphatic that they are not. cliffs-tohad.jpg binned by luminance reads
    * [0.765 0.679 0.700 0.858 0.767] — a U, high at both ends. Confined to the
    * bottom bin so the rise from midtone to highlight is untouched.
+   *
+   * Raised to 0.40 once the low-sun frames were properly exposed rather than
+   * pedestalled by `shadowLift`: with the additive lift cut from 0.075 to 0.034
+   * the darks lost the sky hue that lift was injecting, and tools/palette.mjs
+   * measured shadow saturation down at 0.14-0.24 against the 0.25 floor.
+   * Recovering it with a saturation grade rather than an additive tint keeps the
+   * darks chromatic without putting a constant back under the picture.
    */
   satShadow: number
   /** Shadows lifted toward the sky hue. Never grey. */
@@ -69,16 +76,26 @@ export const POST_DEFAULTS: PostSettings = {
   // of its own; now that the key runs ~2 stops over the fill, a toe on top of
   // it just crushes the shadow stop the ramp worked to author.
   toneGamma: 1.44,
-  satBase: 1.58,
+  satBase: 1.78,
   satHighlight: 0.45,
-  satShadow: 0.26,
-  // A whisper. The lift is additive in linear light, and `horizonTint` is
-  // normalised to luminance 1, so 0.19 injected ~0.24 of blue into every dark
-  // pixel — it flattened the value range to 0.19 and desaturated the shadow it
-  // was supposed to colour. The shadow's HUE now comes from the sky irradiance
-  // inside the material (`shadowSkyTint`), which is the right place for it;
-  // this is only the last few percent of "never crushed".
-  shadowLift: 0.075,
+  satShadow: 0.40,
+  // A whisper, and 0.075 was not one; 0.034 is.
+  //
+  // The lift is additive IN LINEAR LIGHT, and the whole point of low-sun frames
+  // is that they are dark in linear light. Measured on atmos-sunrise-sunward,
+  // the foreground rendered at linear luminance 0.013 and this term added
+  // 0.071 on top — a constant 5.5x the size of the picture underneath it. Every
+  // shading cue in the frame, the terrain's own form included, arrived as 15% of
+  // a pixel that was 85% pedestal, which is exactly the "statistically perfect,
+  // visually broken" failure tools/structure.mjs exists to catch: the shot
+  // measured shadowLuma 0.32 and passed the shadow gate while carrying a 1%
+  // value spread across a 48px tile.
+  //
+  // The fix is not to lift harder, it is to light the world. The dawn ambient is
+  // now directional (see `ambientDirectional` in tod.ts) and the low-sun fill
+  // has a real floor, so "never crushed" is paid for multiplicatively, by light
+  // that shades, instead of additively by a constant that cannot.
+  shadowLift: 0.034,
   chromaStrength: 0.27,
   chromaScale: 0.45,
   vignette: 0.2,

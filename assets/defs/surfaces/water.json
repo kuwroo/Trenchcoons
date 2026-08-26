@@ -2,11 +2,11 @@
   "id": "water",
   "version": 1,
   "type": "surface",
-  "notes": "Capy Castaway lagoon placeholder until M7. No specular here.",
+  "notes": "Capy Castaway lagoon placeholder until M7. No specular here. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
   "material": {
     "base": "#2fbfc4",
     "shadow": "#1d7fa8",
-    "lit": "#5fe8d4",
+    "lit": "#2dffe0",
     "top": "#7ff5e0",
     "topGain": 1.04,
     "rampSoftness": 0.24,
@@ -14,6 +14,9 @@
     "brushScale": 11,
     "brushStrength": 0.35,
     "saturationGain": 0.3,
-    "rimStrength": 0.3
+    "rimStrength": 0.3,
+    "gradientBase": -2.5,
+    "gradientHeight": 5.0,
+    "gradientStrength": 0.15
   }
 }

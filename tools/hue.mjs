@@ -72,6 +72,11 @@ export function analyse(file) {
   }
 }
 
+// Only run the CLI when invoked directly. These modules are imported by
+// tools/regress.mjs, and unguarded top-level output would fire on import.
+const IS_MAIN = import.meta.url === `file://${process.argv[1]}`
+if (IS_MAIN) {
+
 // Snow is legitimately monochrome — refs/snow scores 1 hue family and entropy
 // 1.84. Including it in the floor cohort would licence a periwinkle wash
 // everywhere; gating on it would fail the reference itself. So it sets the
@@ -138,3 +143,5 @@ for (const a of outs) {
 }
 console.log(failed ? `\n${failed} shot(s) failing hue gate` : '\nall shots pass hue gate')
 process.exit(failed ? 1 : 0)
+
+}

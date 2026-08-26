@@ -72,6 +72,11 @@ export function analyse(file) {
   }
 }
 
+// Only run the CLI when invoked directly. These modules are imported by
+// tools/regress.mjs, and unguarded top-level output would fire on import.
+const IS_MAIN = import.meta.url === `file://${process.argv[1]}`
+if (IS_MAIN) {
+
 // Cohorts matter. The raccoon close-up is a character portrait with a genuinely
 // dark background (shadowLuma 0.154); including it in a landscape cohort drags
 // the floor down far enough to make the gate toothless. Judge landscapes
@@ -139,3 +144,5 @@ for (const a of outs) {
 }
 console.log(failed ? `\n${failed} shot(s) failing shadow gate` : '\nall shots pass shadow gate')
 process.exit(failed ? 1 : 0)
+
+}

@@ -1,0 +1,24 @@
+{
+  "id": "scrub",
+  "version": 1,
+  "type": "surface",
+  "notes": "Ground-cover tufts. Deliberately LOW contrast against the meadow it sits in: the point of this layer is silhouette density, not value punch, and the first version reused grassMound (lit #bce828) which lit up as bright yellow confetti across every vista at raking sun. refs/painterly/desert-hazy.jpeg is the model \u2014 its scrub is a shade or two DARKER than the sand, never brighter. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
+  "material": {
+    "base": "#3d7834",
+    "shadow": "#3a6b4a",
+    "lit": "#6aa63a",
+    "top": "#7cb843",
+    "topGain": 1.05,
+    "gradientHeight": 2.0,
+    "gradientStrength": 0.35,
+    "rampSoftness": 0.3,
+    "brushScale": 1.3,
+    "brushStrength": 0.7,
+    "detailStrength": 0.2,
+    "saturationGain": 0.22,
+    "rimStrength": 0.22,
+    "rimPower": 2.6,
+    "ambient": 1.0,
+    "gradientBase": -1.0
+  }
+}

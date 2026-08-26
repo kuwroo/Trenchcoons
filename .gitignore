@@ -10,3 +10,4 @@ shots/
 .atlas/
 *.tmp
 .DS_Store
+shots/.best.json

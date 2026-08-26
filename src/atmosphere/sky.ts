@@ -18,7 +18,7 @@
 import * as THREE from 'three/webgpu'
 import {
   cameraPosition, dot, equirectDirection, equirectUV, float, luminance, mix, positionLocal,
-  smoothstep, texture, uniform, uv, vec3, vec4,
+  mx_noise_float, smoothstep, texture, uniform, uv, vec3, vec4,
 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
 import { cloudLayer } from './clouds'
@@ -35,6 +35,10 @@ const IRR_W = 48
 const IRR_H = 24
 const DOME_RADIUS = 11_000
 const IRR_SAMPLES = 32
+/** How hard the surface's stroke field modulates the haze it is seen through. */
+const HAZE_BRUSH = 0.38
+/** Amplitude of the direction-locked brush on the sky dome. */
+const SKY_BRUSH = 0.44
 
 /** Deterministic Fibonacci sphere — no Math.random anywhere in generation. */
 function fibonacciSphere(n: number): THREE.Vector3[] {
@@ -91,8 +95,17 @@ export class Atmosphere {
   readonly horizonTintNode = uniform(new THREE.Vector3(1, 1, 1))
   /** See `ambientWarm` in tod.ts. */
   private readonly ambientWarmNode = uniform(0)
+  /** See `ambientDirectional` in tod.ts. */
+  private readonly ambientDirNode = uniform(0)
   /** See `shadowTintBoost` in tod.ts. Read by the painterly material. */
   readonly shadowTintBoostNode = uniform(1)
+  /**
+   * Ceiling on the ambient's peak-channel-over-luminance ratio. See
+   * `ambientChroma` in tod.ts and `clampChroma` in scattering.ts. Read by the
+   * painterly material too, because the shadow stop's sky tint is derived from
+   * the same chromaticity and inherits the same failure.
+   */
+  readonly ambientChromaNode = uniform(3)
   /**
    * Chroma pushed into the haze target. The heavy-atmosphere register in
    * refs/mkw/desert-sunset-haze.jpg is meanSat 0.76 — monochrome in HUE and
@@ -108,6 +121,8 @@ export class Atmosphere {
   readonly gradeSatNode = uniform(1)
   /** See `rampScale` in tod.ts. Read by the painterly material. */
   readonly rampScaleNode = uniform(1)
+  /** See `shadowStrength` in tod.ts. */
+  private readonly shadowStrengthNode = uniform(1)
 
   private readonly skyViewTarget = makeTarget(SKYVIEW_W, SKYVIEW_H)
   private readonly irradianceTarget = makeTarget(IRR_W, IRR_H)
@@ -198,7 +213,28 @@ export class Atmosphere {
     const disc = vec3(sunDisc(u, dir).mul(clouds.alpha.oneMinus()))
 
     const mat = new THREE.MeshBasicNodeMaterial()
-    mat.colorNode = vec3(mix(sky, clouds.color, clouds.alpha).add(disc))
+    // ── the sky is painted too ────────────────────────────────────────────────
+    //
+    // Not a screen-space overlay: the field is a function of the VIEW DIRECTION,
+    // so it is locked to the celestial sphere exactly as the clouds are. Turn the
+    // camera and the marks turn with the sky rather than swimming across it, and
+    // there is nothing frame-relative anywhere in it to crawl.
+    //
+    // It earns its place: a gouache sky is laid in with a brush, and a clear
+    // analytic gradient is the one part of these frames with no mark-making in it
+    // at all. It matters most in shots pitched upward, where the lower 60% of the
+    // frame — the region the structure gate looks at, and the region a player
+    // driving toward a horizon actually sees — is mostly sky.
+    //
+    // Kept to a few percent of value, and squashed horizontally so it reads as
+    // the long flat strokes both painterly references lay their skies in with.
+    const sb = vec3(dir.mul(9.5))
+    const skyBrush = mx_noise_float(vec3(sb.x, sb.y.mul(2.3), sb.z))
+      .mul(0.66)
+      .add(mx_noise_float(vec3(sb.x.mul(2.1).add(9.1), sb.y.mul(4.8), sb.z.mul(2.1))).mul(0.34))
+    const painted = vec3(mix(sky, clouds.color, clouds.alpha)
+      .mul(skyBrush.mul(SKY_BRUSH).add(1).max(0.2)))
+    mat.colorNode = vec3(painted.add(disc))
     mat.side = THREE.BackSide
     mat.depthWrite = false
     // Depth-TESTED and drawn LAST, which is both what ARCHITECTURE's graph
@@ -229,7 +265,29 @@ export class Atmosphere {
     const warm = boostSaturation(
       vec3(this.nodes.horizonWarm.mul(luminance(lut))), 1.25,
     )
-    return vec3(mix(lut, warm, this.ambientWarmNode))
+    const tinted = vec3(mix(lut, warm, this.ambientWarmNode))
+    // ── directionality the 32-sample integral cannot resolve ──────────────────
+    //
+    // `ambientWarm` above fixes the LUT's HUE at low sun and deliberately leaves
+    // its LEVEL alone. That was half a fix. Measured on the irradiance LUT at a
+    // horizon sun, luminance varies by 0.7% across the whole normal sphere —
+    // the ambient is isotropic, and an isotropic light cannot shade anything.
+    // Every surface in a dawn frame therefore came back the same value no matter
+    // which way it faced, so neither the terrain's form nor the brush's relief
+    // reached the screen: atmos-sunrise-sunward measured a 1% spread across a
+    // 48 px tile, and the only thing keeping the frame off black was a constant
+    // additive lift in post.
+    //
+    // The cause is the same one `ambientWarm` documents: at dawn essentially all
+    // of the sky's energy sits in a narrow band a few degrees above the sun, and
+    // 32 uniform hemisphere samples average it into mush. The physical answer is
+    // that a dawn-facing slope is several times brighter than a slope facing
+    // away, which is why every painted sunrise has form. Putting that back as an
+    // explicit azimuthal term is the honest reconstruction of what the integral
+    // dropped, and it is what makes low-sun frames sculptural instead of flat.
+    const facing = dot(n, this.nodes.sunAzimuth).mul(0.5).add(0.5)
+    const gain = mix(float(1), mix(float(1.34), float(1.72), facing), this.ambientDirNode)
+    return vec3(tinted.mul(gain))
   }
 
   /** Sky radiance looking along `dir`. From the LUT. */
@@ -242,7 +300,9 @@ export class Atmosphere {
    * Haze + desaturation + hue shift toward the sky colour in that exact
    * direction. Never a grey fog lerp — that rule is the whole point.
    */
-  aerialPerspective(color: Node<'vec3'>, worldPos: Node<'vec3'>): Node<'vec3'> {
+  aerialPerspective(
+    color: Node<'vec3'>, worldPos: Node<'vec3'>, stroke: Node<'float'>,
+  ): Node<'vec3'> {
     const toPoint = vec3(worldPos.sub(cameraPosition))
     const dist = toPoint.length()
     const dir = vec3(toPoint.div(dist.max(1e-3)))
@@ -277,8 +337,23 @@ export class Atmosphere {
       vec3(this.skyLookup(dir).mul(this.hazeGainNode)),
       this.hazeSatNode.mul(f.mul(0.38).oneMinus()),
     )
+    // The HAZE IS BRUSHED TOO, with the surface's own stroke field.
+    //
+    // Without this, aerial perspective is the one stage that can erase the
+    // painterly treatment completely: `mix(faded, hazeColor, f)` scales the
+    // surface's contribution by (1 - f), so at f = 0.8 the strokes arrive at a
+    // fifth strength and the hazed middle distance goes back to being a smooth
+    // slab. That is visible in the references as the opposite: cliffs-tohad and
+    // desert-hazy both lose CONTRAST with distance and keep their marks — the
+    // far cliffs are still made of visible flat-brush strokes, just paler ones.
+    // A painter hazes by laying thinner paint, not by wiping the canvas.
+    //
+    // Modulating the haze target rather than the composite keeps this
+    // surface-locked: `stroke` is the same world-space field the albedo uses, so
+    // it stays stuck to the terrain instead of crawling like a screen overlay.
+    const brushed = vec3(hazeColor.mul(stroke.mul(HAZE_BRUSH).add(1).max(0.15)))
     const faded = setSaturation(color, f.mul(0.34).oneMinus())
-    return vec3(mix(faded, hazeColor, f))
+    return vec3(mix(faded, brushed, f))
   }
 
   setTimeOfDay(tod: number): void {
@@ -305,6 +380,7 @@ export class Atmosphere {
     this.horizonTintNode.value.copy(s.horizonTint)
     this.ambientSat.value = s.ambientSat
     this.ambientWarmNode.value = s.ambientWarm
+    this.ambientDirNode.value = s.ambientDirectional
     this.shadowTintBoostNode.value = s.shadowTintBoost
     this.hazeSatNode.value = s.hazeSat
     this.nodes.skySaturation.value = s.skySaturation
@@ -316,6 +392,7 @@ export class Atmosphere {
     this.gradeTintNode.value.copy(s.gradeTint)
     this.gradeSatNode.value = s.gradeSat
     this.rampScaleNode.value = s.rampScale
+    this.shadowStrengthNode.value = s.shadowStrength
     this.lutsDirty = true
   }
 
@@ -345,7 +422,10 @@ export class Atmosphere {
 
   /** Fraction of the sun reaching a world position. Pass 6's output. */
   sunVisibility(worldPos: Node<'vec3'>): Node<'float'> {
-    return this.shadow.visibility(worldPos, this.nodes.sunDir)
+    const vis = this.shadow.visibility(worldPos, this.nodes.sunDir)
+    // Faded toward "unoccluded" as the sun grazes the horizon. See
+    // `shadowStrength` in tod.ts.
+    return mix(float(1), vis, this.shadowStrengthNode)
   }
 
   dispose(): void {

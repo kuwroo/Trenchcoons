@@ -2,18 +2,19 @@
   "id": "grassMound",
   "version": 1,
   "type": "surface",
-  "notes": "Small grass forms: mounds, verges, tufts.",
+  "notes": "Small grass forms: mounds, verges, tufts. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
   "material": {
     "base": "#6cc032",
-    "shadow": "#33702f",
+    "shadow": "#3d7a3c",
     "lit": "#bce828",
     "top": "#d8ff7a",
     "topGain": 1.14,
-    "gradientHeight": 9,
+    "gradientHeight": 2.0,
     "gradientStrength": 0.6,
     "brushScale": 2.0,
     "brushStrength": 0.75,
     "saturationGain": 0.26,
-    "rimStrength": 0.42
+    "rimStrength": 0.42,
+    "gradientBase": -1.0
   }
 }

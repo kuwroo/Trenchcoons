@@ -2,21 +2,22 @@
   "id": "cliff",
   "version": 1,
   "type": "surface",
-  "notes": "Cliff cream (#EFE4D0) as the mid, lavender shadow, warm cream lit.",
+  "notes": "Cliff cream (#EFE4D0) as the mid, lavender shadow, warm cream lit. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it.",
   "material": {
     "base": "#e8cf9e",
     "shadow": "#a08cc8",
-    "lit": "#ffe9a8",
+    "lit": "#ffe08a",
     "top": "#ffe8b0",
     "topGain": 1.06,
-    "gradientHeight": 26,
-    "gradientStrength": 0.3,
+    "gradientHeight": 1.0,
+    "gradientStrength": 0.4,
     "rampSoftness": 0.09,
     "brushScale": 5.0,
     "brushStrength": 0.5,
     "saturationGain": 0.24,
     "rimStrength": 0.36,
     "ambient": 0.8,
-    "midLevel": 0.6
+    "midLevel": 0.6,
+    "gradientBase": -0.5
   }
 }

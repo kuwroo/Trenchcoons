@@ -53,6 +53,42 @@ export function setSaturation(c: Node<'vec3'>, amount: Node<'float'> | number): 
 }
 
 /**
+ * Cap how far a colour's PEAK channel may run above its own luminance, at
+ * constant luminance.
+ *
+ * This is the operator the ambient chain was missing, and its absence is what
+ * turned the dawn frames into a cobalt-and-magenta poster. Everything that
+ * derives a tint from the sky normalises to unit LUMINANCE — `skyHue` in
+ * painterly.ts, `ambientWarm` here — and for a deep saturated blue that is a
+ * value-exploding operation: Rec.709 gives blue a weight of 0.0722, so a sky
+ * whose chromaticity is nearly pure blue comes back with a blue channel roughly
+ * 2.7x its luminance. Measured on atmos-sunrise-sunward, the near-field
+ * foreground read rgb(73, 58, 193): Rec.709 luma 0.28 (which passes the shadow
+ * gate) with HSV value 0.76 (which destroys the value range the palette gate
+ * measures, because HSV value IS the peak channel). 95% of that frame sat above
+ * value 0.749 and it had no darks at all.
+ *
+ * The references do not do this. cliffs-tohad's shaded fifth is hue 200 with a
+ * peak/luma ratio of 1.37; grasslands' grass shadow is still GREEN at hue 124,
+ * ratio ~1.2 — the shade keeps the albedo's own hue with a cool cast, exactly
+ * as ART_BIBLE §2 says. Their darks are green- or cyan-dominant, so the channel
+ * carrying the value is also the channel carrying the luminance.
+ *
+ * Mixing toward the grey of the SAME luminance is the minimal fix: luminance is
+ * linear, so `mix(grey, c, k)` preserves it exactly while scaling peak-minus-
+ * luminance by k. Solving for the k that lands peak at `maxRatio * luminance`
+ * gives the tightest chroma that still respects the cap, and `saturate` leaves
+ * anything already inside it untouched.
+ */
+export function clampChroma(c: Node<'vec3'>, maxRatio: Node<'float'> | number): Node<'vec3'> {
+  const l = luminance(c).max(1e-5)
+  const peak = c.r.max(c.g).max(c.b)
+  const limit = typeof maxRatio === 'number' ? float(maxRatio) : maxRatio
+  const k = saturate(limit.sub(1).mul(l).div(peak.sub(l).max(1e-5)))
+  return vec3(mix(vec3(l, l, l), c, k))
+}
+
+/**
  * Increase saturation without ever clipping a channel to zero.
  *
  * The obvious operator — lerp away from luminance — is unusable here. Our
