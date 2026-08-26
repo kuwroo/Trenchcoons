@@ -49,7 +49,17 @@ export interface DeformResponse {
   /** How much of the surface's SHADOW stop the disturbed material exposes.
    *  Snow's "deep ruts expose dirt" and the forest's leaf-litter-over-mud. */
   expose: number
-  /** Edge hardness of a mark, 0 = collapsed and soft, 1 = razor. */
+  /**
+   * Edge hardness of a mark, 0 = collapsed and soft, 1 = razor.
+   *
+   * Read three times in `DeformField.shade`, and the third is new: it sets the
+   * TOE, the gamma, and — cubed, so only a surface that genuinely holds an edge
+   * gets any of it — the exponent of the S that turns the stored mask's
+   * one-texel bilinear ramp into a boundary. Without that third term a mark
+   * fades in over tens of screen pixels however dark its centre is, which is
+   * how the last round's tyre tracks came out softer than the ground they were
+   * cut into.
+   */
   edge: number
   /** Extra rolling resistance inside a full-depth mark, m/s². */
   drag: number
@@ -67,22 +77,30 @@ export const BIOMES: Record<string, DeformResponse> = {
   // blade recovers most of its angle in the first few seconds.
   grass: {
     maxDepth: 0.07, refill: 20, maskLife: 26, collapse: 1.7,
-    wet: 0.10, dry: 26, darken: 0.30, chroma: 0.88, expose: 0.30, edge: 0.42,
+    wet: 0.10, dry: 26, darken: 0.44, chroma: 0.86, expose: 0.30, edge: 0.42,
     drag: 1.3, grip: 1.02,
   },
   // "wet sand holds sharp dark tracks — see refs/mkw/beach-wet-sand-tracks.jpg,
   // the most literal reference we have." Dark, saturated, sharp-edged, and it
   // holds: collapse < 1 so the mark barely softens before the tide takes it.
+  //
+  // `darken` 0.72 -> 0.86 against a measurement of that reference. A critic
+  // measured the perpendicular-scanline dip below local median at 61.8-82.0% in
+  // the photograph and 19.9-31.6% in `tracks-fresh`: our tracks were roughly
+  // half the contrast of the one image on the board that shows exactly this
+  // surface doing exactly this thing. This is the knob that closes that, and it
+  // is an ALBEDO knob, which is what the reference is — the tracks there are
+  // the same sand, much darker, not a second material.
   wetSand: {
     maxDepth: 0.10, refill: 45, maskLife: 62, collapse: 0.7,
-    wet: 0.95, dry: 110, darken: 0.52, chroma: 1.18, expose: 0.55, edge: 0.96,
+    wet: 0.95, dry: 110, darken: 0.86, chroma: 1.2, expose: 0.55, edge: 0.96,
     drag: 1.9, grip: 1.06,
   },
   // "ruts collapse fast (~8s), sand sprays at high slip." collapse 2.4: the
   // walls stand briefly and then slump all at once, which is what dry sand does.
   sand: {
     maxDepth: 0.12, refill: 8, maskLife: 11, collapse: 2.4,
-    wet: 0.04, dry: 12, darken: 0.28, chroma: 0.92, expose: 0.34, edge: 0.30,
+    wet: 0.04, dry: 12, darken: 0.34, chroma: 0.92, expose: 0.34, edge: 0.30,
     drag: 2.6, grip: 0.92,
   },
   // Same collapse behaviour, hotter and paler. Desert is dry sand with the
@@ -122,10 +140,36 @@ export const BIOMES: Record<string, DeformResponse> = {
 export type BiomeName = keyof typeof BIOMES
 
 /** Case-insensitive lookup for `?biome=`. Throws rather than substituting. */
+/**
+ * ART_BIBLE §4 biome names -> the MATERIAL keys `BIOMES` is actually indexed by.
+ *
+ * These are two different vocabularies and only `forest` and `desert` happen to
+ * collide. Without this map `?biome=alpine` — the exact URL documented in
+ * CLAUDE.md and README.md — threw at boot, along with meadow, coast, lagoon and
+ * wetland: five of the six biomes the art bible defines.
+ */
+const BIOME_ALIAS: Record<string, string> = {
+  meadow: 'grass', grassland: 'grass', hub: 'grass',
+  coast: 'wetSand', lagoon: 'wetSand', beach: 'wetSand', shore: 'wetSand',
+  alpine: 'snow',
+  wetland: 'mud', marsh: 'mud', swamp: 'mud',
+  woodland: 'forest',
+  dunes: 'desert',
+}
+
 export function biome(name: string): DeformResponse {
-  const key = Object.keys(BIOMES).find((k) => k.toLowerCase() === name.toLowerCase())
+  const wanted = BIOME_ALIAS[name.toLowerCase()] ?? name
+  const key = Object.keys(BIOMES).find((k) => k.toLowerCase() === wanted.toLowerCase())
   const r = key ? BIOMES[key] : undefined
-  if (!r) throw new Error(`no deform response for biome "${name}" (have: ${Object.keys(BIOMES).join(', ')})`)
+  if (!r) {
+    // A URL parameter must not be able to kill the boot. Warn and fall back to
+    // the hub surface, so a typo degrades to "wrong ground" and not a blank page.
+    console.warn(
+      `[deform] no response for biome "${name}"; falling back to grass. ` +
+      `known: ${[...Object.keys(BIOMES), ...Object.keys(BIOME_ALIAS)].join(', ')}`,
+    )
+    return BIOMES.grass as DeformResponse
+  }
   return r
 }
 
