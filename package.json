@@ -17,7 +17,8 @@
     "gate": "npm run palette && npm run shadow && npm run structure && npm run hue && npm run distinct",
     "shadow": "node tools/shadow.mjs",
     "structure": "node tools/structure.mjs",
-    "hue": "node tools/hue.mjs"
+    "hue": "node tools/hue.mjs",
+    "perf": "node tools/perf.mjs"
   },
   "repository": {
     "type": "git",
