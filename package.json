@@ -1,0 +1,41 @@
+{
+  "name": "trenchcoons",
+  "version": "1.0.0",
+  "description": "Two broke raccoons in pursuit of a driving liscence end up on their most trecherous test yet: stranded on an island with SCARY FOXES. Coordinate your driving skills and ESCAPE ALIVE!!!",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "shots": "node tools/shots.mjs",
+    "shots:serve": "vite build && vite preview --port 4173 & sleep 3 && BASE_URL=http://127.0.0.1:4173 node tools/shots.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuwroo/Trenchcoons.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/kuwroo/Trenchcoons/issues"
+  },
+  "homepage": "https://github.com/kuwroo/Trenchcoons#readme",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.20.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.4",
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.62.1",
+    "pngjs": "^7.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "private": true
+}

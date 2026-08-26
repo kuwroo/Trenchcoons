@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
+    "strict": true, "noUncheckedIndexedAccess": true, "noImplicitOverride": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["vite/client"],
+    "skipLibCheck": true, "noEmit": true, "isolatedModules": true,
+    "verbatimModuleSyntax": true, "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "tools"]
+}

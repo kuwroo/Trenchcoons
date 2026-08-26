@@ -1,0 +1,72 @@
+# Trenchcoons — agent operating instructions
+
+Open-world driving game. Two raccoons in a trenchcoat in a cardboard box.
+Mid-migration from Godot to a WebGPU/Three.js rebuild, on branch `web-rebuild`.
+
+## Read first
+
+- `docs/ART_BIBLE.md` — visual target. Read before touching any shader,
+  material, palette, or post effect.
+- `docs/ARCHITECTURE.md` — systems, render graph order, conventions, Asset Forge.
+- `docs/MILESTONES.md` — the work queue.
+- `refs/README.md` — what each reference image governs.
+
+The Godot project at the repo root is the **old** build, kept for assets and
+reference. Do not add features to it.
+
+## Stack
+
+WebGPU only (no WebGL2 fallback) · Three.js + TSL · TypeScript strict · Vite ·
+Rapier · vanilla Three for rendering, React for Forge/debug UI only.
+
+## The look, in one box
+
+**Painterly, hyper-saturated, soft-lit.** Not photoreal, not flat-cel — painted.
+Capy Castaway for character style and vibrance; Tohad's cliffs for palette;
+Genshin for terrain and foliage forms; Mario Kart for open-world structure,
+water driving, and tire tracks.
+
+```
+Shadows:   coloured and lifted, tinted toward sky. Never grey, never crushed.
+Specular:  water, wet surfaces, ice, vehicle paint. Never nature.
+Saturation increases with light — lit faces get more saturated, not blown white.
+Distance:  haze + desaturation + hue shift toward sky. Never a grey fog lerp.
+Forms:     big and simple. Detail lives in the light, not the geometry.
+Clouds:    pink and lavender, not white.
+```
+
+## Invariants — do not break these
+
+- **Units are metres.**
+- **NPR, not PBR.** No metal/roughness workflow for nature.
+- **Tonemap is gentle filmic with highlight desaturation OFF.** Not AgX — it
+  desaturates highlights, the opposite of the target.
+- **No `Math.random()` in generation.** Seeded RNG only; determinism is what
+  makes the screenshot harness meaningful.
+- **Render calls live in `core/renderGraph.ts`.** Don't scatter them.
+- **Never block a frame on GPU readback.** Deformation → physics is async.
+- **All vegetation samples the one global wind field.** No per-asset wobble.
+- **No hardcoded assets.** Every asset is a JSON def in `assets/defs/` driven by
+  a Forge generator — including imported and AI-generated meshes.
+- **Ambient comes from the sky LUT**, never a constant.
+- Perf: 16.6ms @ 1080p, <1500 draw calls, <400MB GPU memory.
+
+## Verifying visual work
+
+Screenshots are the feedback signal — not "it compiles".
+
+```
+npm run dev        # game
+npm run forge      # asset forge
+npm run shots      # headless capture -> PNGs
+npm run typecheck
+```
+
+Any world state is reproducible from a URL:
+```
+?seed=1234&pos=120,8,-340&look=0.3,-0.1&time=0.35&weather=snow&biome=alpine
+```
+
+Wait on `__ready` before capturing, or screenshots race the streaming system.
+
+"Done" on visual work means **compared against `refs/`**, not that it ran.

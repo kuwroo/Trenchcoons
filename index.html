@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Trenchcoons</title>
+  <style>
+    html,body{margin:0;height:100%;background:#0b0d10;overflow:hidden}
+    canvas{display:block;width:100vw;height:100vh}
+    #hud{position:fixed;top:8px;left:8px;font:11px/1.45 ui-monospace,Menlo,monospace;
+         color:#cfe3ef;background:#0b0d10a8;padding:7px 9px;border-radius:5px;
+         white-space:pre;pointer-events:none;z-index:10;backdrop-filter:blur(6px)}
+    body.shot #hud{display:none}
+    #err{position:fixed;inset:0;display:none;place-items:center;padding:40px;
+         font:13px/1.6 ui-monospace,monospace;color:#ff9a9a;background:#0b0d10;
+         white-space:pre-wrap;z-index:99}
+  </style>
+</head>
+<body>
+  <canvas id="app"></canvas>
+  <div id="hud"></div>
+  <div id="err"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
