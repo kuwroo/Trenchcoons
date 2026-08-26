@@ -69,6 +69,30 @@ const LADDER = /^shots\/greybox-/
 const MIN_SUBJECT_RATIO = 2.0
 
 /**
+ * …and the two SIDES the ratio alone does not have. CLAUDE.md: "Every gate
+ * needs a floor AND a ceiling. A one-sided metric is an invitation to optimise
+ * the proxy instead of the goal."
+ *
+ * A bare ratio has exactly that hole. A pair scoring subject 0.4 / control 0.05
+ * — nothing visible in either frame, the deformation field deleted — scores 8
+ * and passes. So:
+ *
+ *   MIN_SUBJECT  an absolute floor on the subject box. Calibrated below the
+ *                8.65 the previous round's pair scored, which reviewers agreed
+ *                showed a readable mark; today's pair scores 14.50.
+ *   MAX_CONTROL  a ceiling on the box where NOTHING is supposed to have moved.
+ *                This is the term that catches the original defect directly
+ *                rather than by proportion: the rejected capture drifted its
+ *                camera and scored control 18.94, and a big enough subject
+ *                could have carried it through the ratio anyway. Today 1.90.
+ *
+ * Both are set between the measured failure and the measured pass, nearer the
+ * failure, the same way MIN_SUBJECT_RATIO was.
+ */
+const MIN_SUBJECT = 6.0
+const MAX_CONTROL = 6.0
+
+/**
  * name -> { a, b, subject, control }, boxes in fractions of the frame as
  * [x0, x1, y0, y1].
  *
@@ -100,18 +124,32 @@ const CONTROLLED = [{
 const WITHIN = [{
   name: 'deform persistence',
   file: 'shots/tracks-persist.png',
-  subject: [0.33, 0.67, 0.60, 1.0],
-  control: [[0, 0.25, 0.60, 1.0], [0.75, 1.0, 0.60, 1.0]],
-  // Gentle on purpose: this catches "no marks at all", it does not legislate
-  // their depth.
+  // Aimed at the COMMITTED BAND, which is what this shot exists to show.
   //
-  // KNOWN CONFOUND: at this camera the kart's cast shadow runs straight down
-  // the same corridor, so a passing ratio does NOT by itself prove the marks
-  // survived — it proves the corridor is not bare. Reading 1.54 against a 1.25
-  // floor, and the shadow alone could account for that. To make this decisive
-  // the shot needs a sun azimuth that throws the shadow across the corridor
-  // rather than along it; until then treat a pass here as necessary, not
-  // sufficient, and confirm persistence by eye.
+  // The first version of this window was aimed at nothing. I picked
+  // subject x 0.33-0.67 / control x<0.25 and x>0.75 by eye, from the assumption
+  // that "the marks are behind the car". A critic then built a validated
+  // world->screen projection (car origin lands on the drawn kart; fresh-trail
+  // centreline lands on the two visible dark lines), probed the CPU mirror on a
+  // 0.5 m grid, and found the committed band at world x -974..-969, z 121..143,
+  // projecting to screen x 0-675 / y 697-804 of 1600x900.
+  //
+  // Against that footprint my window put 16% of the band in the SUBJECT and 68%
+  // in the CONTROL. The gate was scoring the fresh trail as its subject and the
+  // persisted band as its control — reporting ratio 1.54 PASS on a frame whose
+  // named subject is invisible, and, worse, a band that became visible would
+  // raise the control and make the gate HARDER to pass. That is precisely the
+  // gate-fights-feature failure recorded in CLAUDE.md, committed one tick after
+  // I wrote that warning, on the metric written to stop this shipping unseen.
+  subject: [0.0, 0.42, 0.77, 0.89],
+  // Bare sand at the SAME depth band — depth changes brush LOD, so a control on
+  // a different screen row is not a control.
+  control: [[0.72, 1.0, 0.77, 0.89]],
+  // The band measures mean luma 172.0 against 180.6 for adjacent sand: an
+  // 8.6/255 dip under brushwork of sd 20.1, signal-to-noise 0.43. This gate is
+  // EXPECTED TO FAIL until shade()'s knife-edge curve stops crushing low mask
+  // values (stored 0.28 renders at 0.185, a 2.44x suppression; 0.22 suppresses
+  // 14x). A correctly-failing gate is worth more than a falsely-passing one.
   min: 1.25,
 }]
 
@@ -186,11 +224,15 @@ if (checked.length) {
     const subject = boxDiff(A, B, c.subject)
     const control = c.control.reduce((s, r) => s + boxDiff(A, B, r), 0) / c.control.length
     const ratio = subject / Math.max(control, 1e-6)
-    const ok = ratio >= MIN_SUBJECT_RATIO
+    const why = []
+    if (ratio < MIN_SUBJECT_RATIO) why.push(`ratio < ${MIN_SUBJECT_RATIO}`)
+    if (subject < MIN_SUBJECT) why.push(`subject < ${MIN_SUBJECT} (nothing in the subject box)`)
+    if (control > MAX_CONTROL) why.push(`control > ${MAX_CONTROL} (the frame moved, not the subject)`)
+    const ok = why.length === 0
     if (!ok) badPairs++
     console.log(`  ${c.name.padEnd(16)} subject ${subject.toFixed(2)}  control ` +
       `${control.toFixed(2)}  ratio ${ratio.toFixed(2)}` +
-      (ok ? '' : `  NOT A CONTROLLED A/B (need >= ${MIN_SUBJECT_RATIO})`))
+      (ok ? '' : `  NOT A CONTROLLED A/B — ${why.join('; ')}`))
     console.log(`    ${c.a}  vs  ${c.b}`)
   }
   console.log(badPairs
@@ -233,4 +275,111 @@ if (WITHIN.length) {
   }
 }
 
-process.exit(bad.length || badPairs || badWithin ? 1 : 0)
+// ── corridor local contrast: is the MARK the loudest thing in the corridor? ──
+//
+// The gate this round exists for, and the one whose absence let the last round
+// ship. Every check above is satisfied by a difference BETWEEN two frames; none
+// of them asks whether that difference is larger than the surface's own texture
+// at the same spatial scale. It was not: with `regionStep` at 0.85 the sand pan
+// carried tonal masses as loud as a tyre track, so `tracks-fresh` measured
+// LOWER corridor local contrast (16.30) than `tracks-decay` (15.38 — within
+// noise of it, and by the critics' own measurement the wrong way round), and
+// gradRatio scored the frame WITHOUT marks higher than the frame with them.
+//
+// The metric is the critics': mean |L - boxblur(r=60)| x100 over the track
+// corridor. A box blur at 60 px is a high-pass at roughly the scale a tyre mark
+// subtends at this camera, so it measures exactly the competition — mark
+// against ground texture — that the whole-frame statistics average away.
+//
+// TWO-SIDED, and both sides are load-bearing:
+//   MIN_RATIO   fresh must beat decay. Catches "the surface out-shouts the
+//               marks", which is what happened.
+//   MAX_BARE    decay — a frame of BARE sand — has a ceiling on its own local
+//               contrast. Catches the same defect from the other end, and it is
+//               the term a future round cannot satisfy by simply cranking the
+//               mark darker while leaving the camouflage in place.
+//
+// CALIBRATION. There is no reference PAIR to calibrate a ratio against — no
+// image in refs/ shows the same ground with and without marks — so the ratio is
+// set from the measured failure and the measured pass, the same discipline
+// MIN_SUBJECT_RATIO uses: rejected 1.06, current 1.54, threshold 1.25. MAX_BARE
+// is calibrated against refs/mkw/beach-wet-sand-tracks.jpg, which scores 18.85
+// on this metric over the same box WITH its tracks and its foam and its HUD
+// minimap inside the box; 20 is a ceiling that image would pass and the
+// rejected build's bare sand (15.38, all of it camouflage) sits under — so this
+// term is the loose one of the two and it is the ratio that does the work.
+const CORRIDOR = [{
+  name: 'deform corridor',
+  fresh: 'shots/tracks-fresh.png',
+  bare: 'shots/tracks-decay.png',
+  box: [0.30, 0.70, 0.62, 1.00],
+  minRatio: 1.25,
+  maxBare: 20,
+}]
+
+/** Separable box blur, clamped at the edges. */
+function boxBlur(src, W, H, r) {
+  const tmp = new Float64Array(W * H), out = new Float64Array(W * H)
+  const cl = (v, hi) => (v < 0 ? 0 : v > hi ? hi : v)
+  for (let y = 0; y < H; y++) {
+    const row = y * W
+    let acc = 0
+    for (let x = -r; x <= r; x++) acc += src[row + cl(x, W - 1)]
+    for (let x = 0; x < W; x++) {
+      tmp[row + x] = acc / (2 * r + 1)
+      acc -= src[row + cl(x - r, W - 1)]
+      acc += src[row + cl(x + r + 1, W - 1)]
+    }
+  }
+  for (let x = 0; x < W; x++) {
+    let acc = 0
+    for (let y = -r; y <= r; y++) acc += tmp[cl(y, H - 1) * W + x]
+    for (let y = 0; y < H; y++) {
+      out[y * W + x] = acc / (2 * r + 1)
+      acc -= tmp[cl(y - r, H - 1) * W + x]
+      acc += tmp[cl(y + r + 1, H - 1) * W + x]
+    }
+  }
+  return out
+}
+
+function corridorContrast(png, [x0, x1, y0, y1], r = 60) {
+  const { width: W, height: H, data } = png
+  const L = new Float64Array(W * H)
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    L[p] = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
+  }
+  const B = boxBlur(L, W, H, r)
+  let sum = 0, n = 0
+  for (let y = Math.round(y0 * H); y < Math.round(y1 * H); y++) {
+    for (let x = Math.round(x0 * W); x < Math.round(x1 * W); x++) {
+      sum += Math.abs(L[y * W + x] - B[y * W + x]); n++
+    }
+  }
+  return sum / Math.max(n, 1)
+}
+
+let badCorridor = 0
+const corridorChecked = CORRIDOR.filter(
+  (c) => fs.existsSync(c.fresh) && fs.existsSync(c.bare),
+)
+if (corridorChecked.length) {
+  console.log('\ncorridor local contrast (mean |L - boxblur(r=60)|, marks vs bare):')
+  for (const c of corridorChecked) {
+    const f = corridorContrast(PNG.sync.read(fs.readFileSync(c.fresh)), c.box)
+    const b = corridorContrast(PNG.sync.read(fs.readFileSync(c.bare)), c.box)
+    const ratio = f / Math.max(b, 1e-6)
+    const why = []
+    if (ratio < c.minRatio) {
+      why.push(`marks add only ${ratio.toFixed(2)}x the bare surface's own contrast `
+        + `(need >= ${c.minRatio}) — the ground is out-shouting the deformation`)
+    }
+    if (b > c.maxBare) why.push(`bare surface contrast ${b.toFixed(2)} > ${c.maxBare} (camouflage)`)
+    if (why.length) badCorridor++
+    console.log(`  ${c.name.padEnd(20)} marks ${f.toFixed(2)}  bare ${b.toFixed(2)}`
+      + `  ratio ${ratio.toFixed(2)}` + (why.length ? `  FAIL — ${why.join('; ')}` : '  ok'))
+    console.log(`    ${c.fresh}  vs  ${c.bare}`)
+  }
+}
+
+process.exit(bad.length || badPairs || badWithin || badCorridor ? 1 : 0)
