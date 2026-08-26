@@ -99,7 +99,7 @@ export const POST_DEFAULTS: PostSettings = {
   // it just crushes the shadow stop the ramp worked to author.
   toneGamma: 1.27,
   satBase: 1.98,
-  satHighlight: 0.45,
+  satHighlight: 0.80,
   satShadow: 0.95,
   // A whisper, and 0.075 was not one; 0.048 is.
   //

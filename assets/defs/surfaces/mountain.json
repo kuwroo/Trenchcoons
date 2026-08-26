@@ -2,7 +2,7 @@
   "id": "mountain",
   "version": 1,
   "type": "surface",
-  "notes": "Distant massifs. ART_BIBLE 4 (alpine): exposed rock is DARK and wet-looking, the summit is near-white with a faint cool cast, and the shadow is unmistakably blue at low contrast. The vertical gradient runs over 240 m so a 380 m peak reads pale at the cap and sinks into its own shadow at the base \u2014 which is the only reason a cone silhouette holds up at 3 km. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. rampSoftness widened from a near-cel width: on a facet whose N.L is almost constant, a half-width that tight lets the micro-relief flip the terminator back and forth within a pixel or two, and the result is the ragged navy/cream boundary with magenta-cyan chromatic fringing visible down the shaded faces in shots/lagoon-morning.png. A wider step turns the same signal into a gradient the resolve and the chromatic aberration can both survive.",
+  "notes": "Distant massifs. ART_BIBLE 4 (alpine): exposed rock is DARK and wet-looking, the summit is near-white with a faint cool cast, and the shadow is unmistakably blue at low contrast. The vertical gradient runs over 240 m so a 380 m peak reads pale at the cap and sinks into its own shadow at the base — which is the only reason a cone silhouette holds up at 3 km. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead — the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel.",
   "material": {
     "base": "#5a6f96",
     "shadow": "#33476c",
@@ -19,6 +19,7 @@
     "detailStrength": 0.5,
     "saturationGain": 0.28,
     "rimStrength": 0.3,
-    "ambient": 0.92
+    "ambient": 0.92,
+    "brushHue": 0.15
   }
 }

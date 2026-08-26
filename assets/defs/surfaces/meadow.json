@@ -16,6 +16,7 @@
     "brushStrength": 1.45,
     "rampSoftness": 0.15,
     "saturationGain": 0.34,
-    "rimStrength": 0.24
+    "rimStrength": 0.24,
+    "brushHue": 0.35
   }
 }

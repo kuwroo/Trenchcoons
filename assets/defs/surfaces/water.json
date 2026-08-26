@@ -17,6 +17,8 @@
     "rimStrength": 0.3,
     "gradientBase": -2.5,
     "gradientHeight": 5.0,
-    "gradientStrength": 0.15
+    "gradientStrength": 0.15,
+    "brushHue": 0.24,
+    "regionStep": 0.35
   }
 }

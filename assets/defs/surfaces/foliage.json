@@ -18,6 +18,7 @@
     "rimStrength": 0.85,
     "rimPower": 2.4,
     "ambient": 0.36,
-    "gradientBase": -0.5
+    "gradientBase": -0.5,
+    "brushHue": 0.26
   }
 }

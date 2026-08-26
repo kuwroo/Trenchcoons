@@ -15,6 +15,7 @@
     "brushStrength": 0.75,
     "saturationGain": 0.26,
     "rimStrength": 0.42,
-    "gradientBase": -1
+    "gradientBase": -1,
+    "brushHue": 0.3
   }
 }

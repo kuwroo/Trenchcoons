@@ -169,7 +169,7 @@ export const PAINTERLY_DEFAULTS: PainterlyParams = {
   brushScale: 3.2,
   brushSaturation: 0.55,
   brushHue: 0.26,
-  regionStep: 0.64,
+  regionStep: 0.52,
   detailStrength: 0.14,
   reliefShade: 0.88,
   rimStrength: 0.5,
@@ -560,7 +560,7 @@ export class PainterlyMaterial {
     brushScale: uniform(3),
     brushSaturation: uniform(0.5),
     brushHue: uniform(0.26),
-    regionStep: uniform(0.64),
+    regionStep: uniform(0.52),
     detailStrength: uniform(0.55),
     reliefShade: uniform(0.6),
     rimStrength: uniform(0.5),
@@ -757,7 +757,16 @@ export class PainterlyMaterial {
     // fragment for the normal layer, so this costs one hue rotation and nothing
     // else, and because it is a different field from `stroke` the colour
     // boundaries do not sit on top of the value boundaries.
-    albedo = rotateHue(albedo, brush.height.mul(u.brushHue).mul(u.brushStrength))
+    // Stepped, like the marks themselves, and NOT scaled by `brushStrength`.
+    // A smooth rotation the size of the relief field's own sigma (~0.17) moved
+    // the near field's circular hue std from 14.4deg to only 20.3deg against
+    // 34-74deg across the references: a gradual hue drift reads as one colour
+    // that wanders, where a painting has two colours meeting at an edge. Pushed
+    // through the same threshold the paint marks use, `brushHue` becomes what
+    // its docstring says — the hue difference BETWEEN adjacent marks — and it
+    // is a per-surface authored angle rather than something the value knob
+    // drags around with it.
+    albedo = rotateHue(albedo, flatMark(brush.height, 0.30).mul(u.brushHue))
 
     // ── light: sky ambient (coloured, lifted) + ramped direct ─────────────────
     const level = mix(float(0), u.midLevel, toMid)

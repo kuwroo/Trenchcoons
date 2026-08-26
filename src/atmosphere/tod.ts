@@ -535,7 +535,7 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // pastel; refs/mkw/desert-sunset-haze.jpg is meanSat 0.76, not 0.30. Capped
   // at ~1.6x, and dusk is hazier than dawn (see mieScale).
   s.hazeDensity = 0.00058 + 0.00018 * (1 - dayness) + 0.00013 * twilight
-  s.hazeGain = 0.66 - 0.13 * twilight
+  s.hazeGain = 0.66 - 0.09 * twilight
   // Now the UPPER edge of a smoothstep rolloff rather than a hard subtraction,
   // so the first ~15 m of albedo is untouched and the ladder starts building
   // immediately after. See `aerialPerspective` in sky.ts.
@@ -600,7 +600,7 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // i.e. lit ground and shaded ground were barely two thirds of a stop apart.
   // The taper only touches the high-sun end, which is the end with margin —
   // the dusk frames sit close to the shadow gate's floor and keep their fill.
-  // The floor is ~4.5x at a horizon sun, and it USED to be 18x.
+  // The floor is ~4.7x at a horizon sun, and it USED to be 18x.
   //
   // 17x cubed in fillFloor was the round-4 regression, and it is worth being
   // precise about why, because the reasoning that produced it was half right.
@@ -615,14 +615,14 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // value RANGE collapsed from 0.459 to 0.231, against 0.42-0.51 in the
   // references. A pedestal is a pedestal whether it is added or multiplied.
   //
-  // Quadratic, not cubic, and 4.6 rather than 17, so a horizon sun (fillFloor
-  // 0.868) gets 4.5x its integral back — enough to keep the shaded world off
+  // Quadratic, not cubic, and 4.85 rather than 17, so a horizon sun (fillFloor
+  // 0.868) gets 4.7x its integral back — enough to keep the shaded world off
   // the floor of the shadow gate, not enough to outvote the key. The rest of the
   // low-sun brightness budget is now spent where it does not flatten anything:
   // on `ambientChroma` below, which buys luma out of the fill's own excess
   // purity rather than out of its level.
   //
-  // 4.6, down from 5.0 at a horizon sun (and the shape below it changed too: and this is the round's largest single change. At 5.0
+  // 4.85, down from 5.0 at a horizon sun (and the shape below it changed too: and this is the round's largest single change. At 5.0
   // the multiplier was 4.77x at a horizon sun — by the paragraph above's own
   // definition still a pedestal, and the surrounding prose claimed 3.2x/3.5x
   // while the code did 4.77x. Measured consequence across all twenty shots:
@@ -633,7 +633,7 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // "darkest 15%" pool of the rest a sliver of midtone. A fill that no shaded
   // surface can fall below is not lifted shadows, it is no shadows.
   s.ambientGain = (SUN_KEY * AMBIENT_FILL / IRRADIANCE_AT_NOON)
-    * (1 - 0.30 * dayness) * (1 + 4.6 * fillFloor * fillFloor)
+    * (1 - 0.30 * dayness) * (1 + 4.85 * fillFloor * fillFloor)
 
   // Dawn is clean and cool, dusk is hazy and warm — the day's aerosol load
   // does not reset at noon. This is also the second half of the fix for
