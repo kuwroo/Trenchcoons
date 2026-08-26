@@ -11,3 +11,7 @@ shots/
 *.tmp
 .DS_Store
 shots/.best.json
+
+# agent scratch
+.critprobe*
+.scratch/

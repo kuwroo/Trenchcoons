@@ -52,6 +52,47 @@ export function analyse(file) {
       stds.push(Math.sqrt(Math.max(0, s2 / n - mean * mean)))
     }
   }
+  // ── gradient concentration + plateaus ──────────────────────────────────
+  // What "painterly" actually means, numerically. The references are FLAT
+  // MASSES of one value meeting at hard boundaries. medStd measures total
+  // variance, which uniform airbrush wobble satisfies perfectly — which is why
+  // three rounds of "add more detail" produced soft mush that passed.
+  //
+  //   measured, lower 28% of frame:   med grad   p99 grad   p99/med   plateau%
+  //     cliffs-tohad                   0.0076     0.2597       34       27.1
+  //     grasslands                     0.0196     0.2342       12        1.4
+  //     water-lagoon                   0.0103     0.2492       24       23.8
+  //     ours (near-noon)               0.0286     0.1605      5.6        0.7
+  //
+  // Median ABOVE every reference, p99 BELOW every reference: more wobble
+  // everywhere, less contrast anywhere.
+  //
+  // The ratio is the key property: it CANNOT be gamed by adding wobble, because
+  // raising the median lowers the ratio. Every previous one-sided metric could
+  // be satisfied by turning some noise knob up.
+  const yLow = Math.floor(H * 0.72)
+  const grads = []
+  let plateau = 0, plateauN = 0
+  for (let y = yLow + 2; y < H - 2; y += 2) {
+    for (let x = 2; x < W - 2; x += 2) {
+      const gx = lum[y * W + x + 1] - lum[y * W + x - 1]
+      const gy = lum[(y + 1) * W + x] - lum[(y - 1) * W + x]
+      grads.push(Math.hypot(gx, gy))
+      // 5x5 neighbourhood flat to 0.010 luma = a plateau pixel
+      let mn = 1, mx = 0
+      for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) {
+        const v = lum[(y + j) * W + x + i]
+        if (v < mn) mn = v
+        if (v > mx) mx = v
+      }
+      plateauN++
+      if (mx - mn < 0.010) plateau++
+    }
+  }
+  grads.sort((a, b) => a - b)
+  const gq = (p) => grads[Math.floor(grads.length * p)] ?? 0
+  const medGrad = gq(0.5), p99Grad = gq(0.99)
+
   // ── multi-scale coherence ──────────────────────────────────────────────
   // Local variance alone cannot tell painterly brushwork from noise: isotropic
   // high-frequency noise MAXIMISES it. Round 4 exploited exactly that and
@@ -161,6 +202,8 @@ export function analyse(file) {
     p10Std: +q(0.1).toFixed(4),
     // Fraction of detail that survives a 4x downsample. Low = fine noise.
     coherence: +(med4 / Math.max(q(0.5), 1e-6)).toFixed(3),
+    gradRatio: +(p99Grad / Math.max(medGrad, 1e-6)).toFixed(1),
+    plateauPct: +((plateau / Math.max(plateauN, 1)) * 100).toFixed(1),
     specklePct: +((speckle / Math.max(considered, 1)) * 100).toFixed(2),
     flatPct: +(flat * 100).toFixed(1),
     // Fraction of lower-60% pixels carrying a real luma edge. Diagnostic only.
@@ -192,15 +235,15 @@ const row = (a) => [
   String(a.medStd).padStart(8),
   String(a.p10Std).padStart(8),
   String(a.flatPct).padStart(8),
-  String(a.coherence).padStart(10),
+  String(a.gradRatio).padStart(9),
+  String(a.plateauPct).padStart(9),
   String(a.specklePct).padStart(9),
-  String(a.edge06Pct).padStart(8),
   String(a.edge12Pct).padStart(8),
 ].join(' ')
 
 console.log('file'.padEnd(34), 'medStd'.padStart(8), 'p10Std'.padStart(8),
-            'flat%'.padStart(8), 'coherence'.padStart(10), 'speckle%'.padStart(9),
-            'edg.06%'.padStart(8), 'edg.12%'.padStart(8))
+            'flat%'.padStart(8), 'gradRat'.padStart(9), 'plateau%'.padStart(9),
+            'speckle%'.padStart(9), 'edg.12%'.padStart(8))
 console.log('-'.repeat(94))
 console.log('REFERENCES')
 const refs = REFS.map(analyse)
@@ -210,6 +253,8 @@ const mean = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(xs.length, 1)
 const refMedStd = mean(refs.map((r) => r.medStd))
 const refFlat = mean(refs.map((r) => r.flatPct))
 const refCoh = mean(refs.map((r) => r.coherence))
+const refGradRatioMin = Math.min(...refs.map((r) => r.gradRatio))
+const refPlateauMin = Math.min(...refs.map((r) => r.plateauPct))
 const refSpeck = mean(refs.map((r) => r.specklePct))
 
 console.log('\nOUTPUT')
@@ -219,7 +264,8 @@ for (const a of outs) console.log(row(a))
 const refE06 = mean(refs.map((r) => r.edge06Pct))
 const refE12 = mean(refs.map((r) => r.edge12Pct))
 
-console.log(`\nreference mean: medStd ${refMedStd.toFixed(4)}, flat% ${refFlat.toFixed(1)}, coherence ${refCoh.toFixed(3)}, speckle% ${refSpeck.toFixed(2)}`)
+console.log(`\nreference mean: medStd ${refMedStd.toFixed(4)}, flat% ${refFlat.toFixed(1)}, speckle% ${refSpeck.toFixed(2)}`)
+console.log(`reference MINIMUMS: gradRatio ${refGradRatioMin.toFixed(1)}, plateau% ${refPlateauMin.toFixed(1)}`)
 console.log(`reference edge density (DIAGNOSTIC, not gated): >0.06 ${refE06.toFixed(2)}%, >0.12 ${refE12.toFixed(2)}%`)
 console.log('VERDICT (per shot):')
 let failed = 0
@@ -241,6 +287,13 @@ for (const a of outs) {
   // actually works, so that is what is gated.
   if (a.medStd > refMedStd * 1.35)
     p.push(`OVER-DETAILED — tile detail ${a.medStd} is ${(a.medStd / refMedStd).toFixed(1)}x the reference mean ${refMedStd.toFixed(4)} (band 0.056-0.080); reads as noise, not brushwork`)
+  // Floors from the least-painterly reference, with slack. Gradient
+  // concentration is the anti-gaming one: uniform wobble raises the median and
+  // therefore LOWERS the ratio.
+  if (a.gradRatio < refGradRatioMin * 0.8)
+    p.push(`AIRBRUSHED — gradient concentration ${a.gradRatio} vs reference floor ${refGradRatioMin.toFixed(1)}; soft gradients everywhere instead of flat masses meeting at hard edges`)
+  if (a.plateauPct < refPlateauMin * 0.5)
+    p.push(`NO FLAT MASSES — ${a.plateauPct}% plateau pixels vs reference floor ${refPlateauMin.toFixed(1)}%`)
   if (a.specklePct > Math.max(refSpeck * 4, 0.09))
     p.push(`SPECKLE/ALIASING — ${a.specklePct}% isolated outlier pixels (ref ${refSpeck.toFixed(2)}%)`)
   if (p.length) failed++
