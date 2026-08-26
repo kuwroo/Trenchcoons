@@ -14,6 +14,7 @@ import { KeyboardInput, mountControlHint, type InputSource } from './vehicle/inp
 import { ScriptedInput, readVehicleOptions } from './vehicle/replay'
 import { EngineAudio } from './vehicle/audio'
 import { ContactShadow, NO_CAST_LAYER } from './vehicle/contactShadow'
+import { Deformation, readDeformOptions } from './deform'
 
 declare global {
   interface Window {
@@ -39,6 +40,14 @@ declare global {
         x: number; y: number; z: number; yaw: number
         wheels: { compression: number; contact: boolean; slip: number }[]
       }) | null
+      /** M4. The deformation field as the PHYSICS sees it — the CPU mirror,
+       *  sampled at any world XZ. This is how the shot harness finds the frame
+       *  at which a mark exists rather than guessing, and it is the only way to
+       *  tell "the stamp did not run" apart from "the stamp ran and the
+       *  material is not showing it". */
+      deform?: (x: number, z: number) => {
+        depth: number; mask: number; wet: number; displacement: number
+      } | null
     }
   }
 }
@@ -90,8 +99,16 @@ async function boot() {
   const atmosphere = new Atmosphere(state.time)
   scene.add(atmosphere.dome)
 
-  const world = buildGreybox(atmosphere, rng)
+  // ── M4: the deformation field ─────────────────────────────────────────────
+  // Built before the world, because the terrain material has to be compiled
+  // with its read hook. Opt-in under `?shot=1`, opt-out elsewhere — see
+  // `readDeformOptions`.
+  const deformOpts = readDeformOptions()
+  const deform = deformOpts.enabled ? new Deformation(deformOpts) : null
+
+  const world = buildGreybox(atmosphere, rng, deform?.hook ?? null)
   scene.add(world.group)
+  deform?.setPatch(world.pan)
 
   // `pos` from the URL is a floor, not an absolute: the greybox heightfield is
   // procedural, so a fixed y in a shot URL would sometimes land inside a hill
@@ -114,7 +131,10 @@ async function boot() {
   } | null = null
 
   if (carOpts.enabled) {
-    const vehicle = new Vehicle(world.groundAt)
+    // The vehicle's height field is the terrain PLUS the deformation field, so
+    // the suspension, the plane fit and therefore the body roll all feel the
+    // ruts. Consumer (3) of ARCHITECTURE's read list.
+    const vehicle = new Vehicle(deform ? deform.heightField(world.groundAt) : world.groundAt)
     const kart = new Kart(atmosphere)
     vehicle.object.add(kart.root)
     scene.add(vehicle.object)
@@ -168,6 +188,15 @@ async function boot() {
   //    and irradiance rebuilt only when TOD changes.
   graph.register('atmosphereLUT', () => { atmosphere.updateLuts(renderer) })
 
+  // 3  deformation stamp: re-centre both toroidal tiers, refill whatever the
+  //    scroll exposed, then MAX-blend one oriented capsule per wheel contact.
+  // 4  deformation decay: low cadence, see src/deform/field.ts. The CPU mirror's
+  //    async readback rides along with it.
+  if (deform) {
+    graph.register('deformStamp', async () => { await deform.stampPass(renderer) })
+    graph.register('deformDecay', async (ctx) => { await deform.decayPass(renderer, ctx.dt) })
+  }
+
   // 6  shadow cascades: four texel-snapped ortho slabs from the sun, packed
   //    into one atlas. This is the only pass that renders geometry outside the
   //    post chain's scene pass, and it has to, because it needs its own cameras
@@ -202,6 +231,11 @@ async function boot() {
     }),
     heightAt: world.groundAt,
     obstacles: () => world.obstacles,
+    deform: (x: number, z: number) => {
+      if (!deform) return null
+      const m = deform.mirror.sample(x, z)
+      return { ...m, displacement: deform.mirror.displacement(x, z) }
+    },
     car: () => {
       if (!car) return null
       const p = car.vehicle.object.position
@@ -247,7 +281,13 @@ async function boot() {
       // frames — over a second of driving. Without this offset every capture
       // earlier than frame 64 is unreachable, which is most of a launch.
       const drive = car.input.sample(clock.frame - state.warmup)
+      // Rolling resistance and rut tracking from the marks already in the
+      // ground, applied to the velocity the model is about to read. This is the
+      // second pass the spec asks for: your own ruts change how the car drives.
+      deform?.applyToVehicle(car.vehicle, dt)
       car.vehicle.update(dt, drive)
+      // …and this frame's contacts become next frame's marks.
+      deform?.sampleVehicle(car.vehicle, dt)
       car.kart.update(dt, clock.elapsed, car.vehicle)
       if (dt > 0) car.audio?.update(dt, car.vehicle.telemetry, drive.throttle, FEEL.maxSpeed)
       // After the kart, before the camera: the shadow reads the same pose the
@@ -256,6 +296,10 @@ async function boot() {
       if (dt > 0) car.shadow.update(car.vehicle)
       car.chase.update(dt, car.vehicle)
     }
+
+    // With no car the field follows the camera, so `?deform=1` on a free-cam
+    // URL still has a populated near tier under the view.
+    if (deform && !car) deform.setCentre(camera.position.x, camera.position.z)
 
     // The camera is not in the scene graph, so nothing else will do this — and
     // the sky dome needs its world position.

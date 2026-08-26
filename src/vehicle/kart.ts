@@ -296,11 +296,22 @@ export class Kart {
       const glanceSlot = Math.floor(elapsed / 2.6 + o.phase * 3)
       if (glanceSlot !== o.glanceSlot) {
         o.glanceSlot = glanceSlot
-        // Wide enough that a glance sometimes brings the mask and an eye round
-        // into view. From directly behind — which is where the chase camera
-        // lives — a +/-30 degree glance is two brown blobs turning slightly.
-        o.glanceYaw.target = (hash(glanceSlot * 13 + i) - 0.5) * 2.7
-        o.glancePitch.target = (hash(glanceSlot * 29 + i * 5) - 0.5) * 0.42
+        // +/-46 degrees of yaw, down from +/-77.
+        //
+        // The wide range was written when the chase camera only ever saw the
+        // backs of two heads, and it was solving that by turning a head far
+        // enough that one cheek came round. Now that `RIG.lookUp` frames the
+        // occupants and the parked captures are taken from the front, the same
+        // number is the problem rather than the fix: at 77 degrees a chunky
+        // low-poly skull with the mask on its equator presents its BACK to the
+        // camera for most of a glance cycle, and it reads as a head spinning
+        // rather than as an animal looking at something.
+        // Pitch is biased upward. The rig sits above the occupants, so a
+        // symmetric range spends half its time showing the tops of two skulls;
+        // -0.35 rather than -0.5 puts the mean glance slightly above level,
+        // which is where a passenger looking out of a box actually looks.
+        o.glanceYaw.target = (hash(glanceSlot * 13 + i) - 0.5) * 1.6
+        o.glancePitch.target = (hash(glanceSlot * 29 + i * 5) - 0.35) * 0.42
       }
       // Blinks: 0.11s of closed eye. A spring on the lid means it is a blink,
       // not a dropped frame.

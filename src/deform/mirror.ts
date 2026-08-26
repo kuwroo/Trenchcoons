@@ -110,10 +110,35 @@ export class DeformMirror {
       for (const [sx, sy, w, h, dx, dy] of parts) {
         const buf = await renderer.readRenderTargetPixelsAsync(this.rt, sx, sy, w, h)
         const src = buf as unknown as Uint8Array
+        // ROWS COME BACK 256-BYTE ALIGNED, NOT TIGHTLY PACKED. WebGPU requires
+        // `bytesPerRow` to be a multiple of 256 on a texture-to-buffer copy and
+        // three obliges (`WebGPUTextureUtils.copyTextureToBuffer`: `bytesPerRow
+        // = ceil(width * bytesPerTexel / 256) * 256`), then hands the padded
+        // buffer straight back. Assuming `row * w * 4` is therefore only
+        // correct when the read is 64 texels wide or a multiple of it.
+        //
+        // The unsplit window is 256 wide and 1024 bytes a row, which is why
+        // this was invisible: the bug is in the WRAP SPLIT, whose sub-rect
+        // widths are whatever the car's position makes them. A window at
+        // x0 = 1960 reads 88 texels wide, assumes a 352-byte stride against an
+        // actual 512, and hands the physics a field skewed by 40 texels a row —
+        // silently, because every offset stays inside the buffer. About an
+        // eighth of x positions and an eighth of z positions do this, so
+        // roughly a quarter of the world grid was affected. The three SHORT
+        // captures cannot see it — the pan sits at x0 = 294 / y0 = 1004 and a
+        // 70 m run never leaves one unsplit window — but `tracks-persist`
+        // drives a 300 m loop, which is longer than the 256 m period at which
+        // the window wraps, so it crosses the split path in both axes and its
+        // PNG moves when this is wrong. That is the regression tripwire.
+        //
+        // The last row is short — three sizes the buffer as
+        // `(h - 1) * stride + w * 4`, not `h * stride` — so the copy is clamped
+        // rather than sliced blind.
+        const stride = Math.ceil(w * 4 / 256) * 256
         for (let row = 0; row < h; row++) {
-          const from = row * w * 4
+          const from = row * stride
           const to = ((dy + row) * WINDOW + dx) * 4
-          this.scratch.set(src.subarray(from, from + w * 4), to)
+          this.scratch.set(src.subarray(from, Math.min(from + w * 4, src.length)), to)
         }
       }
       this.data.set(this.scratch)
@@ -203,6 +228,24 @@ export function wheelDrag(s: MirrorSample, r: DeformResponse): WheelDrag {
   const bite = s.mask * (0.35 + 0.65 * depthFrac)
   return {
     drag: r.drag * bite,
-    latDamp: Math.max(0, r.grip - 0.88) * bite * 6,
+    // TWO-SIDED, around 1.0 rather than clamped at 0.88.
+    //
+    // `Math.max(0, r.grip - 0.88)` made the parameter inert for four of the
+    // seven biomes: snow (0.80), mud (0.86) and forest (0.88) all produced
+    // EXACTLY zero, so a slick rut was indistinguishable from pristine ground
+    // laterally and the system could only ever ADD lateral hold. That is the
+    // wrong way round for the one biome MILESTONES M4's done-when names —
+    // "driving in your own rut feels different from fresh snow" — where the
+    // whole point is that the rut is slicker than the ground beside it. The
+    // `grip` docstring says "<1 = the rut is slick"; now it is.
+    //
+    // Sign convention: positive damps the lateral velocity (a wet-sand rut has
+    // walls and they steer you), negative RELEASES it. See `applyToVehicle`
+    // for why the two sides are not applied symmetrically.
+    // 18, not the 6 the one-sided version used: the pivot moved from 0.88 to
+    // 1.0, so the same authored table now produces a third of the coefficient
+    // it used to. 18 restores wet sand's hold to the 1.08 /s it was tuned at
+    // and leaves the RATIOS between biomes exactly as the table authors them.
+    latDamp: (r.grip - 1) * bite * 18,
   }
 }

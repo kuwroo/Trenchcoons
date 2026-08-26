@@ -82,8 +82,20 @@ const RIG = {
    * entirely: the look point used to be pinned at carY + 1.02 forever.
    */
   lookaheadVert: 0.16,
-  /** Height above the chassis origin that the camera aims at. */
-  lookUp: 1.02,
+  /**
+   * Height above the chassis origin that the camera aims at.
+   *
+   * 1.24, up from 1.02, and the reason is who the subject is. The occupants'
+   * heads sit at chassis y 1.5 and the rig sits 2.55 m above the chassis, so
+   * aiming below the box rim put the camera 15-25 degrees ABOVE the two faces
+   * at every arm length — every capture in the set was the tops of two skulls,
+   * and the mask, the eyes and the blink could not be photographed from the
+   * game's own camera at all. Aiming between the box rim and the heads tips the
+   * whole frame up by a couple of degrees: the faces read, and the horizon
+   * comes back into shot, which also buys the car frames hue variety and lifts
+   * their shadow luminance (the foreground was the darkest thing in them).
+   */
+  lookUp: 1.24,
   /** How far the arm swings from the heading toward the velocity when sliding.
    *  This is what makes a drift show the car's flank. */
   slideYaw: 0.45,

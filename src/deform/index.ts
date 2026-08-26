@@ -19,7 +19,7 @@ import { DeformMirror, wheelDrag } from './mirror'
 import { BIOMES, biome, weatherDecay, type DeformResponse } from './biome'
 
 /** Half-width of a kart tyre's contact patch, metres. */
-const TYRE_HALF = 0.115
+const TYRE_HALF = 0.16
 
 /** A rectangular surface with a response of its own. See `world.pan`. */
 export interface DeformPatch {
@@ -114,7 +114,18 @@ export class Deformation {
     this.field.setResponse(this.patchResponse, this.worldResponse, patch)
   }
 
-  /** CPU-side twin of `DeformField.patchMask`. Physics and shading must agree. */
+  /**
+   * CPU-side twin of `DeformField.patchMask`. Physics and shading have to agree
+   * about which surface they are on, or the car drives on sand and the frame
+   * shows grass.
+   *
+   * Hard-edged where the shader feathers over 4 m. That is the whole
+   * difference, and it is deliberate: a blend of two `DeformResponse` records
+   * is meaningful for the SHADER, which is lerping colours, and meaningless for
+   * the stamp, which has to pick one `maxDepth` to scale a rut by. Four metres
+   * of disagreement on the boundary of a 120 x 260 m surface is not a thing any
+   * capture can see.
+   */
   private responseAt(x: number, z: number): DeformResponse {
     const p = this.patch
     if (!p) return this.patchResponse
@@ -193,13 +204,28 @@ export class Deformation {
       // A parked car still presses the ground, but only once — the stamp is
       // MAX-blended, so holding still cannot bore a hole.
       const moving = 0.28 + 0.72 * Math.min(1, speed / 1.4)
-      const depthM = r.maxDepth * Math.min(1, load * (0.22 + 1.5 * slip)) * moving
+      // DEPTH is where "hard cornering must visibly cut deeper than cruising"
+      // lives, and the two terms are deliberately multiplicative: a cruising
+      // wheel at rest load writes 0.19 of this surface's depth, a loaded,
+      // scrubbing one writes 0.9. Five times deeper, and wider with it.
+      const depthM = r.maxDepth
+        * Math.min(1, (0.25 + 0.75 * load) * (0.28 + 1.3 * slip)) * moving
+      // MASK is not scaled the same way. A wheel in firm contact has disturbed
+      // the ground it stood on whether or not it was sliding, so this floors
+      // near 0.5 at a cruise and saturates under load — the difference between
+      // cruising and cornering is meant to read as DEPTH and WIDTH, not as the
+      // mark fading out.
+      const mask = Math.min(1, (0.55 + 0.45 * load) * (0.85 + 0.5 * slip)) * moving
       this.stamps.push({
         ax, az, bx, bz,
         halfWidth: TYRE_HALF * (1 + 0.95 * slip),
         depth: Math.min(1, depthM / DEPTH_SCALE),
-        mask: Math.min(1, load * (0.62 + 0.8 * slip) * moving),
-        wet: r.wet * (0.55 + 0.45 * slip),
+        mask,
+        // Wetness is mostly a property of the GROUND, not of how hard the
+        // wheel was working — a beach is wet whether you cruise over it or
+        // slide. Slip only adds the last fifth, for the darker smear a
+        // scrubbing tyre pulls up out of the damp layer.
+        wet: r.wet * (0.8 + 0.2 * slip),
       })
     }
   }
@@ -246,7 +272,7 @@ export class Deformation {
     if (n === 0) return
     drag /= n
     latDamp /= n
-    if (drag <= 0 && latDamp <= 0) return
+    if (drag <= 0 && latDamp === 0) return
 
     const v = vehicle.velocity
     let vLong = v.dot(vehicle.forward)
@@ -255,10 +281,22 @@ export class Deformation {
     // reverse you out of itself.
     const dv = drag * dt
     vLong -= Math.sign(vLong) * Math.min(Math.abs(vLong), dv)
-    // Rut tracking. Damping the LATERAL component is what "the rut holds you"
-    // means mechanically, and it is the same knob that makes a slick snow rut
-    // (grip < 1, so latDamp 0) feel nothing like a wet-sand one.
-    vLat *= Math.max(0, 1 - latDamp * dt)
+    // Rut tracking, BOTH WAYS. Damping the LATERAL component is what "the rut
+    // holds you" means mechanically; a slick rut (grip < 1, so latDamp < 0)
+    // has to do the opposite, and until this round it did nothing at all —
+    // see `wheelDrag`.
+    //
+    // The two sides are deliberately NOT symmetric. The hold side is bounded
+    // by the rut wall, which can be arbitrarily strong, so it is a plain
+    // exponential decay. The slip side can only work by giving back some of
+    // the lateral grip the tyre model already applied this step — this code
+    // runs outside `Vehicle.update` and cannot reach into it — so it is scaled
+    // to a quarter and capped: at snow's grip 0.80 and a full-depth rut that
+    // is +35% of lateral speed per second, a felt slide, and it cannot run
+    // away no matter how the table is authored.
+    vLat *= latDamp >= 0
+      ? Math.max(0, 1 - latDamp * dt)
+      : 1 + Math.min(-latDamp, 3) * dt * 0.25
     v.copy(vehicle.forward).multiplyScalar(vLong)
       .addScaledVector(vehicle.right, vLat)
   }

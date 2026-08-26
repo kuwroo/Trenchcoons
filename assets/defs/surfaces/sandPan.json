@@ -1,0 +1,30 @@
+{
+  "id": "sandPan",
+  "version": 1,
+  "type": "surface",
+  "notes": "The tidal sand flat M4 lays its tracks on. Colour is the Capy Castaway sand of `sand`, pulled a shade damper and cooler so a wet mark has somewhere to go: refs/mkw/beach-wet-sand-tracks.jpg gets its whole effect from the CONTRAST between pale dry sand and a dark saturated track, and a base already at full brightness leaves the disturbed material nowhere darker to be. This is the only ground surface in the greybox tessellated finely enough to take the field's vertical displacement as geometry as well as as shading - see `buildSandPan`. gradientBase/Height are in the ground mesh's convention (vertices carry world Y), matching meadow.json.\n\nTHIRD AUTHORING OF THE BRUSHWORK, AND THE SECOND ONE WAS WRONG. `regionStep` was taken 0.30 -> 0.85 last round to clear tools/structure.mjs's gradient-concentration floor. It cleared it by doing the exact thing painterly.ts's `regionStep` docstring already records as REJECTED - the ground becomes large flat masses, a lava-lamp camouflage - and the proof is the gate's own output, not an opinion. Corridor local contrast (mean |L - boxblur(r=60)| x100 over the track corridor, x 0.30-0.70, y 0.62-1.00) measured 16.30 on tracks-fresh against 15.38 on tracks-decay: the frame WITH the marks scored 6% above the frame the marks had decayed out of, i.e. the surface's own masses were as loud as a tyre track. gradRatio said it the other way round - 12.7 for tracks-decay against 11.6 for tracks-fresh - so the four captures that exist to show the deformation field were passing the structure gate on `regionStep` noise rather than on the marks.\n\nWHAT THIS VERSION DOES. `regionStep` 0.85 -> 0.30 (below the meadow's 0.52; a tidal flat is smoother than a hillside) deletes the masses. `brushStrength` 0.25 -> 1.45 and `brushScale` 4.4 -> 6.5 put the surface's paint back where the references keep it, in stepped strokes at stroke scale rather than in continental blobs - and the bigger scale matters as much as the amplitude, because the LOD ladder clamps at rung -4, so `brushScale` is what sets the size of a near-field mark and a bigger mark spends fewer of its pixels being an edge. `detailStrength` 0.10 -> 0.025, `reliefShade` 0.35 -> 0.20 and `rimStrength` 0.20 -> 0.16 take out the three terms that lay a SOFT gradient across every pixel: on a plane seen at grazing incidence from a 3.5 m camera all three are near-constant washes, and a wash cannot be a brush mark.\n\nMEASURED AFTER, same corridor metric, on the committed captures: tracks-fresh 19.85 against tracks-decay 12.89. The marks now carry 54% more local contrast than the ground they are cut into, where last round they carried 6% more. Perpendicular-scanline dip below local median (window 6.25% of frame width) is 34-45% across the near rows of tracks-fresh against 6-19% on tracks-decay; last round the same two frames measured 24.1% and 23.2%, i.e. indistinguishable. Peak mark amplitude in the fresh-minus-decay difference is 78 luma, up from 36.\n\nWHY THE STRUCTURE GATE STILL PASSES WITHOUT THE BLOBS, stated plainly, because the last round's answer to this question was the mistake. gradRatio is p99 gradient over MEDIAN gradient. The blobs raised the numerator by shifting a whole ramp stop at a mass boundary; this version lowers the DENOMINATOR instead, by removing the soft-gradient terms above. That is the metric's own stated intent - 'more wobble everywhere, less contrast anywhere' is the failure it was written to catch - and it cannot be pushed further by turning a noise knob up, because medStd still has to land inside 0.056-0.080 (it does: 0.059-0.066 across the four) and tools/regress.mjs ratchets `detailErr` on exactly that band. Measured: gradRatio 29.4 / 29.4 / 13.0 / 17.0 on fresh / decay / corner / persist against a 9.52 floor, flat% 0-1.4 against a 12 ceiling, speckle 0. `detailStrength` is 0.025 rather than 0 for a reason: at 0 the median gradient drops below one 8-bit quantisation step and gradRatio stops measuring the picture at all, which would be gaming the proxy instead of satisfying it.\n\nTWO THINGS NOT FIXED HERE. (1) gradRatio for tracks-fresh does not EXCEED tracks-decay's; the two are level at 29.4. It cannot: a mark adds area as well as edges, so it lifts the median along with the p99. The two-sided way to read it is the ABSOLUTE p99 gradient, which is 0.1165 on fresh against 0.1155 on decay, plus the corridor contrast above. (2) The mark's floor is additive rather than multiplicative - the disturbed albedo is 0.20x the pristine one and the track still measures ~0.45x in linear luma, because aerial inscatter and bloom put light back on top of it. The reference's tracks reach a 97% scanline dip; ours reach 45%. Closing that is an atmosphere/post change, not a surface one.",
+  "material": {
+    "base": "#dfcb86",
+    "shadow": "#bf8d96",
+    "lit": "#fdf3c8",
+    "top": "#fff09a",
+    "topGain": 1.04,
+    "brushScale": 6.5,
+    "brushStrength": 1.45,
+    "saturationGain": 0.24,
+    "rimStrength": 0.16,
+    "gradientBase": -120,
+    "gradientHeight": 260,
+    "gradientStrength": 0.1,
+    "brushHue": 0.14,
+    "regionStep": 0.3,
+    "deform": 1,
+    "deformRelief": 1,
+    "deformNormal": 0.85,
+    "deformExpose": 1,
+    "deformSheen": 0.65,
+    "detailStrength": 0.025,
+    "reliefShade": 0.2,
+    "deformSpoil": 1
+  }
+}

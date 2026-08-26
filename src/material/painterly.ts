@@ -20,7 +20,7 @@
 import * as THREE from 'three/webgpu'
 import {
   cameraPosition, cos, cross, dFdx, dFdy, dot, exp2, float, floor, log2, luminance,
-  max, min, mix, modelWorldMatrix, mx_noise_float, normalLocal, normalWorld, normalize,
+  mix, modelWorldMatrix, mx_noise_float, normalLocal, normalWorld, normalize,
   positionLocal, positionWorld, pow, saturate, sign, sin, smoothstep, uniform, vec2,
   vec3, vec4,
 } from 'three/tsl'
@@ -173,9 +173,28 @@ export interface PainterlyParams {
    * response at full strength.
    */
   deform: number
-  /** How much of the field's vertical displacement this surface actually
-   *  takes. Separate from `deform` so a surface can mark without denting. */
+  /**
+   * How much of the field's vertical displacement this surface actually takes.
+   * Separate from `deform` so a surface can mark without denting.
+   *
+   * ZERO IS A COMPILE-TIME DECISION, not a multiply by nothing. A surface that
+   * takes no relief gets no `positionNode` at all, and therefore none of the
+   * vertex-stage texture fetches behind it. That matters because the surface
+   * this applies to is the greybox ground: one 8 km plane at 420x420 segments,
+   * 177k vertices, `frustumCulled = false`, drawn in the depth prepass and the
+   * opaque pass. Its quads are 19 m and a rut is 30 cm, so the displacement was
+   * mathematically unresolvable there — the mark on grass comes from
+   * `deformNormal` and the albedo blend, both of which still run. M2's CDLOD
+   * terrain is what earns it back.
+   */
   deformRelief: number
+  /**
+   * Whether this surface pays for the SPOIL ring in `displace` — the four extra
+   * taps that throw a lip up along a rut's edge. Only meaningful with
+   * `deformRelief` above zero. Authored, because a 40 cm lip on a mesh with
+   * quads wider than the lip is four texture fetches spent on nothing.
+   */
+  deformSpoil: number
   /**
    * Gain on the disturbed surface's shading normal.
    *
@@ -232,6 +251,7 @@ export const PAINTERLY_DEFAULTS: PainterlyParams = {
   // tyre mark at all.
   deform: 0,
   deformRelief: 1,
+  deformSpoil: 1,
   deformNormal: 1,
   deformExpose: 1,
   deformSheen: 0.5,
@@ -263,8 +283,9 @@ export interface DeformSample {
 
 export interface DeformHook {
   /** Signed vertical displacement in metres at a world position. Negative is a
-   *  rut; positive is the spoil thrown up along its edge. */
-  displace(worldPos: Node<'vec3'>): Node<'float'>
+   *  rut; positive is the spoil thrown up along its edge — which costs four
+   *  extra taps and is therefore authored per surface (`deformSpoil`). */
+  displace(worldPos: Node<'vec3'>, spoil?: boolean): Node<'float'>
   shade(worldPos: Node<'vec3'>): DeformSample
 }
 
@@ -695,18 +716,37 @@ export class PainterlyMaterial {
     const dfm = deform
       ? deform.shade(vec3(modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz))
       : null
-    if (deform) {
+    if (deform && this.params.deformRelief > 0) {
       // (a) TERRAIN VERTEX SHADER displaces by the height channel.
       //
       // Gated on the LOCAL up-axis so the vertical wall of a shore disc is not
       // dragged sideways by a rut on the flat beside it, and applied along
       // object Y — every mesh that opts in is an unrotated, unscaled ground
       // surface, which is the only case where that identity holds.
-      const disp = deform.displace(vec3(modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz))
+      //
+      // …and gated on `deformRelief` at COMPILE time, not just scaled by it.
+      // See the param's docstring: a surface whose quads are sixty times wider
+      // than a rut cannot show the displacement, and emitting it anyway spent
+      // ten vertex-stage texture fetches per vertex on the one mesh in the
+      // build with 177k of them.
+      const disp = deform.displace(
+        vec3(modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz),
+        this.params.deformSpoil > 0,
+      )
       const facing = smoothstep(0.45, 0.9, normalLocal.y)
       this.material.positionNode = vec3(positionLocal.add(
         vec3(0, disp.mul(u.deform).mul(u.deformRelief).mul(facing), 0),
       ))
+      // KNOWN GAP, stated rather than hidden: the shadow cascades render with
+      // `scene.overrideMaterial = this.casterMaterial` (src/atmosphere/
+      // sunShadow.ts), which replaces `positionNode`, so a displaced rut casts
+      // an UNdisplaced shadow. It is invisible today — the deepest rut ART_BIBLE
+      // allows is 0.35 m against a cascade texel of several metres, so the
+      // displaced and undisplaced depths land in the same texel — and it is not
+      // fixable from here: sunShadow.ts belongs to M1 and is outside this
+      // milestone's files. It becomes real the moment M2's CDLOD terrain gives
+      // the displacement geometry worth shadowing, and the fix is for the caster
+      // material to take the same `positionNode`, not for this to change.
     }
     if (dfm) {
       // (b) …and the FRAGMENT normal takes the fine structure the vertices

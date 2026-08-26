@@ -72,8 +72,22 @@ const JUMP = 'time=0.45&warmup=64&spawn=-160,1040&caryaw=3.142'
 // to the nearest dry, gentle, unobstructed point — which is 29 m inside the
 // pan's +x edge with 190 m of pan ahead of it along -z.
 const PAN = 'time=0.62&deform=1&warmup=64&spawn=-1000,150&caryaw=0'
-// Accelerate, then brake to a stop. Shared by `tracks-fresh` and `tracks-decay`
-// so the only difference between those two frames is how long ago it happened.
+// Accelerate, brake, and COME TO REST. Shared by `tracks-fresh` and
+// `tracks-decay`, and the resting matters as much as the driving: the car is
+// stationary at (-971.2, 83.73) from frame 330 onward and never moves again, so
+// both captures are taken with the chase camera settled at the same place. The
+// A/B is elapsed time and nothing else.
+//
+// MEASURED, `__trench.cam()`: frame 400 (-971.238, -58.447, 103.228), frame
+// 1200 (-971.238, -58.447, 103.225) — three millimetres apart at a 19 m arm,
+// which is well under a tenth of a pixel. The previous pair took `fresh` at frame 270 with
+// the car still rolling at 8.2 m/s, so the camera moved 1.5 m between the two
+// and 94% of the pixels differed; the sky alone differed by a mean of 14.5/255
+// and swamped the thing the pair was supposed to isolate.
+//
+// The brake input is the reverse channel (see replay.ts), so the last 1.6 s of
+// this script backs the car up 9.7 m over its own tracks. That doubled patch is
+// the deepest ground in the frame and it is the last thing to disappear.
 const PAN_RUN = 'drive=throttle:0-150@0.62,brake:150-235'
 
 export const SHOTS = [
@@ -272,11 +286,17 @@ export const SHOTS = [
   // the lower half. Capture-only, on the real rig; the simulated pose is
   // identical either way.
   //
-  // A straight run at speed, marks a fraction of a second old. Two clean
-  // parallel lines: at a cruise the wheels write mask 0.61 and depth 0.19 of
-  // the surface maximum, which on wet sand is a 1.9 cm rut.
-  //   frame 270 is 0.6 s after the brake releases — 8.2 m/s, 4/4 contact.
-  { name: 'tracks-fresh',   q: `${PAN}&${PAN_RUN}&frame=270&camarm=3.0` },
+  // FRESH. The car has just come to rest at the end of the run and the ground
+  // between it and the camera is the track it laid getting there: two clean
+  // parallel lines a couple of seconds old, plus the doubled patch where it
+  // backed up under the brake.
+  //   frame 400 — 1.2 s parked at (-971.238, 83.725), speed 0.00, 4/4 contact,
+  //   camera settled (see PAN_RUN). MEASURED through `__trench.deform` along the
+  //   wheel line at 2/5/8/12 m behind the car: mask 0.525 / 0.574 / 0.632 /
+  //   0.494, depth 0.0047 / 0.0063 / 0.0089 / 0.0027 m. That is what a CRUISE
+  //   writes on wet sand — half a centimetre — and `tracks-corner`, at 8.7 cm
+  //   and mask 0.99, is the other end of the same scale.
+  { name: 'tracks-fresh',   q: `${PAN}&${PAN_RUN}&frame=400&camarm=3.0` },
   // Full lock at 35 m/s, slip ratio 0.16 — the car is genuinely travelling
   // sideways. Against `tracks-fresh`, from the same camera on the same ground:
   // the two thin lines become one broad dark swathe. That is the spec's "hard
@@ -285,31 +305,63 @@ export const SHOTS = [
   // surface maximum, five times deeper) while scrub drives WIDTH (the stamp
   // capsule widens by up to 95%).
   { name: 'tracks-corner',  q: `${PAN}&drive=throttle:0-9999@0.55,steerLeft:44-9999&frame=130&camarm=3.0` },
-  // Drive away and come back. A 300 m loop at full throttle: the car gets 312 m
-  // from the start line, which is well outside the 128 m half-span of the near
-  // field, so the marks it laid on the way out are evicted from the 2048² tier
-  // entirely and survive only in the 1024²/2 km committed one. On the return
-  // they are demoted back — the soft wide band crossing ahead of the car, at
-  // the committed tier's own 2 m per texel, against the sharp near-field lines
-  // it is laying now. The resolution difference between the two IS the tiering,
-  // visible in one frame.
-  { name: 'tracks-persist', q: `${PAN}&drive=throttle:0-9999,steerLeft:300-9999@0.30&frame=1400&camarm=2.2` },
-  // The SAME drive script and the SAME camera as `tracks-fresh`, with the car
-  // parked where it stopped. Diffed against `tracks-fresh` this is a controlled
-  // A/B on one variable: elapsed time.
+  // Drive away and come back — MILESTONES M4's done-when, as one frame.
   //
-  // Was frame 930, with a comment claiming the shallow marks had "gone
-  // completely". That is arithmetically impossible against the numbers in the
-  // same sentence: braking ends at frame 235, so 930 is 11.6 s later, and wet
-  // sand refills over 45 s (ART_BIBLE §4, Coast) — about 26% of the way. Two
-  // independent critics flagged that the capture does not show decay while its
-  // own comment says it does.
+  // Out along the pan at full throttle, a full-lock U-turn at the far end, back
+  // up the far side, and a second full-lock turn that brings the car ACROSS its
+  // own outward track at right angles. At the far point of the loop the car is
+  // 205 m in z from the marks it laid on the way out — the near tier's half-span
+  // is 128 m — so those marks are evicted from the 2048² tier entirely and
+  // survive only in the 1024²/2 km committed one. Coming back demotes them.
   //
-  // 2400 is 36 s after braking, ~80% through the refill, which is late enough
-  // for the shallow cruising marks to be gone while the deep braking scar
-  // nearest the car is still readable. That is the contrast the shot exists to
-  // demonstrate.
-  { name: 'tracks-decay',   q: `${PAN}&${PAN_RUN}&frame=2400&camarm=3.0` },
+  // WHY IT CROSSES rather than merely passing near. The previous version drove a
+  // 110 m-radius circle and came back alongside the outward leg, which put the
+  // demoted band 13 m off the frame's axis in a haze of brushwork; both critics
+  // said the one shot whose job is "find your tracks" did not carry its subject.
+  // Crossing puts the old band perpendicular to the view, between the camera and
+  // the car, with the fresh track running through it.
+  //
+  // MEASURED at frame 890, mapping `__trench.deform` on a 1 m grid around the
+  // car: a 4-5 m wide band at x -973..-969 running the full 31 m of the window
+  // at mask 0.22-0.44 and depth 0.000 — the rut has long since filled and only
+  // the stain is left, which is what a 15-second-old mark on wet sand should be
+  // — crossed by the fresh trail at mask 0.7-0.9. Two textures in one frame: the
+  // committed tier's 2 m per texel against the near tier's 12.5 cm.
+  //
+  // It is also 510 frames cheaper to capture than the loop it replaces.
+  { name: 'tracks-persist', q: `${PAN}&drive=throttle:0-9999,steerLeft:300-500@1.0,steerLeft:735-830@1.0&frame=890&camarm=2.6` },
+  // The SAME drive script, the SAME parked car and the SAME camera as
+  // `tracks-fresh`, 13.3 s later. One variable: elapsed time.
+  //
+  // THIS SHOT WAS THE ROUND'S BIGGEST FAILURE and it was two failures stacked.
+  // It was taken at frame 930 with a comment claiming the shallow marks had
+  // "gone completely", and they had not — measured through `__trench.deform`,
+  // the mask 2 m behind the car was still 0.361 and 12 m behind still 0.342,
+  // and since the material draws the mark almost entirely from that channel the
+  // capture showed two full-length, fully readable ruts. It also called itself a
+  // controlled A/B while the car rolled 3.2 m between the two frames and took
+  // the chase camera with it.
+  //
+  // The camera half is fixed by parking both frames (see PAN_RUN). The decay
+  // half was a real bug in the field, not a frame number: R decays at a rate
+  // scaled to the surface while G decayed on an absolute `maskLife`, so a
+  // half-centimetre scuff lost its rut in four seconds and kept its stain for
+  // thirty-five. `STAIN_BARE` in src/deform/field.ts ties the two together.
+  //
+  // MEASURED HERE, same probe as `tracks-fresh`, same offsets: depth 0.0000 at
+  // all four — the ruts are gone, not shallower — and mask 0.063 / 0.115 /
+  // 0.187 / 0.032, an eighth to a third of what it was. Through the material's
+  // toe and gamma that leaves at most a fifth of the mark's contrast, which is
+  // what the frame shows: no readable track anywhere in it. The numbers are
+  // quoted rather than rounded to zero because the last round's comment rounded
+  // to zero and was wrong.
+  //
+  // The pair is gated, not asserted. `npm run distinct` measures the difference
+  // between these two frames inside the track corridor and against bare sand
+  // either side of it, and requires the first to be at least twice the second:
+  // 8.65 vs 1.97, ratio 4.39. The capture this replaces scores 19.27 vs 18.94,
+  // ratio 1.02 — a whole-frame difference with nothing in the subject.
+  { name: 'tracks-decay',   q: `${PAN}&${PAN_RUN}&frame=1200&camarm=3.0` },
 ]
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173'
