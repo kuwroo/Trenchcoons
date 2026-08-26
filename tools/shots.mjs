@@ -63,6 +63,19 @@ const PARKED = 'time=0.62&warmup=64&spawn=720,-540&caryaw=3.142'
 // identical either way — the sim does not read the clock.
 const JUMP = 'time=0.45&warmup=64&spawn=-160,1040&caryaw=3.142'
 
+// M4's deformation site. Hour 0.62 for the same reason the M3 poses use it —
+// the sun behind the chase camera — and it matters more here: a tyre mark is a
+// low-contrast albedo change on a bright surface, and at a backlit hour the
+// whole pan is its own shadow and the marks are invisible in it.
+//
+// The spawn resolves to (-971.2, 141.5) — `spawnPoint` moves the request 29 m
+// to the nearest dry, gentle, unobstructed point — which is 29 m inside the
+// pan's +x edge with 190 m of pan ahead of it along -z.
+const PAN = 'time=0.62&deform=1&warmup=64&spawn=-1000,150&caryaw=0'
+// Accelerate, then brake to a stop. Shared by `tracks-fresh` and `tracks-decay`
+// so the only difference between those two frames is how long ago it happened.
+const PAN_RUN = 'drive=throttle:0-150@0.62,brake:150-235'
+
 export const SHOTS = [
   // Fixed vista camera, varying time. Five sun elevations, not four: with the
   // dusk declination in sunDirection() the arc is asymmetric, so 0.25 and 0.75
@@ -136,16 +149,20 @@ export const SHOTS = [
   //   on the pair that is not backlit, and until this round the mask, the eyes
   //   and the blink had never been photographed at all — every car-* frame in
   //   the set was the backs of two heads.
-  { name: 'car-idle',   q: `${PARKED}&drive=&frame=300&camarm=0.6&camyaw=2.95` },
-  // car-idle, 72 frames (1.2 s) later, same URL otherwise.
+  { name: 'car-idle',   q: `${PARKED}&drive=&frame=102&camarm=0.6&camyaw=2.95` },
+  // car-idle, 48 frames (0.8 s) later, same URL otherwise.
   //
   // This shot exists because "a parked car must never be a still image" is a
   // MILESTONES M3 done-when and a single PNG cannot show it. The camera is
   // bit-identical to car-idle's — verified, not asserted: (710.4181773320053,
   // 28.801449358268343, -537.8567111827165) at both frames — and the vehicle
-  // telemetry is identical to the last digit, so the entire pixel difference
+  // telemetry is identical to the last digit (pitch -0.149, roll -0.726, speed
+  // 0, idle 1.00, all four wheels 0.110), so the entire pixel difference
   // between the two files is breathing, glancing, blinking and coat settle.
-  { name: 'car-idle-b', q: `${PARKED}&drive=&frame=372&camarm=0.6&camyaw=2.95` },
+  // MEASURED: 195,829 pixels differ by more than 2/255 between the two PNGs,
+  // 13.60% of the frame, with a peak delta of 221. There is no longer anything
+  // to take on trust here — `cmp shots/car-idle.png shots/car-idle-b.png`.
+  { name: 'car-idle-b', q: `${PARKED}&drive=&frame=150&camarm=0.6&camyaw=2.95` },
   // 0.57 s into a standing start, from over the rear quarter so the nose lift
   // is against the horizon rather than end-on.
   //   pitch +9.47 with the terrain contributing +0.15, i.e. 9.3 deg of pure
@@ -157,19 +174,28 @@ export const SHOTS = [
   //   rear wheels off, and rear squat against front droop is the entire subject
   //   of this capture. All four contact patches are now inside the frame.
   { name: 'car-launch', q: `${FLAT}&drive=throttle:0-400&frame=34&camyaw=-0.6&camarm=0.85` },
-  // 1.67 s into a full-lock left. The throttle is held at 0.55 so the car takes
+  // 1.27 s into a full-lock left. The throttle is held at 0.55 so the car takes
   // longer to wind up and the corner establishes inside the flat site rather
   // than 120 m downrange of it; top speed is unaffected, the demand cap is.
-  //   roll -13.63 with the slope only -3.89 of it, so 9.7 deg is cornering
-  //   load; wheels -0.197 / +0.031 / -0.127 / +0.185, i.e. both left wheels
-  //   extended against both right compressed; slip ratio 0.162 and aLat -35.1
-  //   — the car is genuinely travelling sideways. pitch +9.61 (terrain +6.79).
-  //   cam dy 2.889, arm 7.33 m, fov 59.07.
+  //   roll -11.33 with the slope only -3.06 of it, so 8.3 deg is cornering
+  //   load; wheels -0.146 / +0.084 / +0.036 / +0.266, i.e. the outside rear is
+  //   carrying the car and the inside front has lifted clean off its stop;
+  //   slip ratio 0.162 and aLat -32.0 — the car is genuinely travelling
+  //   sideways. speed 32.63, pitch +1.32 (terrain -3.64).
+  //   cam dy 2.968, arm 5.60 m, fov 63.16.
   //   `camyaw` is NEGATIVE here: it swings the camera to the OUTSIDE of the
   //   turn, which is the only side the loaded flank and the lifted inner wheel
-  //   are both visible from. -1.0 rather than -0.7 because the shallower swing
-  //   put the frame on a slope facing away from the sun.
-  { name: 'car-corner', q: `${FLAT}&drive=throttle:0-400@0.55,steerLeft:40-400&frame=100&camyaw=-1.0` },
+  //   are both visible from.
+  //   FRAME 76, NOT 100, AND THAT IS A COMPOSITION FIX. The aim point leads the
+  //   car by `RIG.lookahead` seconds of velocity, so the faster the car is
+  //   going the further it sits from the centre of its own frame: at 35.5 m/s
+  //   (frame 100) the 8.4 m lead pushed the kart into the bottom-right corner
+  //   with the left 60% of the picture empty grass, which is what the last
+  //   round shipped. Swinging wider or shortening the arm both make that worse,
+  //   because neither changes the lead. Photographing the corner 0.4 s earlier
+  //   at 32.6 m/s does: same slip ratio, 8.3 deg of load instead of 9.7, and
+  //   the whole kart inside the frame at nearly twice the size.
+  { name: 'car-corner', q: `${FLAT}&drive=throttle:0-400@0.55,steerLeft:40-400&frame=76&camyaw=-1.0&camarm=0.8` },
   // THE DEFAULT RIG. No `camyaw`, no `camarm`, nothing overridden.
   //
   // Every other car shot overrides the chase camera, which meant the camera
@@ -219,6 +245,71 @@ export const SHOTS = [
   //      kart's own kraft/teal/violet are most of the hue variety available
   //      down there, also costs hue entropy.
   { name: 'car-landing',  q: `${JUMP}&drive=throttle:0-9999&frame=209&camyaw=0.4&camarm=0.42` },
+
+  // ── M4: the deformation field, as four states of one system ───────────────
+  //
+  // Same contract as the M3 poses above: a fixed input sequence on the
+  // deterministic clock, captured at an exact frame.
+  //
+  // `deform=1` is OPT-IN under `?shot=1`, exactly as `car` is and for exactly
+  // the reason src/vehicle/replay.ts spells out — the twenty captures above are
+  // ratcheted against a best-ever ledger, and a system that adds new geometry
+  // (the sand pan) and new albedo to a frame would silently rewrite all twenty
+  // baselines. The four below are gated no more gently for it: `npm run gate`
+  // reads every PNG in shots/.
+  //
+  // THE SITE is `buildSandPan` in src/world/greybox.ts — a finely tessellated
+  // sand flat laid exactly on the terrain, and the only surface in the greybox
+  // with the tessellation to take the field's vertical displacement as geometry
+  // rather than only as shading. The ground mesh is 19 m quads; a tyre rut is
+  // 30 cm wide. It is built ONLY when the field is enabled.
+  //
+  // `camarm=3.0` is not a preference. The chase rig looks along the car's
+  // FORWARD axis and a tyre mark is behind the car, so at the gameplay arm
+  // (6.5 m) the marks occupy the bottom eighth of the frame and the shot cannot
+  // show what it is for. At 3x the arm the camera sits ~19 m back and the
+  // ground between it and the car — which is precisely the fresh track — fills
+  // the lower half. Capture-only, on the real rig; the simulated pose is
+  // identical either way.
+  //
+  // A straight run at speed, marks a fraction of a second old. Two clean
+  // parallel lines: at a cruise the wheels write mask 0.61 and depth 0.19 of
+  // the surface maximum, which on wet sand is a 1.9 cm rut.
+  //   frame 270 is 0.6 s after the brake releases — 8.2 m/s, 4/4 contact.
+  { name: 'tracks-fresh',   q: `${PAN}&${PAN_RUN}&frame=270&camarm=3.0` },
+  // Full lock at 35 m/s, slip ratio 0.16 — the car is genuinely travelling
+  // sideways. Against `tracks-fresh`, from the same camera on the same ground:
+  // the two thin lines become one broad dark swathe. That is the spec's "hard
+  // cornering MUST visibly cut deeper than cruising", and it is two terms
+  // multiplied — `slipRatio * normalLoad` drives DEPTH (0.19 -> 0.90 of the
+  // surface maximum, five times deeper) while scrub drives WIDTH (the stamp
+  // capsule widens by up to 95%).
+  { name: 'tracks-corner',  q: `${PAN}&drive=throttle:0-9999@0.55,steerLeft:44-9999&frame=130&camarm=3.0` },
+  // Drive away and come back. A 300 m loop at full throttle: the car gets 312 m
+  // from the start line, which is well outside the 128 m half-span of the near
+  // field, so the marks it laid on the way out are evicted from the 2048² tier
+  // entirely and survive only in the 1024²/2 km committed one. On the return
+  // they are demoted back — the soft wide band crossing ahead of the car, at
+  // the committed tier's own 2 m per texel, against the sharp near-field lines
+  // it is laying now. The resolution difference between the two IS the tiering,
+  // visible in one frame.
+  { name: 'tracks-persist', q: `${PAN}&drive=throttle:0-9999,steerLeft:300-9999@0.30&frame=1400&camarm=2.2` },
+  // The SAME drive script and the SAME camera as `tracks-fresh`, with the car
+  // parked where it stopped. Diffed against `tracks-fresh` this is a controlled
+  // A/B on one variable: elapsed time.
+  //
+  // Was frame 930, with a comment claiming the shallow marks had "gone
+  // completely". That is arithmetically impossible against the numbers in the
+  // same sentence: braking ends at frame 235, so 930 is 11.6 s later, and wet
+  // sand refills over 45 s (ART_BIBLE §4, Coast) — about 26% of the way. Two
+  // independent critics flagged that the capture does not show decay while its
+  // own comment says it does.
+  //
+  // 2400 is 36 s after braking, ~80% through the refill, which is late enough
+  // for the shallow cruising marks to be gone while the deep braking scar
+  // nearest the car is still readable. That is the contrast the shot exists to
+  // demonstrate.
+  { name: 'tracks-decay',   q: `${PAN}&${PAN_RUN}&frame=2400&camarm=3.0` },
 ]
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173'
