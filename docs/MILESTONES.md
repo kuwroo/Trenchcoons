@@ -52,15 +52,45 @@ painterly scenes, and the saturation matches `refs/painterly/cliffs-tohad.jpg`.
 sea with no visible seam, and the same line in another direction gives
 grassland → desert → beach → sea. No hand-authored transition anywhere.
 
-## M3 — Vehicle
+## M3 — Vehicle + couch co-op ★
+**Couch co-op is CONFIRMED**, carried over from the Godot build:
+
+| player | controls |
+|---|---|
+| P1 | steering — `A` / `D` |
+| P2 | throttle and brake — `Up` / `Down` |
+
+Two players, one keyboard, one car. This is the hook, not a fallback — it makes
+every surface-friction change a negotiation between two people, which is what
+the deformation system is ultimately for. Single-player fallback maps all four
+to one player.
+
 - Rapier raycast vehicle, tuned from the Godot feel constants
-- Chase camera — spring arm, velocity lookahead, FOV punch. (The Godot build
-  called `look_at` every physics frame with no smoothing. Don't port that.)
+  (max_speed 35, accel 60, friction 8, turn 4.5)
 - Per-surface friction from the splat map at each wheel contact
 - Engine audio, pitch by speed
 
+### Animation feel — an explicit requirement, not polish
+High-fidelity *motion*, all procedural — there are no rigged assets, so nothing
+here is keyframed:
+
+- **Suspension travel** per wheel from the raycast hit distance, critically
+  damped. Visible compression over bumps and under braking.
+- **Body roll and pitch** driven by lateral and longitudinal acceleration, with
+  a spring-damper so it overshoots slightly and settles.
+- **Squash and stretch** on hard landings — brief, subtle, Capy-Castaway-style.
+- **Chase camera**: spring arm with velocity lookahead, FOV punch on
+  acceleration, and lag that eases rather than snapping. The Godot build called
+  `look_at` every physics frame with no smoothing — do not port that.
+- **Idle**: the box breathes, the raccoons shift and blink, the coat settles.
+  A parked car must never be a still image.
+- **Wheel spin** rate from actual contact velocity, with slip when it exceeds
+  grip.
+- One shared easing/spring utility, so nothing in the game moves linearly.
+
 **Done when:** grass, snow, sand, road, and mud each feel distinct to drive on
-without looking at the screen.
+without looking at the screen; and a parked, untouched car is still visibly
+alive.
 
 ## M4 — Deformation field ★
 See ARCHITECTURE §"The deformation field".
@@ -124,10 +154,8 @@ Two registers, blended by depth:
 
 ## Open questions
 
-- **2-player couch co-op?** The Godot build had one player steering (A/D) and
-  another accelerating (arrows). Distinctive hook, but it constrains the input
-  layer. **Decide before M3.**
-- Characters and animation — not scheduled yet.
+- Characters: the raccoon pair and trenchcoat still need modelling. Style is
+  settled from `refs/character/`, the coat and box are not.
 - Any actual game loop: objectives, progression, the driving-licence premise.
 
 ## Reference gaps

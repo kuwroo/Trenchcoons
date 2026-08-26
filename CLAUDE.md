@@ -51,16 +51,42 @@ Clouds:    pink and lavender, not white.
 - **Ambient comes from the sky LUT**, never a constant.
 - Perf: 16.6ms @ 1080p, <1500 draw calls, <400MB GPU memory.
 
+## Controls — couch co-op (confirmed)
+
+Two players, one keyboard, one car. P1 steers with `A`/`D`; P2 throttles and
+brakes with `Up`/`Down`. This is the hook, not a fallback.
+
+## Motion rule
+
+Nothing in this game moves linearly. Every transition — camera, suspension,
+body roll, UI, idle — goes through the shared spring/easing utility. A parked
+car must still be visibly alive. See MILESTONES M3.
+
 ## Verifying visual work
 
 Screenshots are the feedback signal — not "it compiles".
 
 ```
-npm run dev        # game
-npm run forge      # asset forge
-npm run shots      # headless capture -> PNGs
+npm run dev        # game (HMR)
+npm run shots      # headless capture -> shots/*.png
+npm run gate       # palette + shadow + structure + hue + distinct
+npm run perf       # frame stability; needs `vite preview`, NOT dev (HMR
+                   # reloads mid-measurement and kills the context)
 npm run typecheck
 ```
+
+### The gates are the bar
+Each is calibrated so all six images in `refs/` pass. If a gate fails your
+output, your output is wrong. **Do not loosen a threshold to pass** — adding new
+diagnostic output is fine, moving the bar is not.
+
+Every gate needs a floor AND a ceiling. Three separate one-sided metrics were
+gamed during M1: `shadowSat` rewarded navy shadows, `vRange` rewarded crushed
+darks, `medStd` rewarded high-frequency noise over brushwork. A one-sided metric
+is an invitation to optimise the proxy instead of the goal.
+
+Before trusting any new gate, run it against `refs/` first. Three of the five
+were mis-calibrated on the first write and only caught that way.
 
 Any world state is reproducible from a URL:
 ```
