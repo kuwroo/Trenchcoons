@@ -42,6 +42,28 @@ Biomes:    must be distinguishable by more than hue — ground, scatter, rock
            form, grass density and light all change together.
 ```
 
+## Known issue: cast shadows go blue
+
+The most visible fault in the build. Measured on one frame, meadow camera at
+noon:
+
+  lit ground          rgb(167,224,95)  H 87  S0.58  V0.88   correct green
+  cast shadow pool    rgb( 37, 90,117)  H201  S0.68  V0.46   blue, 114deg off
+
+Shadowed ground takes the SKY's hue rather than a tint of the ground beneath it.
+ART_BIBLE §2 requires a bias of about 40 degrees that stays in the material
+family; the reference runs lit H99 -> shadow H136, a 37-degree shift.
+
+`npm run complaints` gates this and reports 73 degrees, NOT 114 — it averages
+the darkest fifth of the whole frame, so ordinary shading dilutes the pools. The
+gate is directionally right and understates the fault; trust the pool
+measurement when judging a fix.
+
+Mechanism: in shadow the direct term is ~0, so the surface renders as
+albedo x ambient. If ambient carries full sky chroma the albedo is erased. The
+fix belongs in how ambient combines with albedo — ambient must TINT, not
+replace — and not in any value in assets/defs, which cannot reach this.
+
 ## Known issue: the palette only survives in mid-tones
 
 Measured on one frame at the meadow camera (pos 2160,0,-420, eye 6), sampled
