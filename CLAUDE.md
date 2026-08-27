@@ -164,13 +164,14 @@ Ruled out by measurement, so nobody re-derives them:
     `src/terrain/ground.ts`, which is not a `PainterlyMaterial`.
   * `assets/defs/surfaces/meadow.json` — its stops were already right.
 
-Related lead, unverified: the `top` / vertical-gradient path looks DEAD for the
-instanced grass. `top` set to pure black at `gradientStrength: 1.0` on both grass
-surfaces changed the near band by nothing at all, while changing `base` on the
-same surfaces in the same build moved it. `top` IS uploaded (painterly.ts
-`set()`) and `resolveMaterial` gives a tuft `gradientBase: 0, gradientHeight:
-0.5`, so `rise` should reach ~0.8 at the tips. Suspect `positionLocal` in the
-fragment stage against the custom `positionNode` grass.ts installs.
+Resolved, and worth knowing about as a class of bug: the vertical-gradient term
+was dead on every blade of grass in the game. `positionLocal` is
+SELF-REFERENTIAL in any material that overrides `positionNode` — grass does, for
+wind and crush — so the gradient read the node being defined in terms of it and
+evaluated to nothing. Fixed by reading `positionGeometry`, which is also what
+the gradient wants (the sweep should be locked to the form, not slide down a
+blade as the wind bends it). If you add another material with a `positionNode`,
+this is the trap.
 
 ## Known issue: "I don't see tyre marks"
 
