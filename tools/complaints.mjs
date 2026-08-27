@@ -365,35 +365,66 @@ if (!sh) {
     `gap ${sh.gap.toFixed(0)}deg (ref 37, must be <=60)`)
 }
 
-// 8. Does distance read as blue haze?
+// 8/9. Does distance read as blue haze, and does the foreground stay warm?
 //
-// The single largest remaining gap against the reference, and the thing that
-// makes it read as deep. Rows from the horizon band down to the foreground are
-// a proxy for distance; a real aerial perspective rotates ground hue toward the
-// sky across that span.
+// TWO INSTRUMENT BUGS FIXED HERE, BOTH MINE, BOTH OF WHICH MADE A WORKING
+// FEATURE MEASURE AS BROKEN. Recorded because each one produced a confident,
+// specific and wrong diagnosis, and the second is subtle.
 //
-//   reference  H199 -> H78   121 degrees of rotation
-//   ours       H125 -> H111   14 degrees
-//              H122 -> H98    24 degrees
+//   1. THE CAMERA HAD NO DISTANCE IN IT. This ran at `eye=6` looking along a
+//      near hillside: the whole frame is grass 10-100 m out with a ridge at the
+//      top. No aerial-perspective term can rotate hue across a frame that has
+//      no depth range, so the 14 degrees it reported was a property of the
+//      CAMERA, not of the atmosphere. Reading it as an engine fault cost a
+//      round. The shot is now a meadow vista with real depth -- distant ridges,
+//      mid-distance hills, foreground grass -- which is also what the reference
+//      it is compared against actually is.
+//
+//   2. BAND AVERAGES WERE CONFOUNDED BY SHADOW. A flat mean over each row mixes
+//      lit and shadowed ground, and shadowed ground in this build goes BLUE, so
+//      a near band full of shadow reads as though it were distant. Measured on
+//      greybox-noon, whose foreground hill is plainly green, the old metric
+//      returned H178 for it. Each band now keeps only its brightest half, so
+//      the ladder compares lit ground against lit ground.
+//
+//   3. AND IT IS DIRECTIONAL. `abs(far - near)` scores an INVERTED ladder just
+//      as highly as a correct one: a candidate camera at eye=160 ran H153 far
+//      to H221 near -- foreground bluer than distance, i.e. exactly backwards --
+//      and scored 67 on the old metric. The drop is now signed.
 //
 // Measured within ONE frame, so it cannot be satisfied by tinting the whole
-// scene blue — only by distance actually behaving differently from foreground.
-await load('shot=1&car=0&time=0.42&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06')
+// scene blue -- only by distance behaving differently from foreground.
+//
+//   reference  H199 -> H73   126 degrees, S0.51 -> S0.56
+//   this build H222 -> H111  111 degrees, S0.35 -> S0.30
+//
+// So the haze itself is right and the FOREGROUND is the remaining gap: the
+// reference's near grass is warm (H73) and chromatic (S0.56) where ours is cool
+// (H111) and washed (S0.30). That is the lit end of the palette failing to
+// warm, which CLAUDE.md documents separately -- it is gated below on its own
+// rather than hidden inside the rotation number.
+await load('shot=1&car=0&time=0.42&warmup=48&pos=2160,120,-420&look=1.15,-0.10')
 const ladderPng = await shot(page)
 function depthLadder(png, bands = 5) {
   const { width: W, height: H, data } = png
   const out = []
   for (let b = 0; b < bands; b++) {
-    const ya = Math.floor(H * (0.40 + 0.58 * b / bands))
-    const yb = Math.floor(H * (0.40 + 0.58 * (b + 1) / bands))
-    let r = 0, g = 0, bl = 0, n = 0
+    const ya = Math.floor(H * (0.34 + 0.64 * b / bands))
+    const yb = Math.floor(H * (0.34 + 0.64 * (b + 1) / bands))
+    const px = []
     for (let y = ya; y < yb; y += 2) {
-      for (let x = Math.floor(W * 0.3); x < Math.floor(W * 0.7); x += 2) {
+      for (let x = Math.floor(W * 0.15); x < Math.floor(W * 0.85); x += 2) {
         const i = (y * W + x) * 4
-        r += data[i]; g += data[i + 1]; bl += data[i + 2]; n++
+        const r = data[i], g = data[i + 1], bl = data[i + 2]
+        px.push([r, g, bl, 0.2126 * r + 0.7152 * g + 0.0722 * bl])
       }
     }
-    r /= n; g /= n; bl /= n
+    // Brightest half only — see instrument bug 2 above.
+    px.sort((a, c) => c[3] - a[3])
+    const sel = px.slice(0, Math.max(1, Math.floor(px.length * 0.5)))
+    let r = 0, g = 0, bl = 0
+    for (const q of sel) { r += q[0]; g += q[1]; bl += q[2] }
+    r /= sel.length; g /= sel.length; bl /= sel.length
     const mx = Math.max(r, g, bl), mn = Math.min(r, g, bl), d = mx - mn
     let h = 0
     if (d) {
@@ -402,18 +433,46 @@ function depthLadder(png, bands = 5) {
       else h = ((r - g) / d + 4)
       h *= 60
     }
-    out.push({ h, v: mx / 255 })
+    out.push({ h, v: mx / 255, s: mx ? d / mx : 0 })
   }
   return out
 }
 const L = depthLadder(ladderPng)
-let rot = Math.abs(L[0].h - L[L.length - 1].h)
-if (rot > 180) rot = 360 - rot
-// Half the reference's 121 degrees, which is generous and still separates
-// cleanly from the 14-24 the build currently produces.
-check('distance reads as blue haze', rot >= 60,
-  `far H${L[0].h.toFixed(0)} -> near H${L[L.length-1].h.toFixed(0)}, ` +
-  `rotation ${rot.toFixed(0)}deg (ref 121, must be >=60)`)
+const nearBand = L[L.length - 1]
+// SIGNED: far must be BLUER than near, not merely different from it.
+const drop = L[0].h - nearBand.h
+// Half the reference's 126 degrees, which is generous and still separates
+// cleanly from the 14-30 a frame without real depth produces.
+check('distance reads as blue haze', drop >= 60,
+  `far H${L[0].h.toFixed(0)} -> near H${nearBand.h.toFixed(0)}, ` +
+  `drop ${drop.toFixed(0)}deg (ref 126, must be >=60 and far bluer than near)`)
+
+// 9. Is the FOREGROUND warm — and warm the right way?
+//
+// MEASURED ON A GROUND-LEVEL FRAME, not on the vista above, and that matters:
+// from 120 m up the nearest band is still 150-300 m out, so it is mid-ground.
+// Scoring "foreground" there reported H111 S0.30 and read as a washed-out
+// foreground; at eye level the same terrain is H86-108 at S0.55-0.68. The
+// vista frame is the right instrument for DISTANCE and the wrong one for the
+// near end, so the two checks use two cameras.
+//
+// The reference's composition is eye-level: grass at your feet, rock shelves
+// mid-distance, blue peaks at the top of frame.
+await load('shot=1&car=0&time=0.42&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06')
+const fg = depthLadder(await shot(page))[4]
+// A JOINT CONDITION, because the hue alone is a trap.
+//
+// ART_BIBLE 2: lit surfaces warm toward yellow while LOSING about 0.15 of
+// saturation. Gating hue on its own invites the fix that has already shipped
+// once -- an earlier round drove the meadow to H79 while HOLDING S0.66 and
+// produced an acid highlighter lime, which is why CLAUDE.md now carries a
+// warning about it. The reference is warm AND comparatively unsaturated
+// (H73 at S0.56 through this same brightest-half sampling); this build is both
+// cooler and MORE saturated (H107 at S0.68), so it fails on both axes and the
+// only way to satisfy it is to move both together.
+check('foreground grass is warm, not acid', fg.h <= 100 && fg.s <= 0.62,
+  `near band H${fg.h.toFixed(0)} S${fg.s.toFixed(2)} ` +
+  `(ref H73 S0.56; want H<=100 AND S<=0.62 — warmer and LESS saturated together)`)
 
 console.log(errs.length ? `\npage errors: ${[...new Set(errs)].slice(0,3).join(' | ')}` : '\nno page errors')
 const failed = results.filter((r) => !r.ok).length
