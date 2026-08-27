@@ -21,7 +21,7 @@ import * as THREE from 'three/webgpu'
 import {
   cameraPosition, cos, cross, dFdx, dFdy, dot, exp2, float, floor, log2, luminance,
   mix, modelWorldMatrix, mx_noise_float, normalLocal, normalWorld, normalize,
-  positionLocal, positionWorld, pow, saturate, sign, sin, smoothstep, uniform, vec2,
+  positionGeometry, positionLocal, positionWorld, pow, saturate, sign, sin, smoothstep, uniform, vec2,
   vec3, vec4,
 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
@@ -968,7 +968,25 @@ export class PainterlyMaterial {
     albedo = vec3(mix(albedo, u.lit, toLit))
 
     // ── vertical gradient along the object up-axis ────────────────────────────
-    const rise = saturate(positionLocal.y.sub(u.gradientBase).div(u.gradientHeight.max(1e-3)))
+    //
+    // `positionGeometry`, NOT `positionLocal`, and this was a silent total
+    // failure rather than a subtle one.
+    //
+    // A material that overrides `positionNode` — src/world/grass.ts does, for
+    // wind sway and deform crush — makes `positionLocal` self-referential: the
+    // node it resolves to is the very node being defined in terms of it. The
+    // whole gradient term then evaluated to nothing on every blade of grass in
+    // the game. Measured: with `top` forced to black, `gradientBase` to -100
+    // (so `rise` saturates to 1 everywhere regardless of position) and
+    // `gradientStrength` to 1 — settings under which the albedo is
+    // mathematically zero — the frame did not change by one luma value, while
+    // changing `base` on the same material in the same build moved it 151 -> 120.
+    // Even `topGain: 5` did nothing, so it was the whole term, not one uniform.
+    //
+    // `positionGeometry` is the unmodified vertex attribute, which is also what
+    // this gradient WANTS: the sweep should be locked to the form, so a blade's
+    // tip colour does not slide down the blade as the wind bends it.
+    const rise = saturate(positionGeometry.y.sub(u.gradientBase).div(u.gradientHeight.max(1e-3)))
     albedo = vec3(mix(albedo, albedo.mul(u.top).mul(u.topGain), rise.mul(u.gradientStrength)))
 
     // ── triplanar brush overlay: value + a little saturation ──────────────────
