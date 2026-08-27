@@ -52,6 +52,16 @@ const HOLE = M / 4 - 1
  * 5 cm x 8 rungs is 40 cm of droop at the coarsest ring, 3.4 km away.
  */
 const SINK = 0.05
+/**
+ * Levels from here up are hidden from the sun cascades.
+ *
+ * Level 5 already covers +/-845 m around the camera, which is past the far edge
+ * of the last cascade, so levels 6-8 can only ever cast a shadow onto ground
+ * that is outside the shadow atlas entirely. They are 41k triangles drawn four
+ * more times a frame for nothing, and the shadow pass re-runs on EVERY frame in
+ * which the camera moves — i.e. all of them, while driving.
+ */
+const SHADOW_LEVELS = 6
 
 export type HeightFn = (x: number, z: number) => number
 
@@ -212,6 +222,11 @@ export class TerrainClipmap {
 
   /** Metres across, finest cell. Diagnostics only. */
   get finestCell(): number { return BASE_CELL }
+
+  /** Rings the sun cascades must not draw. See `SHADOW_LEVELS`. */
+  get shadowExcluded(): THREE.Object3D[] {
+    return this.levels.slice(SHADOW_LEVELS).map((l) => l.mesh)
+  }
 
   dispose(): void { for (const l of this.levels) l.dispose() }
 }

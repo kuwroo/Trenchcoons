@@ -37,9 +37,17 @@ import { graded } from './surfaceGrade'
 /** Band outer radii, metres. */
 const BANDS = [80, 260, 900] as const
 /** Placement lattice per band, metres. */
-const BAND_CELL = [3.4, 11, 18] as const
-/** Instance ceiling per (def, variant, band). */
-const BAND_CAP = [560, 900, 1400] as const
+const BAND_CELL = [3.4, 13, 32] as const
+/**
+ * Instance ceiling per (def, variant, band).
+ *
+ * The band-2 ceiling is a FRAME BUDGET, not a memory one. A forest at 8000
+ * conifers per square kilometre wants 17,000 instances in the 260-900 m
+ * annulus; drawing them costs about 4 ms and they are two to six pixels tall
+ * under 1.0x haze. The cap plus the 32 m lattice hands the horizon what it can
+ * carry and spends the rest on the near field.
+ */
+const BAND_CAP = [560, 900, 1000] as const
 /** Fraction of its own height an instance is sunk into the ground. */
 const EMBED = 0.06
 
@@ -116,6 +124,8 @@ export class Scatter {
   private readonly defs = new Map<string, DefInfo>()
   private readonly choices: Choice[] = []
   private readonly batches = new Map<string, Batch>()
+  private readonly weights = new Float32Array(BIOME_COUNT)
+  private readonly acc = new Float64Array(64)
   private readonly m = new THREE.Matrix4()
   private readonly q = new THREE.Quaternion()
   private readonly e = new THREE.Euler()
@@ -151,6 +161,9 @@ export class Scatter {
       }
     }
 
+    if (this.choices.length > this.acc.length) {
+      throw new Error(`scatter: ${this.choices.length} entries exceeds the acc buffer`)
+    }
     const box = new THREE.Box3()
     for (const id of ids) {
       const variants = library.variants(id)
@@ -247,8 +260,6 @@ export class Scatter {
     const i1 = Math.ceil((cx + outer) / cell)
     const j0 = Math.floor((cz - outer) / cell)
     const j1 = Math.ceil((cz + outer) / cell)
-    const weights = new Float32Array(BIOME_COUNT)
-    const acc = new Float64Array(this.choices.length)
 
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
@@ -256,6 +267,8 @@ export class Scatter {
         const z = (j + hash2(i, j, 5)) * cell
         const d = Math.hypot(x - cx, z - cz)
         if (d > outer || d <= inner) continue
+        const weights = this.weights
+        const acc = this.acc
         weights.set(this.world.weightsAt(x, z))
         let total = 0
         for (let k = 0; k < this.choices.length; k++) {
@@ -277,9 +290,17 @@ export class Scatter {
 
         const y = this.world.heightAt(x, z)
         if (y < this.world.waterLevel + 1.2) continue
-        const gx = this.world.heightAt(x + 1.5, z) - y
-        const gz = this.world.heightAt(x, z + 1.5) - y
-        if (Math.atan(Math.hypot(gx, gz) / 1.5) > choice.maxSlope) continue
+        // The slope test costs two extra heightfield evaluations, and a
+        // heightfield evaluation is ten noise taps. Band 0 pays for it because
+        // a boulder leaning out of a cliff face at ten metres is a bug you can
+        // see; band 2 is 260-900 m away under aerial perspective and paying
+        // 14,000 noise taps a rebuild to straighten a silhouette three pixels
+        // tall is how a streaming system turns into a frame hitch.
+        if (band < 2) {
+          const gx = this.world.heightAt(x + 1.5, z) - y
+          const gz = this.world.heightAt(x, z + 1.5) - y
+          if (Math.atan(Math.hypot(gx, gz) / 1.5) > choice.maxSlope) continue
+        }
 
         const v = info.variants > 1 ? Math.floor(hash2(i, j, 17) * info.variants) % info.variants : 0
         const batch = this.batches.get(`${choice.id}#${v}#${band}`)
@@ -322,6 +343,31 @@ export class Scatter {
         mesh.visible = b.count > 0
         mesh.instanceMatrix.needsUpdate = true
       }
+    }
+  }
+
+  /**
+   * Make every batch drawable for one `compileAsync`, then restore.
+   *
+   * WebGPU compiles a pipeline the first time a (geometry, material) pair is
+   * drawn, and `compileAsync` walks the scene graph — so it skips anything
+   * currently `visible = false`, which is most of the scatter most of the time
+   * (a meadow draws none of the alpine set). The result is a compile stall the
+   * first time each batch streams in, which is exactly when the player is
+   * driving into somewhere new. Measured: the first six seconds of the perf
+   * harness's driving scene ran at 24-25 ms against 17-18 ms for the last six.
+   */
+  prepareForCompile(): () => void {
+    const saved: [THREE.InstancedMesh, boolean, number][] = []
+    for (const b of this.batches.values()) {
+      for (const m of b.meshes) {
+        saved.push([m, m.visible, m.count])
+        m.visible = true
+        if (m.count === 0) m.count = 1
+      }
+    }
+    return () => {
+      for (const [m, visible, count] of saved) { m.visible = visible; m.count = count }
     }
   }
 

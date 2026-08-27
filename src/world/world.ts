@@ -221,7 +221,7 @@ export function buildWorld(
     // every blade in the frame; distant scatter casts into cascades whose
     // texels are metres across. Near scatter still casts, which is the shadow
     // that reads.
-    shadowExcluded: [grass.group, scatter.farGroup],
+    shadowExcluded: [grass.group, scatter.farGroup, ...clipmap.shadowExcluded],
     dominantAt: (x, z) => terrain.dominantAt(x, z),
   }
 }

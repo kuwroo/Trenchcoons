@@ -174,6 +174,64 @@ const coll = await page.evaluate(() => {
 check('kart collides with objects', coll.blocked || coll.speed < 34,
   `speed ${coll.speed} m/s, contact ${coll.blocked}`)
 
+// 6. Does the GROUND actually match the reference?
+//
+// Added because the world critic's verdict opened with: "All five complaints
+// close on their own acceptance test while the frame does not match the
+// reference." Every check above can pass on a frame whose colour is wrong,
+// because each one asks "is the feature present" rather than "is it right".
+//
+// Measured within the green family, lit vs shaded — the same comparison
+// ART_BIBLE §2 is written from:
+//   reference  lit S0.603 / shaded S0.560   dS -0.043
+//   ours       lit S0.769 / shaded S0.512   dS +0.257   <- inverted
+// and the acid cast is a crushed BLUE channel: lit ground rgb(170,213,40)
+// against the reference's rgb(191,219,87). Red and green nearly match.
+await load('shot=1&car=0&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06')
+const groundPng = await shot(page)
+function greenFamily(png) {
+  const { width: W, height: H, data } = png
+  const px = []
+  for (let y = Math.floor(H * 0.45); y < H; y += 2) {
+    for (let x = 0; x < W; x += 2) {
+      const i = (y * W + x) * 4
+      const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn
+      if (d < 0.06) continue
+      let h
+      if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0))
+      else if (mx === g) h = ((b - r) / d + 2)
+      else h = ((r - g) / d + 4)
+      h = ((h * 60) % 360 + 360) % 360
+      if (h < 55 || h > 165) continue
+      px.push({ s: mx ? d / mx : 0, v: mx, b: data[i + 2] })
+    }
+  }
+  if (px.length < 50) return null
+  px.sort((a, c) => a.v - c.v)
+  const k = Math.max(1, Math.floor(px.length * 0.12))
+  const avg = (a, f) => a.reduce((t, x) => t + f(x), 0) / a.length
+  const lo = px.slice(0, k), hi = px.slice(-k)
+  return {
+    dS: avg(hi, (x) => x.s) - avg(lo, (x) => x.s),
+    shadedV: avg(lo, (x) => x.v),
+    litBlue: avg(hi, (x) => x.b),
+  }
+}
+const gf = greenFamily(groundPng)
+if (!gf) {
+  check('ground colour matches reference', false, 'no green-family pixels found')
+} else {
+  // Reference: dS -0.043, shaded V 0.588, lit blue 87.
+  const okDs = gf.dS < 0.05           // must not GAIN saturation with light
+  const okShadow = gf.shadedV > 0.44  // shadows lifted, not crushed
+  const okBlue = gf.litBlue > 62      // blue not crushed out of the lit green
+  check('ground colour matches reference', okDs && okShadow && okBlue,
+    `dS ${gf.dS >= 0 ? '+' : ''}${gf.dS.toFixed(3)} (ref -0.043, must be <+0.05), ` +
+    `shaded V ${gf.shadedV.toFixed(3)} (ref 0.588), ` +
+    `lit blue ${gf.litBlue.toFixed(0)} (ref 87)`)
+}
+
 console.log(errs.length ? `\npage errors: ${[...new Set(errs)].slice(0,3).join(' | ')}` : '\nno page errors')
 const failed = results.filter((r) => !r.ok).length
 console.log(failed ? `\n${failed}/${results.length} complaints still unfixed` : `\nall ${results.length} complaints addressed`)

@@ -234,6 +234,25 @@ async function boot() {
 
   const pipeline = buildPostChain(renderer, scene, camera, atmosphere)
 
+  // ── pre-compile ───────────────────────────────────────────────────────────
+  // WebGPU pipeline creation is asynchronous, and three compiles lazily: the
+  // first frame that draws a given (geometry, material) pair pays for it. With
+  // one material per surface and a streamed scatter set that is a stream of
+  // compiles spread over the first several seconds of play, and it is
+  // measurable — `npm run perf`'s driving scene ran its first six seconds at
+  // 24-25 ms and its last six at 17-18 ms on an otherwise unchanged scene.
+  //
+  // `__ready` is contracted to mean "everything for the current view is
+  // resident", so the right place for that cost is here, before it resolves,
+  // rather than in the player's first corner.
+  //
+  // Every scatter batch is made drawable for the duration: `compileAsync` walks
+  // the scene graph and skips `visible = false`, and most of the scatter is
+  // hidden in any one biome. See `Scatter.prepareForCompile`.
+  const restoreScatter = world.scatter.prepareForCompile()
+  await renderer.compileAsync(scene, camera)
+  restoreScatter()
+
   // ── render graph ──────────────────────────────────────────────────────────
   // 1  atmosphere LUTs: transmittance folded into the analytic model, sky-view
   //    and irradiance rebuilt only when TOD changes.

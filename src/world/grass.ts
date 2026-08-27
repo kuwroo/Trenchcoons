@@ -222,12 +222,15 @@ export class Grass {
         if (n >= batch.cap) continue
         const y = this.world.heightAt(x, z)
         if (y < this.world.waterLevel + 0.4) continue
-        // Slope test on the lattice we are already walking: a tuft standing on
-        // a 45-degree face reads as a mistake, and every reference puts grass
-        // on the flats and bare rock on the breaks.
-        const gx = this.world.heightAt(x + 0.9, z) - y
-        const gz = this.world.heightAt(x, z + 0.9) - y
-        if (Math.atan(Math.hypot(gx, gz) / 0.9) > MAX_SLOPE) continue
+        // Slope test: a tuft standing on a 45-degree face reads as a mistake,
+        // and every reference puts grass on the flats and bare rock on the
+        // breaks. Two extra heightfield evaluations, so only the near band —
+        // see the same note in scatter.ts. At 60 m a tuft is four pixels.
+        if (band === 0) {
+          const gx = this.world.heightAt(x + 0.9, z) - y
+          const gz = this.world.heightAt(x, z + 0.9) - y
+          if (Math.atan(Math.hypot(gx, gz) / 0.9) > MAX_SLOPE) continue
+        }
 
         const yaw = hash2(i, j, 67) * Math.PI * 2
         const scale = g.scale * (0.72 + hash2(i, j, 89) * 0.66)

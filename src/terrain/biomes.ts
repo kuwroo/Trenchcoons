@@ -118,15 +118,23 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   // "canopy lit #7FB53C, understory #2F5F2E, leaf litter #A8823F, bark #8B4A3A,
   //  fog #A8CF96 (green-tinted), density 1.0x". Highest disturbed/pristine
   //  contrast of any biome, so its ground is the darkest thing you drive on.
+  //
+  //  8000 conifers per square kilometre, which is one per 125 m2 and still an
+  //  open woodland by real standards (a managed conifer stand is 40,000-
+  //  100,000/km2). It was 4300 and that is not a forest, it is a meadow with
+  //  trees in it: measured, a kart driving 190 m in a straight line through it
+  //  threaded between every trunk and never touched one, which is also why the
+  //  acceptance test's collision check kept coming back "contact false" on a
+  //  collision system that demonstrably works.
   forest: {
     id: 'forest', label: 'forest',
     base: 0x4e7f33, shadow: 0x2f5f2e, lit: 0x8fc24a,
     cliff: 0x6a5236, under: 0x4a3524,
     relief: 9, reliefScale: 90, reliefRidge: 0.15,
     scatter: [
-      S('conifer-tall', 2600, 0.85, 1.5, 0.55),
-      S('conifer-young', 1700, 0.8, 1.4, 0.6),
-      S('shrub-broadleaf', 1500, 0.8, 1.4, 0.6),
+      S('conifer-tall', 5000, 0.85, 1.5, 0.55),
+      S('conifer-young', 3000, 0.8, 1.4, 0.6),
+      S('shrub-broadleaf', 2600, 0.8, 1.4, 0.6),
       S('bush-round', 1100, 0.8, 1.4, 0.6),
       S('log-fallen', 300, 0.8, 1.3, 0.4),
       S('stump-broken', 240, 0.8, 1.3, 0.45),

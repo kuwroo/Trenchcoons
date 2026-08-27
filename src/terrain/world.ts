@@ -336,12 +336,19 @@ export class TerrainWorld {
 
   /** Blended deformation response — the fix for "marks only exist on the pan".
    *  Every square metre of the world now has a response of its own. */
+  private readonly responseOut: Record<string, number> = {
+    maxDepth: 0, refill: 0, maskLife: 0, collapse: 0, wet: 0, dry: 0,
+    darken: 0, chroma: 0, expose: 0, edge: 0, drag: 0, grip: 0,
+  }
+
   responseAt(x: number, z: number): DeformResponse {
+    // Allocation-free. The deformation system calls this eight times a frame —
+    // once per wheel in `sampleVehicle` and once per wheel in `applyToVehicle`
+    // — and a twelve-field record per call is 480 short-lived objects a second
+    // on the hot path of the thing the frame budget is tightest around.
     const c = this.climateAt(x, z)
-    const out: Record<string, number> = {
-      maxDepth: 0, refill: 0, maskLife: 0, collapse: 0, wet: 0, dry: 0,
-      darken: 0, chroma: 0, expose: 0, edge: 0, drag: 0, grip: 0,
-    }
+    const out = this.responseOut
+    for (const k in out) out[k] = 0
     for (let i = 0; i < BIOME_COUNT; i++) {
       const w = c.weights[i]!
       if (w <= 0) continue
@@ -352,16 +359,25 @@ export class TerrainWorld {
   }
 
   /** Blended light and air, for the per-frame atmosphere grade. */
+  private readonly gradeOut = {
+    fog: new THREE.Color(), sunTint: new THREE.Color(),
+    fogDensity: 1, ambient: 1, label: 'meadow',
+  }
+  private readonly gradeTmp = new THREE.Color()
+
   gradeAt(x: number, z: number): {
     fog: THREE.Color; fogDensity: number; sunTint: THREE.Color; ambient: number
     label: string
   } {
+    // Allocation-free: this runs every frame from the render loop, and three
+    // `new THREE.Color` per call at 60 Hz is 180 short-lived objects a second
+    // for a value that is immediately copied out.
     const c = this.climateAt(x, z)
-    const fog = new THREE.Color(0, 0, 0)
-    const sun = new THREE.Color(0, 0, 0)
+    const fog = this.gradeOut.fog.setRGB(0, 0, 0)
+    const sun = this.gradeOut.sunTint.setRGB(0, 0, 0)
     let density = 0
     let ambient = 0
-    const tmp = new THREE.Color()
+    const tmp = this.gradeTmp
     for (let i = 0; i < BIOME_COUNT; i++) {
       const w = c.weights[i]!
       if (w <= 0) continue
@@ -371,10 +387,17 @@ export class TerrainWorld {
       density += w * s.fogDensity
       ambient += w * s.ambient
     }
-    return { fog, fogDensity: density, sunTint: sun, ambient, label: c.dominant }
+    this.gradeOut.fogDensity = density
+    this.gradeOut.ambient = ambient
+    this.gradeOut.label = c.dominant
+    return this.gradeOut
   }
 
   /** Grass clumps per square metre here, before the distance falloff. */
+  private readonly grassOut = { density: 0, id: '', scale: 1 }
+
+  /** Allocation-free: the grass rebuild calls this once per lattice cell, which
+   *  is four thousand times for one band. */
   grassAt(x: number, z: number): { density: number; id: string; scale: number } {
     const c = this.climateAt(x, z)
     let density = 0
@@ -389,7 +412,10 @@ export class TerrainWorld {
       scale += w * s.grassScale
       if (s.grassId && w > best) { best = w; id = s.grassId }
     }
-    return { density, id, scale: scale || 1 }
+    this.grassOut.density = density
+    this.grassOut.id = id
+    this.grassOut.scale = scale || 1
+    return this.grassOut
   }
 
   /** Style weights at a point, copied out so callers may keep them. */
