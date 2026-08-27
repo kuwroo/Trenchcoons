@@ -459,9 +459,45 @@ export class DeformField implements DeformHook {
     // smudge, wet sand keeps a knife edge. Applied to the mask rather than to
     // the stamp so it follows the SURFACE, not the moment of writing: a mark
     // that outlives a weather change should soften with the ground it is in.
-    const mask = saturate(smoothstep(
-      float(mix(float(0.30), float(0.02), r.edge)), float(0.58), s.g,
-    ))
+    //
+    // A toe plus a GAMMA, not a smoothstep between two thresholds. Any shaping
+    // with an upper edge below 1 SATURATES, and a saturating mask cannot fade —
+    // a mark decayed to half its stored value still reads at full contrast, so
+    // `tracks-decay` and `tracks-fresh` come out as the same picture. This is
+    // monotone in the stored channel all the way to 1.
+    const toe = mix(float(0.16), float(0.02), r.edge)
+    const gamma = mix(float(1.6), float(0.55), r.edge)
+    const shapeMask = (v: Node<'float'>): Node<'float'> =>
+      saturate(v.sub(toe).div(toe.oneMinus())).pow(gamma)
+    const ramp = shapeMask(s.g).toVar()
+
+    // NO KNIFE-EDGE S HERE, DELIBERATELY. Round 3 added one:
+    //
+    //   g(x) = x^k / (x^k + (1-x)^k),  k = mix(1, 8.5, edge^3)
+    //
+    // applied to `ramp`. It sharpens fresh marks — the corridor gate measured
+    // 1.51 with it against 1.21 without — but it is steep about 0.5 and crushes
+    // everything under it, so a demoted band (stored 0.28 -> ramp 0.452) renders
+    // at 0.185, a 2.44x suppression, and 0.22 suppresses 14x. It made
+    // `tracks-persist` invisible, which is what the deform gauntlet rejected.
+    //
+    // The fix is to apply it RELATIVE TO A LOCAL PLATEAU sampled ALONG the mark
+    // (a perpendicular ring cannot work — TYRE_HALF 0.16 m against a 0.125 m
+    // texel makes a mark 2.56 texels wide, so cross taps land on bare ground and
+    // the S vanishes everywhere; measured 1.51 -> 1.18). `slope` already gives
+    // the gradient whose perpendicular is the track direction, so the taps are
+    // nearly free.
+    //
+    // That version is written and was NOT verifiable here: a scripted deform
+    // capture stalls on `renderAsync` once per simulated frame, so even a
+    // 120-frame replay exceeds the time available, and every reading during
+    // those attempts came from a dead preview server serving stale PNGs. Rather
+    // than ship an unmeasured shader change, this keeps the part that is
+    // known-good — the monotone toe+gamma above, which fixes the saturating
+    // smoothstep that made tracks-decay and tracks-fresh the same picture — and
+    // leaves the edge off. Marks are softer than round 3; persistence is no
+    // longer actively suppressed.
+    const mask = ramp
     return {
       mask, wet: s.b, slope, depth: s.r,
       darken: r.darken, chroma: r.chroma, expose: r.expose,
