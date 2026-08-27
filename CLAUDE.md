@@ -118,7 +118,30 @@ ground-level near band against refs/genshin/grasslands.jpg:
   was         H113 V0.55
   now         H90  V0.63     hue fixed in biomes.ts; VALUE still 0.22 short
 
-**Do not chase the value in the palette.** Measured: raising the meadow's
+**Three global levers were tried for the value and ALL THREE regress the gate
+suite.** Measured on the same frame and the same 33-shot set, so do not re-run
+them:
+
+  lever                            fg V   spread   palette  struct  shadow  hue
+  baseline                         0.625  0.569    12       29      6       6
+  toneGamma 1.27->1.12, exp 1.5    0.698  0.525    20       30      1       6
+  BASE_EXPOSURE 1.26 -> 1.45       0.660  0.569    15       29      5       6
+  ground.ts FILL 0.12 -> 0.30      0.718  0.490    16       30      3       6
+
+Every one buys foreground value and pays for it in the palette gate. Exposure is
+the cleanest of the three — it lifts value without flattening or desaturating —
+and still costs three shots for +0.035. `toneGamma` is the worst: it lifts
+midtones by compressing everything, which is what the palette gate calls FLAT.
+
+Two gates are therefore in conflict: this complaint wants V>=0.75, the palette
+gate resists every global way of getting there. Both are calibrated so the
+references pass, so the disagreement means the build differs from the reference
+in a way no single global knob closes. The next attempt should be a SHAPED
+curve — lift the low-mids while holding the black point and the highlight
+spread — not another scalar. Do not simply raise a threshold or a scalar and
+call it done.
+
+**Do not chase the value in the palette either.** Measured: raising the meadow's
 authored base value 0.61 -> 0.80 (+0.19) moved the rendered band 0.547 -> 0.625
 (+0.078). That is a compression of about 0.4, so reaching 0.85 would need an
 authored value above 1.0. The remainder is exposure and tonemap. This is the
