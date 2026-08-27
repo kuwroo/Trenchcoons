@@ -116,13 +116,42 @@ Note the clouds are **pink and lavender**, not white. That single choice is
 worth more than any amount of shader work.
 
 ### Meadow / hub
+
+MEASURED OFF `refs/genshin/grasslands.jpg`, not authored by eye. The previous
+values in this section were wrong in two ways and both showed up in the build,
+so the sampled numbers are given with their sample points.
+
 ```
-ground base #6FB03F   grass tip #B8E84F   grass shadow #3F7A3E (green, not grey)
-rock lit #A6B8C4      rock shadow #6F86A8 (blue)   dirt #8B6A45
-fog #BFE0F0           density 0.7x        sun warm white #FFF6DC, high
+                          measured on the reference        sample (u,v)
+lit grass       #7BCA4F   H 99  S0.61  V0.79               0.30, 0.72
+bright grass    #E0F2A1   H 73  S0.34  V0.95               0.55, 0.82
+grass shadow    #3B6C9A   H207  S0.66  V0.60               0.12, 0.62
+mid-distance    #9EC8A6   H131  S0.21  V0.78               0.70, 0.60
+rock, darkest   #3775A4   H205  S0.66  V0.64
 ```
+
+**Where the reference goes yellow, it goes PALE.** Bright grass is H73 at
+saturation 0.34. This section previously authored a "grass tip" of #B8E84F —
+the same hue at S0.66, double the chroma — and that is chartreuse. Measured in
+the build: ground hue 73 / S0.831 against the reference's hue 98 / S0.665, with
+samples #BBE626, #B6EC36 and #F1F05D. The acid cast came from this table, not
+from the renderer.
+
+**Grass shadow is BLUE, not green.** H207 at S0.66 — strongly sky-lit, the same
+hue family as the rock. The old value here was #3F7A3E, a green at H119, which
+fights the "shadows tinted toward sky" rule two sections up rather than
+expressing it.
+
+**But blue shadows must stay LIGHT.** The reference shadow sits at V0.60 and its
+darkest rock facet at V0.64. Rock facets in the build render #232E66 at luma
+0.187 — right hue family, value crushed to a third — which reads as a navy hole
+punched in the ground. Getting the hue right and the value wrong is worse than
+either alone.
+
 Deformation: shallow ruts, grass flattens and springs back over ~20s; mud shows
-only under hard cornering.
+only under hard cornering. Note that `BIOMES.grass` authors maxDepth 0.07 and a
+20 s refill, which is faithful to that sentence and also means a player never
+sees a mark — see the known issue in CLAUDE.md.
 
 ### Coast / lagoon — *the showcase biome*
 ```
