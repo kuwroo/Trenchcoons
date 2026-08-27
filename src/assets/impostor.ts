@@ -49,6 +49,16 @@ export function silhouette2D(
   return [...half(pts), ...half([...pts].reverse())]
 }
 
+/** Evenly-spaced subset of a convex outline. A subset of a hull is still convex. */
+function decimate(
+  outline: readonly [number, number][], max: number,
+): [number, number][] {
+  if (outline.length <= max) return [...outline]
+  const out: [number, number][] = []
+  for (let i = 0; i < max; i++) out.push(outline[Math.round((i * outline.length) / max)]!)
+  return out
+}
+
 /**
  * Two crossed cards carrying the asset's real outline.
  *
@@ -57,15 +67,17 @@ export function silhouette2D(
  *   read as a sphere). Foliage wants ~0.7: enough that the two cards do not
  *   flip value against each other as the sun crosses them, which is the tell
  *   that gives a billboard away.
+ * @param maxPoints Cap on outline vertices per card. The raw silhouette hull of
+ *   a bowed log runs to a dozen points and the impostor then cost MORE than the
+ *   coarsest mesh rung it was supposed to replace, which makes it pointless.
+ *   Seven is enough to keep a log a log and a conifer a triangle.
  */
 export function crossCards(
-  points: readonly Vec3[], splay = 0.7,
+  points: readonly Vec3[], splay = 0.7, maxPoints = 7,
 ): THREE.BufferGeometry {
   const b = new MeshBuilder()
-  const outlineXY = silhouette2D(points, 'xy')
-  const outlineZY = silhouette2D(points, 'zy')
-  card(b, outlineXY, 'xy', splay)
-  card(b, outlineZY, 'zy', splay)
+  card(b, decimate(silhouette2D(points, 'xy'), maxPoints), 'xy', splay)
+  card(b, decimate(silhouette2D(points, 'zy'), maxPoints), 'zy', splay)
   return b.build()
 }
 

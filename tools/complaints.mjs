@@ -27,23 +27,53 @@ function bandStats(png, y0, y1) {
   return { r:r/n, g:g/n, b:b/n,
     sd: Math.sqrt(v.reduce((a,x)=>a+(x-m)*(x-m),0)/v.length) }
 }
-function rowVariance(png, y0, y1) {
-  const { width: W, height: H, data } = png
-  let acc=0, rows=0
-  for (let y=Math.floor(H*y0); y<Math.floor(H*y1); y+=4) {
-    const v=[]
-    for (let x=0; x<W; x+=2) {
-      const i=(y*W+x)*4
-      v.push((0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2])/255)
-    }
-    const m=v.reduce((a,x)=>a+x,0)/v.length
-    acc += Math.sqrt(v.reduce((a,x)=>a+(x-m)*(x-m),0)/v.length); rows++
-  }
-  return acc/rows
-}
-
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173'
 const ARGS = ['--use-angle=metal', '--enable-unsafe-swiftshader']
+
+// Sky cleanliness, by SPATIAL SCALE.
+//
+// The first version of this measured row variance in the upper frame and had the
+// sign backwards: references score 0.058-0.076 and our blobby sky scored 0.0395,
+// because a reference frame contains mountains and structured cloud. A blobbier
+// sky scored LOWER and passed more easily.
+//
+// What actually separates them is scale. A clean sky is SMOOTH at fine scale
+// with structure only at coarse scale — gradient, soft cloud masses. Fine-scale
+// texture in the sky means something is wrong, and here it is the brush mottle
+// being applied to the sky dome.
+//
+//   validated against refs before use:
+//     genshin/grasslands   coarse/fine 1.8
+//     painterly/cliffs     coarse/fine 2.4
+//     snow                 coarse/fine 2.6
+//     ours                 coarse/fine 0.9   <- fine texture on the dome
+function skyScale(png, y0, y1) {
+  const { width: W, height: H, data } = png
+  const L = (x, y) => {
+    const i = (y * W + x) * 4
+    return (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
+  }
+  const K = Math.max(4, Math.floor(W / 40))
+  const sd = (a) => {
+    const m = a.reduce((p, c) => p + c, 0) / a.length
+    return Math.sqrt(a.reduce((p, c) => p + (c - m) * (c - m), 0) / a.length)
+  }
+  let fine = 0, coarse = 0, rows = 0
+  for (let y = Math.floor(H * y0); y < Math.floor(H * y1); y += 4) {
+    const raw = []
+    for (let x = 0; x < W; x += 2) raw.push(L(x, y))
+    const blur = raw.map((_, i) => {
+      let s = 0, n = 0
+      for (let k = -K; k <= K; k++) { const j = i + k; if (j >= 0 && j < raw.length) { s += raw[j]; n++ } }
+      return s / n
+    })
+    fine += sd(raw.map((v, i) => v - blur[i]))
+    coarse += sd(blur)
+    rows++
+  }
+  fine /= rows; coarse /= rows
+  return { fine, coarse, ratio: coarse / Math.max(fine, 1e-6) }
+}
 
 const browser = await chromium.launch({ headless: true, args: ARGS })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
@@ -96,10 +126,10 @@ check('two locations look different', dRGB > 25 && dSD > 0.01,
 // 3. "the sky is weirdly blobby" — cloud should be thin and high, not dominant.
 //    Measure the fraction of the upper frame that departs from a clean gradient.
 await load('shot=1&car=0&warmup=30&pos=0,60,0&look=0,0.25')
-// A clean sky varies smoothly with HEIGHT; blobs vary ACROSS a row.
-const sky = { horizontalVariance: +rowVariance(await shot(page), 0, 0.45).toFixed(4) }
-check('sky is a clean gradient', sky.horizontalVariance < 0.055,
-  `horizontal variance ${sky.horizontalVariance} (<0.055 = smooth across rows)`)
+const sky = skyScale(await shot(page), 0, 0.35)
+// Floor from the least-clean reference (grasslands 1.8), with slack.
+check('sky is clean, not blobby', sky.ratio >= 1.5,
+  `coarse/fine ${sky.ratio.toFixed(1)} (refs 1.8-2.6; <1.5 means fine texture on the dome)`)
 
 // 4. "can i have threejs grass" — instanced grass present near the camera.
 await load('shot=1&car=1&warmup=40&pos=0,3,0&look=0,-0.05')

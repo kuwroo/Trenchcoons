@@ -7,13 +7,13 @@
   "params": {
     "height": 5.2,
     "tiers": 4,
-    "spread": 0.33,
+    "spread": 0.36,
     "taper": 0.85,
     "lobes": 6,
     "notch": 0.68,
-    "droop": 0.3,
-    "lift": 0.6,
-    "bare": 0.07,
+    "droop": 0.2,
+    "lift": 0.78,
+    "bare": 0.1,
     "trunk": 0.05,
     "lean": 0.1
   },
@@ -38,5 +38,12 @@
     "forest",
     "alpine",
     "meadow"
-  ]
+  ],
+  "material": {
+    "foliage": {
+      "ambient": 0.55,
+      "gradientStrength": 0.42,
+      "rimStrength": 0.7
+    }
+  }
 }

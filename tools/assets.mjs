@@ -18,7 +18,15 @@ import path from 'node:path'
 import { WEBGPU_ARGS } from './shots.mjs'
 
 const BASE = process.env['BASE_URL'] ?? 'http://127.0.0.1:4173'
-const OUT = 'shots'
+// A SUBDIRECTORY of shots/, and that is load-bearing. Every gate in tools/
+// enumerates `readdirSync('shots').filter(f => f.endsWith('.png'))`, so anything
+// written next to the game captures gets graded by the palette, shadow,
+// structure, hue and regress gates. These are asset contact sheets — one flat
+// ground plane and a handful of props — and they are not the compositions those
+// gates were calibrated on; dropped into shots/ they failed six of them
+// instantly and would have buried a real regression in noise. A directory name
+// does not end in .png, so this is invisible to all of them.
+const OUT = 'shots/forge'
 const W = 1600
 const H = 900
 
@@ -30,28 +38,37 @@ const PROPS = 'log-fallen,stump-broken,roots-exposed'
 const HERO = 'rock-slab,rock-medium,boulder-large,outcrop-shelf,conifer-tall,shrub-broadleaf'
 
 export const SHEETS = [
-  // Hour 0.36 is the art bible's hero state: warm high sun, light haze, maximum
-  // readability. Every form sheet is taken there so silhouettes are compared
-  // under one light.
-  { name: 'forge-rock',      q: `ids=${ROCK}&row=5&time=0.36` },
-  { name: 'forge-cliff',     q: `ids=${CLIFF}&row=3&time=0.36` },
-  { name: 'forge-trees',     q: `ids=${TREES}&row=2&time=0.36&dist=0.85` },
-  { name: 'forge-veg',       q: `ids=${VEG}&row=4&time=0.36` },
-  { name: 'forge-props',     q: `ids=${PROPS}&row=3&time=0.36` },
+  // Hour 0.62, not the 0.36 hero hour, and for the reason tools/shots.mjs gives
+  // for the car captures: at 0.36 the sun is in FRONT of a camera looking down
+  // -Z, so every asset on the sheet is its own silhouette and none of the form
+  // reads. The first round of these was captured at 0.36 and the conifers came
+  // back as black cutouts — which looked exactly like a shading bug and was not
+  // one. 0.62 puts the key behind the camera.
+  { name: 'forge-rock',      q: `ids=${ROCK}&row=5&time=0.62` },
+  // Raised camera: at the default elevation a nineteen-metre block is taller
+  // than the eye and the sheet shows nothing but its vertical faces.
+  { name: 'forge-cliff',     q: `ids=${CLIFF}&row=3&time=0.62&pitch=0.5` },
+  { name: 'forge-trees',     q: `ids=${TREES}&row=2&time=0.62&dist=0.85&pitch=0.34` },
+  { name: 'forge-veg',       q: `ids=${VEG}&row=4&time=0.62` },
+  { name: 'forge-props',     q: `ids=${PROPS}&row=3&time=0.62` },
   // Variant 1: the jitter has to produce a visibly different asset, not the
   // same one nudged.
-  { name: 'forge-variants',  q: `ids=${ROCK}&row=5&time=0.36&variant=1` },
+  { name: 'forge-variants',  q: `ids=${ROCK}&row=5&time=0.62&variant=1` },
   // The ladder. Same framing, three rungs plus the impostor: a rung that
   // changes the SILHOUETTE is a rung that will pop.
-  { name: 'forge-lod0',      q: `ids=${HERO}&row=6&time=0.36&lod=0` },
-  { name: 'forge-lod1',      q: `ids=${HERO}&row=6&time=0.36&lod=1` },
-  { name: 'forge-lod2',      q: `ids=${HERO}&row=6&time=0.36&lod=2` },
-  { name: 'forge-impostor',  q: `ids=${HERO}&row=6&time=0.36&lod=imp` },
+  { name: 'forge-lod0',      q: `ids=${HERO}&row=6&time=0.62&lod=0` },
+  { name: 'forge-lod1',      q: `ids=${HERO}&row=6&time=0.62&lod=1` },
+  { name: 'forge-lod2',      q: `ids=${HERO}&row=6&time=0.62&lod=2` },
+  { name: 'forge-impostor',  q: `ids=${HERO}&row=6&time=0.62&lod=imp` },
   // The world team's hard dependency, drawn.
-  { name: 'forge-collider',  q: `ids=${HERO}&row=6&time=0.36&collider=1` },
+  { name: 'forge-collider',  q: `ids=${HERO}&row=6&time=0.62&collider=1` },
   // Low sun: flat planes are only sculptural if they take different values, and
   // a raking light is where that either works or does not.
-  { name: 'forge-raking',    q: `ids=${ROCK}&row=5&time=0.72` },
+  { name: 'forge-raking',    q: `ids=${ROCK}&row=5&time=0.70` },
+  // And the opposite check — the 0.36 hero hour with the sun in front, where
+  // all that survives is outline. ART_BIBLE 2: "every asset reads as a clear
+  // silhouette at its LOD2 distance."
+  { name: 'forge-backlit',   q: `ids=${HERO}&row=6&time=0.36` },
 ]
 
 function table(budget) {

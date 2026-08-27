@@ -12,6 +12,7 @@
 //             world/greybox.ts all actually want.
 
 import type * as THREE from 'three/webgpu'
+import type { PainterlyParams } from '../material/painterly'
 
 /** One level of a part's LOD ladder. */
 export interface AssetLod {
@@ -29,6 +30,15 @@ export interface AssetPart {
   slot: string
   /** Painterly surface def id from assets/defs/surfaces. */
   surface: string
+  /**
+   * The surface's params, resolved: the named def, with its vertical gradient
+   * re-scaled to this asset's real height, plus any per-def overrides.
+   *
+   * Resolved here rather than looked up at draw time because the gradient
+   * rescale needs the asset's bounds, which only exist after generation. See
+   * `resolveMaterial` in registry.ts for why the rescale is not optional.
+   */
+  material: PainterlyParams
   /** LOD0 first. Always at least one entry. */
   lods: AssetLod[]
   /**

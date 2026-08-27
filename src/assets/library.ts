@@ -12,8 +12,7 @@
 
 import * as THREE from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
-import { PainterlyMaterial } from '../material/painterly'
-import { surface } from '../material/defs'
+import { PainterlyMaterial, type PainterlyParams } from '../material/painterly'
 import { allScatterAssets, scatterAsset, scatterIds, scatterVariants } from './registry'
 import type { AssetLod, AssetPart, Collider, GeneratedAsset } from './types'
 
@@ -40,36 +39,18 @@ export class ScatterLibrary {
   constructor(private readonly atmosphere: Atmosphere) {}
 
   /**
-   * The material for a surface, with its vertical gradient re-scaled to the
-   * asset's own height.
+   * The material for a resolved param set, cached by value.
    *
-   * This override is not optional and it is easy to miss. `gradientBase` and
-   * `gradientHeight` in a surface def are OBJECT space, and every existing def
-   * says so in its notes — they were authored against the greybox, where the
-   * geometry is unit-sized and the instance matrix carries the scale. This
-   * library authors in METRES, because a collision proxy and an LOD switch
-   * distance are both meaningless without real units. Reusing `gradientHeight:
-   * 1` on a 12 m conifer would saturate the sweep inside the first metre of
-   * trunk and switch off the vertical gradient for the whole tree — which
-   * ART_BIBLE §3 calls out as doing "enormous work in the Genshin and Capy
-   * references".
-   *
-   * Bucketed to powers of two so a library of forty assets cannot turn into
-   * forty materials and forty pipeline compiles. Within a bucket the gradient
-   * is at most a factor of two off, which is invisible.
+   * Keyed by the params themselves rather than by surface id, because two
+   * assets on the same surface can legitimately want different `ambient` or a
+   * different gradient sweep — see `resolveMaterial` in registry.ts. Assets
+   * that resolve to identical params share one material and one pipeline.
    */
-  material(surfaceId: string, height = 1): THREE.Material {
-    const bucket = Math.min(32, Math.max(0.5, Math.pow(2, Math.ceil(Math.log2(Math.max(0.25, height))))))
-    const key = `${surfaceId}@${bucket}`
+  material(params: PainterlyParams): THREE.Material {
+    const key = JSON.stringify(params)
     const hit = this.bySurface.get(key)
     if (hit) return hit.material
-    const m = new PainterlyMaterial(this.atmosphere, {
-      ...surface(surfaceId),
-      // Assets are authored with their base at y = 0, so the sweep starts there
-      // and runs over the form's own height.
-      gradientBase: 0,
-      gradientHeight: bucket,
-    })
+    const m = new PainterlyMaterial(this.atmosphere, params)
     this.bySurface.set(key, m)
     this.materials.push(m)
     return m.material
@@ -126,7 +107,7 @@ export class ScatterLibrary {
       surface: part.surface,
       lod,
       geometry: entry.geometry,
-      material: this.material(part.surface, asset.bounds.height),
+      material: this.material(part.material),
       triangles: entry.triangles,
       until: entry.until,
     }

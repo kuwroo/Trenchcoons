@@ -7,13 +7,13 @@
   "params": {
     "form": "roots",
     "length": 0.4,
-    "radius": 0.5,
+    "radius": 0.62,
     "taper": 0.6,
     "sides": 7,
     "bow": 0.1,
-    "roots": 5,
-    "rootLength": 1.35,
-    "rootRise": 0.3,
+    "roots": 4,
+    "rootLength": 1.15,
+    "rootRise": 0.13,
     "torn": 0.2
   },
   "surfaces": {
@@ -29,5 +29,12 @@
     "forest",
     "wetland",
     "alpine"
-  ]
+  ],
+  "material": {
+    "body": {
+      "shadow": "#63443f",
+      "shadowSkyTint": 0.45,
+      "ambient": 1.05
+    }
+  }
 }

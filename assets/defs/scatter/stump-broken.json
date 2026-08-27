@@ -14,7 +14,7 @@
     "roots": 4,
     "rootLength": 1.0,
     "rootRise": 0.22,
-    "torn": 0.55
+    "torn": 0.6
   },
   "surfaces": {
     "body": "bark"
@@ -28,5 +28,12 @@
   "biomes": [
     "forest",
     "alpine"
-  ]
+  ],
+  "material": {
+    "body": {
+      "shadow": "#63443f",
+      "shadowSkyTint": 0.45,
+      "ambient": 1.05
+    }
+  }
 }

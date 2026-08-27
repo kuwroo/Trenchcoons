@@ -29,7 +29,7 @@ import { Clock } from '../../core/clock'
 import { ScatterLibrary } from '../library'
 import { scatterBudget } from '../budget'
 import { colliderGeometry } from '../collider'
-import { pickLod, scatterAsset, scatterIds, scatterVariants } from '../registry'
+import { scatterAsset, scatterIds, scatterVariants } from '../registry'
 
 declare global {
   interface Window {
@@ -79,12 +79,10 @@ async function boot(): Promise<void> {
   scene.add(atmosphere.dome)
 
   const lib = new ScatterLibrary(atmosphere)
-  const materials: PainterlyMaterial[] = [...lib.materials]
 
   // Ground, on the game's own meadow surface, so an asset is judged against the
   // value it will actually sit on rather than against a void.
   const groundMat = new PainterlyMaterial(atmosphere, surface('meadow'))
-  materials.push(groundMat)
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000, 1, 1), groundMat.material)
   ground.rotation.x = -Math.PI * 0.5
   ground.name = 'forge-ground'
@@ -149,14 +147,13 @@ async function boot(): Promise<void> {
       const entry = lodSel === 'imp'
         ? part.impostor
         : part.lods[Math.min(part.lods.length - 1, Math.max(0, Math.round(Number(lodSel) || 0)))]!
-      const mesh = new THREE.Mesh(entry.geometry, lib.material(part.surface, asset.bounds.height))
+      const mesh = new THREE.Mesh(entry.geometry, lib.material(part.material))
       mesh.position.set(x, 0, z)
       mesh.name = `${asset.id}#${asset.variant}/${part.slot}`
       mesh.frustumCulled = false
       scene.add(mesh)
     }
   })
-  for (const m of lib.materials) if (!materials.includes(m)) materials.push(m)
 
   // Frame the sheet from the FOV rather than from a guessed multiple of its
   // size: the first version put a row of rocks 49 m away in a 42 degree lens

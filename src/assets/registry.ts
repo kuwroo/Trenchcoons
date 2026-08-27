@@ -16,7 +16,8 @@
 // way round — the alternative hides the cost until the frame budget blows.
 
 import { Rng, hashSeed } from '../core/rng'
-import { surfaceIds } from '../material/defs'
+import { surface, surfaceIds } from '../material/defs'
+import { PAINTERLY_DEFAULTS, type PainterlyParams } from '../material/painterly'
 import { triangleCount } from './mesh'
 import type { AnyGenerator } from './generator'
 import type { AssetLod, AssetPart, GeneratedAsset } from './types'
@@ -44,6 +45,17 @@ export interface ScatterDef {
   params?: Record<string, unknown>
   /** Slot -> painterly surface def id. Omitted slots take the generator default. */
   surfaces?: Record<string, string>
+  /**
+   * Slot -> per-asset overrides on top of that surface's def.
+   *
+   * ARCHITECTURE's example def carries a `material` block for exactly this. It
+   * is not a second palette: colours stay in the shared surface def so a biome
+   * repaint reaches every asset at once. What belongs here is the handful of
+   * params that depend on the FORM rather than on the palette — `ambient` on a
+   * form whose facets need to separate, `gradientStrength` on a form whose
+   * sweep the shared def assumed was a unit cube.
+   */
+  material?: Record<string, Record<string, string | number>>
   lod?: {
     /**
      * Metres at which each LOD hands over to the next. One entry per rung; the
@@ -112,6 +124,14 @@ function validate(def: ScatterDef): void {
       throw new Error(`${def.id}: slot "${slot}" resolves to no known surface`)
     }
   }
+  for (const slot of Object.keys(def.material ?? {})) {
+    if (!gen.info.slots.includes(slot)) {
+      throw new Error(
+        `${def.id}.material.${slot}: generator "${def.generator}" has no such slot ` +
+        `(have: ${gen.info.slots.join(', ')})`,
+      )
+    }
+  }
   for (const key of Object.keys(def.seedJitter ?? {})) {
     const spec = gen.schema[key]
     if (!spec) throw new Error(`${def.id}.seedJitter.${key}: not a param of "${def.generator}"`)
@@ -123,6 +143,63 @@ function validate(def: ScatterDef): void {
   if (!Number.isInteger(v) || v < 1 || v > 6) {
     throw new Error(`${def.id}.variants: expected an integer 1..6, got ${String(def.variants)}`)
   }
+}
+
+const COLOUR_KEYS = new Set(['base', 'shadow', 'lit', 'top'])
+
+/**
+ * Resolve a slot to painterly params: named surface, gradient rescaled to the
+ * asset's own height, then the def's overrides.
+ *
+ * The rescale is the part that is easy to miss and impossible to see until it
+ * is wrong. `gradientBase` and `gradientHeight` in a surface def are OBJECT
+ * space, and every existing def says so in its notes — they were authored
+ * against the greybox, where geometry is unit-sized and the instance matrix
+ * carries the scale. This library authors in METRES, because a collision proxy
+ * and an LOD switch distance are both meaningless without real units. Reusing
+ * `gradientHeight: 1` on a 15 m conifer would saturate the sweep inside the
+ * first metre of trunk and switch off the vertical gradient for the whole tree
+ * — which ART_BIBLE §3 calls out as doing "enormous work in the Genshin and
+ * Capy references".
+ *
+ * Bucketed to powers of two so forty assets cannot become forty materials and
+ * forty pipeline compiles. Within a bucket the sweep is at most a factor of two
+ * long, which is invisible.
+ */
+function resolveMaterial(
+  defId: string, surfaceId: string, height: number,
+  overrides: Readonly<Record<string, string | number>> | undefined,
+): PainterlyParams {
+  const bucket = Math.min(32, Math.max(0.5, 2 ** Math.ceil(Math.log2(Math.max(0.25, height)))))
+  const out: PainterlyParams = {
+    ...surface(surfaceId),
+    // Assets are authored with their base at y = 0, so the sweep starts there
+    // and runs over the form's own height.
+    gradientBase: 0,
+    gradientHeight: bucket,
+  }
+  for (const [key, value] of Object.entries(overrides ?? {})) {
+    if (!(key in PAINTERLY_DEFAULTS)) {
+      throw new Error(`${defId}.material.${key}: not a PainterlyParams key`)
+    }
+    if (COLOUR_KEYS.has(key)) {
+      if (typeof value === 'number') {
+        ;(out as unknown as Record<string, number>)[key] = value
+        continue
+      }
+      const m = /^#([0-9a-fA-F]{6})$/.exec(value)
+      if (!m?.[1]) {
+        throw new Error(`${defId}.material.${key}: expected "#rrggbb", got ${JSON.stringify(value)}`)
+      }
+      ;(out as unknown as Record<string, number>)[key] = parseInt(m[1], 16)
+      continue
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`${defId}.material.${key}: expected a number, got ${JSON.stringify(value)}`)
+    }
+    ;(out as unknown as Record<string, number>)[key] = value
+  }
+  return out
 }
 
 function jittered(
@@ -177,7 +254,7 @@ export function scatterAsset(id: string, variant = 0): GeneratedAsset {
 
   const steps = def.lod?.switch
   const parts: AssetPart[] = raw.parts.map((part) => {
-    const surface = def.surfaces?.[part.slot] ?? gen.info.defaultSurfaces[part.slot]!
+    const surfaceId = def.surfaces?.[part.slot] ?? gen.info.defaultSurfaces[part.slot]!
     const lods: AssetLod[] = part.lods.map((geometry, i) => ({
       geometry,
       triangles: triangleCount(geometry),
@@ -186,7 +263,8 @@ export function scatterAsset(id: string, variant = 0): GeneratedAsset {
     const shared = part.impostor === part.lods[part.lods.length - 1]
     return {
       slot: part.slot,
-      surface,
+      surface: surfaceId,
+      material: resolveMaterial(id, surfaceId, raw.bounds.height, def.material?.[part.slot]),
       lods,
       impostor: shared
         ? { ...lods[lods.length - 1]!, until: Infinity }

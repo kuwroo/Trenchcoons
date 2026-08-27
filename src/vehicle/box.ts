@@ -25,7 +25,7 @@
 //        corrugation   vertical flutes across all four walls
 //        flute edge    a scalloped corrugated cut along every flap's free edge
 //        fold crease   a raised crease spine down each of the four box corners
-//        tape          a spine along the lid seam, and a band wrapping the girth
+//        tape          a band wrapping the girth, and a strip under the base
 //        printed mark  this-way-up arrows, a shipping label, a stencil block
 //
 // All of it is merged down: the flutes and creases become part of the shell
@@ -34,11 +34,29 @@
 // five times a frame — once for the frame, once per shadow cascade — so a draw
 // call saved here is worth five.
 //
+// THE BOX IS OPEN. That is not a detail, it is the whole vehicle: two raccoons
+// stand IN it, the flaps are splayed out at the rim, and the chase camera looks
+// down into it for the entire game. The first version got this half right — the
+// flaps were hinged open — while the shell underneath was still a CLOSED
+// rounded box, so a lid sat across the opening with the occupants sticking
+// through it, taped shut, with a shipping label on top. Reported as "the
+// cardboard box is open but i still see cover", and it was exactly that.
+//
+// The shell is therefore a TUB, not a box: outer wall, rolled rim showing the
+// board's real thickness, inner liner, and a floor. The liner is not optional —
+// the painterly material is single-sided, so an opening with no liner is a hole
+// you can see the meadow through. And the tape and the print had to move with
+// it: a strip down a lid seam and a band over the lid are both drawing a lid
+// that no longer exists, so the tape is now a waist band round all four walls
+// (still crossing every corner fold, which was the point of it) plus a strip
+// under the base, which is where the tape on a real box actually is.
+//
 // Every number is in metres, in BOX-LOCAL space: the origin is the centre of
-// the box, so +y/2 is the lid and +z is the rear (the car drives toward -z).
+// the box, so +y/2 is the RIM and +z is the rear (the car drives toward -z).
 
 import * as THREE from 'three/webgpu'
 import { mergeGeometries, place, roundedBox } from './geometry'
+import { MeshBuilder, loft, roundedRect } from '../assets/mesh'
 
 /**
  * Board specification. A real C-flute is 8 mm, which at the chase camera is
@@ -67,6 +85,16 @@ export const BOARD = {
    * continuous wave.
    */
   fluteRise: 0.01,
+  /**
+   * Board thickness, shown at the open rim.
+   *
+   * Real board is 4 mm and would be invisible; 0.075 m puts the rim at ~13
+   * screen pixels at the chase framing, which is enough to read as an EDGE
+   * rather than as a paper cut. It also matches `FLAP.thick` in kart.ts (0.07),
+   * because the flaps are folded out of this same board and a flap noticeably
+   * thinner than the wall it hinges off looks like a modelling mistake.
+   */
+  thickness: 0.075,
   /** Fold crease down a box corner: taller and rounder than a flute. */
   creaseRadius: 0.05,
   creaseRise: 0.012,
@@ -119,18 +147,24 @@ function fluteArc(pitch: number, rise: number, length: number): {
 }
 
 /**
- * The box shell: a rounded box, plus vertical flutes across all four walls and
- * a raised fold crease down each corner.
+ * The box shell: an OPEN TUB — outer wall, rolled rim, inner liner, floor —
+ * plus vertical flutes across all four walls and a raised fold crease down each
+ * corner.
+ *
+ * Built from a rounded-rectangle profile lofted between rings rather than from
+ * `roundedBox`, because there is no way to take the top off a projected
+ * `BoxGeometry` and be left with a rim that has thickness. The profile route
+ * gives all four surfaces from one outline, so the liner cannot drift out of
+ * register with the wall it lines.
  *
  * The flutes are cylinders sunk into the liner so only `fluteRise` shows. That
  * is cheaper than displacing a subdivided box (which would need ~80 segments
- * across the deck to carry the wave, and would pay for that resolution on the
- * lid where there are no flutes) and it gives the same thing the reference
+ * across the deck to carry the wave) and it gives the same thing the reference
  * needs: a hard, regular, DIRECTIONAL light break, which is the one signal no
  * isotropic noise field can produce.
  *
- * They stop short of the rounded top and bottom, because a flute stops at a
- * fold in real board too.
+ * They stop short of the rim and the floor, because a flute stops at a fold in
+ * real board too.
  */
 export function boxShellGeometry(
   w: number, h: number, d: number, r: number,
@@ -138,11 +172,37 @@ export function boxShellGeometry(
   const hx = w * 0.5
   const hy = h * 0.5
   const hz = d * 0.5
+  const t = BOARD.thickness
   // Where the rounding starts, i.e. where the flat liner ends.
   const ix = hx - r
   const iz = hz - r
   const rise = hy - r * 0.85
-  const parts: THREE.BufferGeometry[] = [roundedBox(w, h, d, r, 4)]
+
+  // ── the tub ─────────────────────────────────────────────────────────────
+  // Ring order is load-bearing: `roundedRect` winds counter-clockwise in XZ, so
+  // lofting top-ring-then-bottom-ring faces OUTWARD and bottom-then-top faces
+  // inward. Getting either backwards produces a box that is invisible from one
+  // side and looks like a rendering bug rather than a winding bug.
+  const innerR = Math.max(0.04, r - t)
+  const outerTop = roundedRect(hx, hz, r, hy)
+  const outerBot = roundedRect(hx, hz, r, -hy)
+  const innerTop = roundedRect(hx - t, hz - t, innerR, hy)
+  const innerFloor = roundedRect(hx - t, hz - t, innerR, -hy + t)
+  const tub = new MeshBuilder()
+  // Bottom-to-top faces outward (see `loft`); the liner is the same profile
+  // walked top-to-bottom, which turns it inside to face the cargo.
+  loft(tub, [outerBot, outerTop], { closed: true })
+  loft(tub, [innerTop, innerFloor], { closed: true })
+  tub.polygon(innerFloor)
+  tub.polygonFlipped(outerBot)
+  // The rim: a strip across the board's thickness, which is the surface that
+  // says "this is open" from every angle the camera ever has.
+  for (let i = 0; i < outerTop.length; i++) {
+    const j = (i + 1) % outerTop.length
+    tub.quad(outerTop[i]!, innerTop[i]!, innerTop[j]!, outerTop[j]!)
+  }
+
+  const parts: THREE.BufferGeometry[] = [tub.build()]
 
   // ── flutes: vertical, across every wall ─────────────────────────────────
   // One arc geometry, cloned and turned onto each wall. `place` composes Euler
@@ -208,13 +268,17 @@ function strip(sx: number, sy: number, sz: number): THREE.BufferGeometry {
 }
 
 /**
- * Packing tape: a spine down the lid seam, and a band wrapping the girth.
+ * Packing tape: a band round the girth, a strip under the base, and a shipping
+ * label on the rear wall.
  *
- * The band is the piece that does the work. A flat strip on the lid is just a
- * lighter rectangle; a band that goes over the lid, round both top corners and
- * down both walls is unmistakably tape, and it is also the only element on the
- * kart that crosses a fold — which is what tells the eye that the folds are
- * folds.
+ * The band is the piece that does the work, and it survives the box being open
+ * because it never depended on the lid: a band that crosses all four corner
+ * folds is unmistakably tape, and it is the only element on the kart that
+ * crosses a fold — which is what tells the eye that the folds are folds.
+ *
+ * What did NOT survive: a spine down the lid seam and a segment of the band
+ * running across the lid. Both were drawing a lid. The tape they represented
+ * has moved to the underside, which is where the tape on an open box is.
  */
 export function boxTapeGeometry(
   w: number, h: number, d: number, r: number,
@@ -222,31 +286,22 @@ export function boxTapeGeometry(
   const hx = w * 0.5
   const hy = h * 0.5
   const hz = d * 0.5
-  const ix = hx - r
-  const iy = hy - r
   const lift = 0.010
   const band = 0.30
-  const bandZ = 0.78
+  const bandY = -0.02
   const parts: THREE.BufferGeometry[] = []
 
-  // Seam spine, along the lid. Deliberately shorter than the seam line in the
-  // ink pass below, so the bare seam shows fore and aft of the tape.
-  parts.push(place(strip(0.24, 0.016, 1.62), 0, hy + lift * 0.8, 0))
+  // Girth band, all the way round the four walls.
+  const b = new MeshBuilder()
+  loft(b, [
+    roundedRect(hx + lift, hz + lift, r + lift, bandY + band * 0.5),
+    roundedRect(hx + lift, hz + lift, r + lift, bandY - band * 0.5),
+  ], { closed: true })
+  parts.push(b.build())
 
-  // Girth band: lid segment, two corner arcs, two wall segments.
-  parts.push(place(strip(ix * 2, 0.016, band), 0, hy + lift, bandZ))
-  // `CylinderGeometry` puts theta 0 at +Z and sweeps toward +X; rotating the
-  // axis onto Z maps (sin t, -cos t) into the XY plane, so the +X->+Y quadrant
-  // is theta pi/2..pi and the -X->+Y quadrant is pi..3pi/2.
-  const arc = (start: number): THREE.BufferGeometry =>
-    new THREE.CylinderGeometry(
-      r + lift, r + lift, band, BOARD.segments * 2, 1, true, start, Math.PI * 0.5,
-    )
-  parts.push(place(arc(Math.PI * 0.5), ix, iy, bandZ, Math.PI * 0.5, 0, 0))
-  parts.push(place(arc(Math.PI), -ix, iy, bandZ, Math.PI * 0.5, 0, 0))
-  for (const sx of [-1, 1]) {
-    parts.push(place(strip(0.016, iy * 2, band), sx * (hx + lift), 0, bandZ))
-  }
+  // Base tape: the strip that is actually holding the box together, seen every
+  // time the kart leaves the ground.
+  parts.push(place(strip(0.26, 0.014, (hz - r) * 2), 0, -(hy + lift * 0.6), 0))
 
   // Shipping label: a paper rectangle stuck over the corrugation on the rear
   // wall, which is the face the chase camera spends the whole game looking at.
@@ -278,13 +333,8 @@ function arrowGlyph(x: number, y: number, z: number, size: number): THREE.Buffer
  * the whole kart floats in the top half of the range against the meadow.
  */
 export function boxInkGeometry(w: number, h: number, d: number, r: number): THREE.BufferGeometry {
-  const hy = h * 0.5
   const hz = d * 0.5
-  const iz = hz - r
   const parts: THREE.BufferGeometry[] = []
-
-  // The lid seam — the fold the tape is holding shut.
-  parts.push(place(strip(0.022, 0.010, iz * 2), 0, hy + 0.004, 0))
 
   // Rear wall: two this-way-up arrows, and three code bars on the label.
   const rear = hz + 0.028
@@ -298,8 +348,10 @@ export function boxInkGeometry(w: number, h: number, d: number, r: number): THRE
   // Front wall: a stencil block outline. Four bars, not a filled rectangle —
   // an outline survives being 40 px wide, a filled one becomes a blob.
   const front = -(hz + 0.024)
-  const bw = 0.52
-  const bh = 0.30
+  // Kept inside the flat part of the wall: past `w/2 - r` the surface curves
+  // away into the corner and a straight printed bar would float off it.
+  const bw = Math.min(w * 0.3, (w * 0.5 - r) * 1.5)
+  const bh = h * 0.28
   parts.push(place(strip(bw, 0.026, 0.010), 0, bh * 0.5, front))
   parts.push(place(strip(bw, 0.026, 0.010), 0, -bh * 0.5, front))
   parts.push(place(strip(0.026, bh, 0.010), bw * 0.5, 0, front))

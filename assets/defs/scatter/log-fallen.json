@@ -6,11 +6,11 @@
   "notes": "The only strong HORIZONTAL in the set. Rock is blocky, trees and grass are vertical, bushes are round — a meadow built from those alone reads as a repeating stamp, and one log lying across the slope breaks it. Collided with a single convex hull: a bowed tube is convex to within a few centimetres and a hull needs no canonical axis, which a lying log does not have.",
   "params": {
     "form": "log",
-    "length": 4.2,
+    "length": 4.6,
     "radius": 0.3,
     "taper": 0.72,
     "sides": 8,
-    "bow": 0.11,
+    "bow": 0.06,
     "roots": 0,
     "torn": 0.4
   },
@@ -27,5 +27,12 @@
     "forest",
     "meadow",
     "alpine"
-  ]
+  ],
+  "material": {
+    "body": {
+      "shadow": "#63443f",
+      "shadowSkyTint": 0.45,
+      "ambient": 1.05
+    }
+  }
 }

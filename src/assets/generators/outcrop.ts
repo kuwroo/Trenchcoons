@@ -44,7 +44,15 @@ export const outcrop = defineGenerator({
     const all: Vec3[] = []
     const b = new MeshBuilder()
 
-    const layerH = p.height / p.strata
+    // Courses OVERLAP. The first version butted them end to end and then cut an
+    // undercut off the bottom of each, which left a gap between every pair and
+    // the outcrop rendered as a stack of floating slabs — the single worst
+    // thing in the first capture round. A course is `overlap` taller than its
+    // spacing, so consecutive courses interpenetrate and the stack is one
+    // solid mass whose steps are the parts of a course that stick out past the
+    // one above.
+    const OVERLAP = 0.4
+    const layerH = p.height / (p.strata + OVERLAP)
     let cx = 0
     let cz = 0
     let yaw = 0
@@ -54,7 +62,7 @@ export const outcrop = defineGenerator({
       const hz = p.size * 0.5 * p.aspect * shrink
       // Layers are slabs, not blocks: the height is fixed by the stack, so a
       // tall thin outcrop is three tall thin slabs, not three cubes.
-      const hy = layerH * 0.5
+      const hy = layerH * 0.5 * (1 + OVERLAP)
       const y0 = i * layerH
       const solid = Polytope.box(hx, hy, hz)
 
@@ -63,10 +71,16 @@ export const outcrop = defineGenerator({
       // sliver of the darkest value under every step.
       if (p.lip > 0) {
         const a = rng.range(0, Math.PI * 2)
-        solid.clip({
-          n: normalize([Math.cos(a) * 0.35, -0.94, Math.sin(a) * 0.35]),
-          d: hy * (1 - p.lip * 1.4),
-        })
+        // Steep, not shallow. A near-horizontal plane trims the whole base off
+        // the course; a plane leaning 60 degrees takes a wedge out of ONE side
+        // of it, which is what an undercut is and what puts a sliver of the
+        // darkest value under the step.
+        const n = normalize([Math.cos(a) * 0.86, -0.51, Math.sin(a) * 0.86])
+        const pts = solid.points()
+        let s = -Infinity
+        let e = Infinity
+        for (const q of pts) { s = Math.max(s, dot(n, q)); e = Math.min(e, dot(n, q)) }
+        solid.clip({ n, d: s - (s - e) * p.lip })
       }
       // Vertical fracture faces only. A bedding plane inside a layer would
       // fight the layer boundary, which is the bedding plane that matters.

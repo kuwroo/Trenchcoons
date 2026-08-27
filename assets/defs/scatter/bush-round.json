@@ -26,5 +26,11 @@
     "meadow",
     "forest",
     "coast"
-  ]
+  ],
+  "material": {
+    "body": {
+      "ambient": 0.52,
+      "gradientStrength": 0.4
+    }
+  }
 }

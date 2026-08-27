@@ -189,6 +189,20 @@ export function loopNormal(loop: readonly Vec3[]): Vec3 | null {
  * in the library are built. `flat` gives each quad its own exact normal, which
  * is what makes a nine-sided trunk read as nine facets under the 3-stop ramp
  * rather than as a soft cylinder.
+ *
+ * WINDING CONVENTION, and it is not optional: rings run FROM the bottom of the
+ * form TO the top, and each ring is wound counter-clockwise about the axis of
+ * travel (`ring` and `roundedRect` both do this). Then the side faces point
+ * OUTWARD, `capEnd` closes the top facing +axis and `capStart` closes the
+ * bottom facing -axis. Reverse the ring ORDER to get an inward-facing surface,
+ * which is what a shell's liner wants.
+ *
+ * The first version wound the side quads the other way, so a stack authored
+ * bottom-to-top came out inside-out while its caps — which were already written
+ * to this convention — did not. Nothing errors when that happens: the near face
+ * is culled and you see the far interior instead, which reads as a form that is
+ * mysteriously dark and hollow rather than as a bug. It cost the conifers a
+ * whole capture round.
  */
 export function loft(
   b: MeshBuilder,
@@ -209,13 +223,13 @@ export function loft(
       const c = hi[j]!
       const d = hi[i]!
       if (flat) {
-        b.quad(a, bb, c, d)
+        b.quad(a, d, c, bb)
       } else {
         // Radial normals about the ring centroid: a smooth tube.
         const ca = ringCentroid(lo)
         const cb = ringCentroid(hi)
         b.quadN(
-          a, radial(a, ca), bb, radial(bb, ca), c, radial(c, cb), d, radial(d, cb),
+          a, radial(a, ca), d, radial(d, cb), c, radial(c, cb), bb, radial(bb, ca),
         )
       }
     }
@@ -246,6 +260,33 @@ export function ring(n: number, r: number, y: number, phase = 0, cx = 0, cz = 0)
   for (let i = 0; i < n; i++) {
     const a = phase + (i / n) * Math.PI * 2
     out.push([cx + Math.cos(a) * r, y, cz + Math.sin(a) * r])
+  }
+  return out
+}
+
+/**
+ * A closed rounded-rectangle ring in the XZ plane at height `y`.
+ *
+ * Wound counter-clockwise in XZ (theta increasing), which is the winding the
+ * rest of this file assumes: `loft([top, bottom])` then faces OUTWARD, and
+ * `polygon(loop)` on such a ring faces +Y. Reverse the ring order for the
+ * inside of a shell.
+ */
+export function roundedRect(
+  hx: number, hz: number, r: number, y: number, cornerSegs = 3,
+): Vec3[] {
+  const rr = Math.max(0, Math.min(r, hx, hz))
+  const ix = hx - rr
+  const iz = hz - rr
+  const out: Vec3[] = []
+  const corners: [number, number][] = [[ix, iz], [-ix, iz], [-ix, -iz], [ix, -iz]]
+  for (let c = 0; c < 4; c++) {
+    const [cx, cz] = corners[c]!
+    const a0 = c * Math.PI * 0.5
+    for (let i = 0; i <= cornerSegs; i++) {
+      const a = a0 + (i / cornerSegs) * Math.PI * 0.5
+      out.push([cx + Math.cos(a) * rr, y, cz + Math.sin(a) * rr])
+    }
   }
   return out
 }

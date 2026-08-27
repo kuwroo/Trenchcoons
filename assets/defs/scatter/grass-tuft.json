@@ -5,11 +5,11 @@
   "generator": "grassTuft",
   "notes": "The base ground-cover unit, instanced by the tens of thousands, and the only asset in the library whose triangle count is a real budget rather than a rounding error. Nine blades, three segments, both windings — see src/assets/generators/grass.ts for why single-sided blades are not an option under a front-face-culled material.",
   "params": {
-    "height": 0.38,
-    "blades": 9,
-    "width": 0.03,
+    "height": 0.42,
+    "blades": 14,
+    "width": 0.05,
     "bend": 0.8,
-    "fan": 0.09,
+    "fan": 0.1,
     "vary": 0.4,
     "splay": 0.55,
     "lift": 0.62
@@ -21,7 +21,7 @@
   "seedJitter": {
     "height": 0.3,
     "bend": 0.3,
-    "blades": 0.25
+    "blades": 0.1
   },
   "biomes": [
     "meadow",

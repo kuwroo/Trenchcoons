@@ -32,8 +32,8 @@ const schema = {
   taper: num(1, 0.3, 2.4, 'How fast the plates shrink going up. 1 is linear.'),
   lobes: int(7, 4, 11, 'Points around the rim of a plate. This is the silhouette.'),
   notch: num(0.66, 0.35, 0.95, 'Valley radius between lobes, as a fraction of the tip.'),
-  droop: num(0.24, 0, 0.6, 'How far the lobe tips hang below the plate base.'),
-  lift: num(0.55, 0.15, 1.1, 'Plate height as a fraction of the gap between plates.'),
+  droop: num(0.15, 0, 0.6, 'How far the lobe tips hang below the plate base.'),
+  lift: num(0.7, 0.15, 1.1, 'Plate height as a fraction of the gap between plates.'),
   bare: num(0.16, 0, 0.5, 'Fraction of the trunk left clear at the bottom.'),
   trunk: num(0.042, 0.012, 0.12, 'Trunk radius as a fraction of height.'),
   lean: num(0.05, 0, 0.3, 'Trunk lean off vertical.', 'rad'),
@@ -83,8 +83,10 @@ function foliage(p: P, lobes: number, midRing: boolean, warp: (q: Vec3) => Vec3)
     // This is the darkest face on the tree and the reason the tiers separate.
     const under = rings[0]!.map(warp)
     const c = warp([0, base - droop * 0.35, 0])
+    // Wound so the fan faces DOWN. The other winding is culled from below,
+    // which is the only place this face is ever seen from.
     for (let i = 0; i < under.length; i++) {
-      b.tri(c, under[(i + 1) % under.length]!, under[i]!)
+      b.tri(c, under[i]!, under[(i + 1) % under.length]!)
     }
   }
   return b
@@ -153,9 +155,12 @@ export const conifer = defineGenerator({
       // A cylinder on the trunk, NOT a hull on the tree. The player expects to
       // drive through the canopy and to be stopped by the bole; a hull would do
       // the opposite of both.
-      collider: solidCollider(
-        cylinderShape(p.height * p.trunk * 1.25, p.height * 0.5, [0, p.height * 0.5, 0]),
-      ),
+      // Six tenths of the height, not all of it. The kart can jump, but nothing
+      // it can do puts it against the top of a sixteen-metre tree, and a
+      // shorter cylinder is a cheaper broad-phase.
+      collider: solidCollider(cylinderShape(
+        p.height * p.trunk * 1.25, p.height * 0.3, [0, p.height * 0.3, 0],
+      )),
       bounds: boundsFromPoints(all),
     }
   },

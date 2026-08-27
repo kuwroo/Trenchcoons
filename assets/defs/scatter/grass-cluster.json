@@ -7,7 +7,7 @@
   "params": {
     "height": 0.7,
     "blades": 14,
-    "width": 0.038,
+    "width": 0.055,
     "bend": 0.95,
     "fan": 0.24,
     "vary": 0.45,
@@ -21,7 +21,7 @@
   "seedJitter": {
     "height": 0.3,
     "fan": 0.3,
-    "blades": 0.2
+    "blades": 0.1
   },
   "biomes": [
     "meadow",

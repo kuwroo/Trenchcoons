@@ -25,10 +25,10 @@ const schema = {
   radius: num(0.28, 0.04, 1.4, 'Radius at the thick end.', 'm'),
   taper: num(0.72, 0.25, 1, 'Radius at the thin end, as a fraction of the thick one.'),
   sides: int(8, 4, 14, 'Facets around the bole.'),
-  bow: num(0.1, 0, 0.5, 'Sideways curve of the axis, as a fraction of length.'),
+  bow: num(0.06, 0, 0.5, 'Sideways curve of the axis, as a fraction of length.'),
   roots: int(0, 0, 7, 'Exposed roots splaying from the base.'),
   rootLength: num(0.9, 0.2, 4, 'How far a root reaches from the bole.', 'm'),
-  rootRise: num(0.34, 0, 1.2, 'How high a root arches before it dives underground.', 'm'),
+  rootRise: num(0.2, 0, 1.2, 'How high a root arches before it dives underground.', 'm'),
   torn: num(0.35, 0, 1, 'Jaggedness of a broken end. 0 is a clean saw cut.'),
 } as const
 
@@ -40,6 +40,11 @@ function bole(
   at: (t: number) => Vec3, radiusAt: (t: number) => number,
   cap0: boolean, cap1: boolean, tear: number, rng: Rng,
 ): Vec3[][] {
+  // A torn end is capped by a FAN to the ring's mean height rather than by one
+  // flat polygon. A single polygon through jittered points is planar-fitted and
+  // averages the splinters away — the tear is generated and then thrown out,
+  // which is what made the first stump read as sawn off.
+  const fanCap = tear > 0 && cap1
   const rings: Vec3[][] = []
   for (let c = 0; c <= courses; c++) {
     const t = c / courses
@@ -54,10 +59,13 @@ function bole(
       seed[2] * axis[0] - seed[0] * axis[2],
       seed[0] * axis[1] - seed[1] * axis[0],
     ])
+    // `u x axis`, not `axis x u`: the ring has to run counter-clockwise about
+    // the direction of travel or `loft` builds the tube inside-out. See the
+    // winding convention on `loft` in mesh.ts.
     const v: Vec3 = [
-      axis[1] * u[2] - axis[2] * u[1],
-      axis[2] * u[0] - axis[0] * u[2],
-      axis[0] * u[1] - axis[1] * u[0],
+      u[1] * axis[2] - u[2] * axis[1],
+      u[2] * axis[0] - u[0] * axis[2],
+      u[0] * axis[1] - u[1] * axis[0],
     ]
     const r = radiusAt(t)
     const ring: Vec3[] = []
@@ -76,7 +84,16 @@ function bole(
     }
     rings.push(ring)
   }
-  loft(b, rings, { closed: true, capStart: cap0, capEnd: cap1 })
+  loft(b, rings, { closed: true, capStart: cap0, capEnd: fanCap ? false : cap1 })
+  if (fanCap) {
+    const top = rings[rings.length - 1]!
+    let my = 0
+    let mx = 0
+    let mz = 0
+    for (const q of top) { mx += q[0]; my += q[1]; mz += q[2] }
+    const c: Vec3 = [mx / top.length, my / top.length, mz / top.length]
+    for (let i = 0; i < top.length; i++) b.tri(c, top[i]!, top[(i + 1) % top.length]!)
+  }
   return rings
 }
 
@@ -122,24 +139,38 @@ function build(p: P, ctx: GenContext, sides: number, courses: number): {
     )))
   }
 
-  // Roots, shared by `stump` and `roots`. Thin arcs that leave the bole, crest,
-  // and dive back under y=0 — the underground half is never drawn.
+  // The `roots` form has no bole, so without something at the centre the arcs
+  // converge on a point in mid-air and the prop reads as a starfish. A squat
+  // stub — the last few centimetres of a rotted-out trunk — is what the roots
+  // are roots OF.
+  if (p.form === 'roots') {
+    pts.push(...pointsOf(bole(
+      b, sides, 2,
+      (t) => [0, -r0 * 0.25 + t * r0 * 0.85, 0],
+      (t) => r0 * (0.78 - 0.3 * t), false, true, p.torn, rng,
+    )))
+  }
+
+  // Roots, shared by `stump` and `roots`. Arcs that leave the bole, crest, and
+  // dive back under y=0 — the underground half is never drawn.
   const nRoots = p.form === 'roots' ? Math.max(2, p.roots || 4) : p.roots
   for (let i = 0; i < nRoots; i++) {
     const a = (i / nRoots) * Math.PI * 2 + rng.range(-0.3, 0.3)
     const len = p.rootLength * rng.range(0.65, 1.25)
     const rise = p.rootRise * rng.range(0.6, 1.3)
-    const rr = r0 * rng.range(0.22, 0.4)
+    const rr = r0 * rng.range(0.34, 0.52)
     const axis = (t: number): Vec3 => [
       Math.cos(a) * (r0 * 0.5 + len * t),
       // Out of the ground, over the crest, back under. Ends below zero so the
       // root is cut off by the terrain rather than stopping in mid-air.
-      rise * Math.sin(t * Math.PI * 0.92) - 0.18 * t * t,
+      // Flatter and diving harder at the far end. The first arc was a tall
+      // half-circle and five of them read as a spider, not as roots.
+      rise * Math.sin(t * Math.PI * 0.78) - 0.4 * t * t * len * 0.35,
       Math.sin(a) * (r0 * 0.5 + len * t),
     ]
     pts.push(...pointsOf(bole(
       b, Math.max(4, sides - 3), Math.max(3, courses - 1), axis,
-      (t) => rr * (1 - 0.72 * t), true, true, 0, rng,
+      (t) => rr * (1 - 0.8 * t), true, true, 0, rng,
     )))
   }
   return { b, pts }

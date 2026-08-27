@@ -6,13 +6,13 @@
   "notes": "Three-course shelf, the mid-ground structure of the reference. Each layer sets back and slides so the stack is not a wedding cake, and every layer gets its own convex hull — a single hull would fill the steps in and the kart would collide with open air above each one.",
   "params": {
     "size": 9,
-    "height": 3.4,
+    "height": 4.2,
     "strata": 3,
-    "setback": 0.24,
-    "step": 0.4,
+    "setback": 0.3,
+    "step": 0.45,
     "cuts": 5,
     "aspect": 0.7,
-    "lip": 0.12,
+    "lip": 0.16,
     "twist": 0.2
   },
   "surfaces": {
@@ -27,5 +27,11 @@
   "biomes": [
     "meadow",
     "alpine"
-  ]
+  ],
+  "material": {
+    "body": {
+      "shadow": "#6f86a8",
+      "shadowSkyTint": 0.62
+    }
+  }
 }
