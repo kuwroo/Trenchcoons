@@ -165,14 +165,54 @@ const draws = Number((hud.match(/draws\s+(\d+)/) ?? [])[1] ?? 0)
 check('grass instanced near camera', tris > 200,
   `${tris}k tris, ${draws} draws (want >200k tris, <1500 draws)`)
 
-// 5. "collisions with rocks and objects" — drive at one and check we stopped.
-await load('shot=1&car=1&warmup=40&drive=throttle:0-400@1.0&frame=400')
-const coll = await page.evaluate(() => {
+// 5. "collisions with rocks and objects".
+//
+// TIGHTENED, twice over, because the previous form of this check could not
+// distinguish a collision from a slow lap of an empty field. It was
+//   `coll.blocked || coll.speed < 34`
+// on a run that just drove forward from the default spawn — so ANY kart under
+// 122 km/h satisfied it whether or not there was a rock anywhere in the world,
+// and a critic replaying the collision CAPTURE's own URL found the kart doing
+// 35 m/s with `contact` false and nothing bigger than a 28 cm pebble within
+// 13 m. The feature works; the test did not test it.
+//
+// Now: pick the target from `__trench.solids()` by SIZE (a proxy standing over
+// 1.2 m above the ground with a radius over 1 m — something that ought to stop a
+// kart), aim at it with the build's own yaw convention, and require BOTH
+// `contact === true` AND that the kart finished within a couple of metres of the
+// proxy's face. The `||` is gone: a stopped kart with no contact is a kart that
+// hit terrain, not a rock.
+await load('shot=1&car=1&warmup=40&spawn=280,760&drive=&frame=2')
+const target = await page.evaluate(() => {
   const t = window.__trench, c = t.car()
-  return { speed: +(c.speed ?? 0).toFixed(1), blocked: !!c.contact }
+  let best = null
+  for (const s of t.solids()) {
+    const rise = s.top - t.heightAt(s.x, s.z)
+    const d = Math.hypot(s.x - c.x, s.z - c.z)
+    if (rise < 1.2 || s.radius < 1.0 || d < 12 || d > 90) continue
+    const score = s.radius * rise
+    if (!best || score > best.score) best = { x: s.x, z: s.z, r: s.radius, d, score }
+  }
+  // `atan2(-dx, -dz)` is this build's convention; the other three sign
+  // combinations were tried and all three drive past. See tools/shots.mjs.
+  return best && { ...best, yaw: Math.atan2(-(best.x - c.x), -(best.z - c.z)) }
 })
-check('kart collides with objects', coll.blocked || coll.speed < 34,
-  `speed ${coll.speed} m/s, contact ${coll.blocked}`)
+if (!target) {
+  check('kart collides with objects', false,
+    'no solid proxy over 1.2 m tall within 90 m of the spawn — nothing to hit')
+} else {
+  await load(`shot=1&car=1&warmup=40&spawn=280,760&caryaw=${target.yaw.toFixed(4)}`
+    + '&drive=throttle:0-9999@0.9&frame=150')
+  const coll = await page.evaluate(() => {
+    const t = window.__trench, c = t.car()
+    return { speed: +(c.speed ?? 0).toFixed(1), blocked: !!c.contact, x: c.x, z: c.z }
+  })
+  const miss = Math.hypot(coll.x - target.x, coll.z - target.z)
+  check('kart collides with objects', coll.blocked && miss < target.r + 2.5,
+    `aimed at a ${target.r.toFixed(1)} m proxy ${target.d.toFixed(0)} m away; `
+    + `stopped ${miss.toFixed(1)} m from its centre at ${coll.speed} m/s, `
+    + `contact ${coll.blocked}`)
+}
 
 // 6. Does the GROUND actually match the reference?
 //
@@ -187,7 +227,13 @@ check('kart collides with objects', coll.blocked || coll.speed < 34,
 //   ours       lit S0.769 / shaded S0.512   dS +0.257   <- inverted
 // and the acid cast is a crushed BLUE channel: lit ground rgb(170,213,40)
 // against the reference's rgb(191,219,87). Red and green nearly match.
-await load('shot=1&car=0&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06')
+// Noon, and a look direction chosen to put LIT ground in frame.
+//
+// The first version used the default sun and framed a slope that happens to sit
+// in shadow, so it measured ambient rather than albedo and failed with "no
+// green-family pixels found" — true of the frame, and nothing to do with the
+// palette. A check on the palette has to look at ground the sun is actually on.
+await load('shot=1&car=0&time=0.50&warmup=48&pos=2160,0,-420&eye=6&look=-1.6,-0.08')
 const groundPng = await shot(page)
 function greenFamily(png) {
   const { width: W, height: H, data } = png
