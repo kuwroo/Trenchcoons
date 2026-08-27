@@ -365,6 +365,56 @@ if (!sh) {
     `gap ${sh.gap.toFixed(0)}deg (ref 37, must be <=60)`)
 }
 
+// 8. Does distance read as blue haze?
+//
+// The single largest remaining gap against the reference, and the thing that
+// makes it read as deep. Rows from the horizon band down to the foreground are
+// a proxy for distance; a real aerial perspective rotates ground hue toward the
+// sky across that span.
+//
+//   reference  H199 -> H78   121 degrees of rotation
+//   ours       H125 -> H111   14 degrees
+//              H122 -> H98    24 degrees
+//
+// Measured within ONE frame, so it cannot be satisfied by tinting the whole
+// scene blue — only by distance actually behaving differently from foreground.
+await load('shot=1&car=0&time=0.42&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06')
+const ladderPng = await shot(page)
+function depthLadder(png, bands = 5) {
+  const { width: W, height: H, data } = png
+  const out = []
+  for (let b = 0; b < bands; b++) {
+    const ya = Math.floor(H * (0.40 + 0.58 * b / bands))
+    const yb = Math.floor(H * (0.40 + 0.58 * (b + 1) / bands))
+    let r = 0, g = 0, bl = 0, n = 0
+    for (let y = ya; y < yb; y += 2) {
+      for (let x = Math.floor(W * 0.3); x < Math.floor(W * 0.7); x += 2) {
+        const i = (y * W + x) * 4
+        r += data[i]; g += data[i + 1]; bl += data[i + 2]; n++
+      }
+    }
+    r /= n; g /= n; bl /= n
+    const mx = Math.max(r, g, bl), mn = Math.min(r, g, bl), d = mx - mn
+    let h = 0
+    if (d) {
+      if (mx === r) h = ((g - bl) / d + (g < bl ? 6 : 0))
+      else if (mx === g) h = ((bl - r) / d + 2)
+      else h = ((r - g) / d + 4)
+      h *= 60
+    }
+    out.push({ h, v: mx / 255 })
+  }
+  return out
+}
+const L = depthLadder(ladderPng)
+let rot = Math.abs(L[0].h - L[L.length - 1].h)
+if (rot > 180) rot = 360 - rot
+// Half the reference's 121 degrees, which is generous and still separates
+// cleanly from the 14-24 the build currently produces.
+check('distance reads as blue haze', rot >= 60,
+  `far H${L[0].h.toFixed(0)} -> near H${L[L.length-1].h.toFixed(0)}, ` +
+  `rotation ${rot.toFixed(0)}deg (ref 121, must be >=60)`)
+
 console.log(errs.length ? `\npage errors: ${[...new Set(errs)].slice(0,3).join(' | ')}` : '\nno page errors')
 const failed = results.filter((r) => !r.ok).length
 console.log(failed ? `\n${failed}/${results.length} complaints still unfixed` : `\nall ${results.length} complaints addressed`)
