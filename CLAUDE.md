@@ -109,39 +109,45 @@ goes blue here, so a shadowed foreground reads as distant -- greybox-noon's
 plainly green near hill measured H178), and the metric was unsigned, scoring an
 INVERTED ladder as highly as a correct one. See tools/complaints.mjs.
 
-## Known issue: the foreground is cool and over-saturated
+## Known issue: the foreground is too DARK (hue is fixed)
 
-The one failing check in `npm run complaints`. Measured on a ground-level meadow
-frame, brightest half of the near band:
+The one failing check in `npm run complaints`. Measured on the median of a
+ground-level near band against refs/genshin/grasslands.jpg:
 
-  this build   H107  S0.68        reference  H73  S0.56
+  reference   H78  V0.85
+  was         H113 V0.55
+  now         H90  V0.63     hue fixed in biomes.ts; VALUE still 0.22 short
 
-So the foreground is 34 degrees too cool AND 0.12 too saturated. Both have to
-move together: an earlier round warmed the hue to H79 while HOLDING S0.66 and
-shipped an acid highlighter lime, which is why the gate is a joint condition.
+**Do not chase the value in the palette.** Measured: raising the meadow's
+authored base value 0.61 -> 0.80 (+0.19) moved the rendered band 0.547 -> 0.625
+(+0.078). That is a compression of about 0.4, so reaching 0.85 would need an
+authored value above 1.0. The remainder is exposure and tonemap. This is the
+number behind the long-standing "no palette value fixes either end" rule.
 
-WHERE THE LEVER IS, measured rather than assumed, because two obvious guesses
-are both wrong:
+Warm and bright must move TOGETHER. Three candidates that warmed the hue with the
+value left alone all turned the sunlit slope to dry stubble — warm plus dark is
+khaki, not meadow.
 
-  * NOT the scatter grass surfaces. `grass-tuft` carries `grassMound` and
-    `grass-cluster` carries `scrub`. Magenta-ing base/shadow/lit on BOTH moves
-    the near band only from H107 S0.68 to H103 S0.63 — grass is a minority of
-    the brightest half. The band is dominated by the TERRAIN GROUND, which is
-    shaded by `src/terrain/ground.ts` with its own colour node and is not a
-    `PainterlyMaterial` at all. That is where to work.
-  * NOT `assets/defs/surfaces/meadow.json` either — its `lit` is already
-    #B6E07B (H85 S0.45) and its `top` is the reference's own bright-grass
-    swatch #E0F2A1 (H73 S0.33). The authored values are right; they are not what
-    is arriving.
+SATURATION IS NOT MEASURABLE on this frame and is deliberately not gated. The
+brightest-half of the band says the build is over-saturated (0.68 vs 0.56); the
+median of the same band says under-saturated (0.66 vs 0.74). The difference is
+content, not colour: this build draws instanced blades whose bright lime tips
+dominate any brightest-N selection and the reference is painted grass with none.
+
+Ruled out by measurement, so nobody re-derives them:
+  * the scatter grass surfaces (`grassMound`, `scrub`) — magenta-ing
+    base/shadow/lit on both moves the band only H107 -> H103; grass is a
+    minority of it. The band is the terrain ground, shaded by
+    `src/terrain/ground.ts`, which is not a `PainterlyMaterial`.
+  * `assets/defs/surfaces/meadow.json` — its stops were already right.
 
 Related lead, unverified: the `top` / vertical-gradient path looks DEAD for the
-instanced grass. Setting `top` to pure black at `gradientStrength: 1.0` on both
-grass surfaces changed the near band by nothing at all (rgb identical to three
-figures), while changing `base` on the same surfaces in the same build did move
-it. `top` IS uploaded (painterly.ts `set()`), and `resolveMaterial` gives a tuft
-`gradientBase: 0, gradientHeight: 0.5`, so `rise` should reach ~0.8 at the tips.
-Suspect the interaction between `positionLocal` in the fragment stage and the
-custom `positionNode` grass.ts installs for wind and crush.
+instanced grass. `top` set to pure black at `gradientStrength: 1.0` on both grass
+surfaces changed the near band by nothing at all, while changing `base` on the
+same surfaces in the same build moved it. `top` IS uploaded (painterly.ts
+`set()`) and `resolveMaterial` gives a tuft `gradientBase: 0, gradientHeight:
+0.5`, so `rise` should reach ~0.8 at the tips. Suspect `positionLocal` in the
+fragment stage against the custom `positionNode` grass.ts installs.
 
 ## Known issue: "I don't see tyre marks"
 
