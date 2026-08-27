@@ -15,3 +15,12 @@ shots/.best.json
 # agent scratch
 .critprobe*
 .scratch/
+
+# Agent scratch. Subagents write probe scripts and one-off captures into
+# dot-directories at the repo root; a `git add -A` from the lead sweeps them in.
+# Has happened twice — .critprobe2_*.mjs, then .critic2/ — so match the shape
+# rather than each new name.
+.critic*
+.crit*
+.probe*
+.scratch*
