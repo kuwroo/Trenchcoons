@@ -17,7 +17,7 @@
 import type * as THREE from 'three/webgpu'
 import { Polytope, type Plane } from '../hull'
 import { MeshBuilder, dot, normalize, rotY, type Vec3 } from '../mesh'
-import { coarseSolid, coarseUnder } from '../impostor'
+import { coarseSolid, coarseUnder, emitCoarse } from '../impostor'
 import { boundsFromPoints, hullShape, solidCollider } from '../collider'
 import { defineGenerator, randomDirection, type RawAsset } from '../generator'
 import { int, num } from '../schema'
@@ -318,7 +318,37 @@ export const outcrop = defineGenerator({
       geoLod1.dispose()
       geoLod1 = buildMid(frac)
     }
-    const lodFar = coarseUnder(all, (geoLod1.index?.count ?? 0) / 3)
+    const lod1Tris = (geoLod1.index?.count ?? 0) / 3
+    // LOD2 HULLS EACH COURSE SEPARATELY WHERE IT CAN AFFORD TO.
+    //
+    // This used to be `coarseUnder(all, ...)` -- one convex hull over every
+    // course at once -- and a convex hull over a stepped stack fills in the
+    // steps. cliff-block went from a legible three-course ridge at LOD0/LOD1 to
+    // a single 24-vertex lump at LOD2, silhouette area up 24%. That is the rung
+    // covering 600 m to 1600 m, which for a 26 m skyline mass whose own def
+    // calls it "mostly seen as a silhouette" is exactly where it is looked at.
+    //
+    // Hulling per course keeps the terracing, and for cliff-block it fits: 84
+    // triangles against LOD1's 88. For the small outcrops it does NOT -- three
+    // hulls of even four support directions each are ~84, against outcrop-
+    // shelf's LOD1 of 80 -- so those fall back to the whole-stack hull, which is
+    // the right trade there anyway: a 4 m shelf at its own LOD2 distance is a
+    // few pixels tall and has no terracing left to lose. The choice is made by
+    // MEASURING the result against the rung above rather than by a size
+    // threshold, so it stays correct if any of these numbers move.
+    //
+    // Cut solids were tried here first and are worse than either: dropping cut
+    // planes stops reducing triangles once the containment planes are in play,
+    // because a bigger solid meets more of them. cliff-block bottomed out at 96.
+    let lodFar: THREE.BufferGeometry | null = null
+    for (let dirs = 8; dirs >= 4; dirs--) {
+      const g = new MeshBuilder()
+      for (const pts of layerPoints) emitCoarse(g, pts, dirs)
+      const geo = g.build()
+      if ((geo.index?.count ?? 0) / 3 < lod1Tris) { lodFar = geo; break }
+      geo.dispose()
+    }
+    lodFar ??= coarseUnder(all, lod1Tris)
 
     return {
       parts: [{
