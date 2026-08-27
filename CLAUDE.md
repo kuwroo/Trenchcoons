@@ -42,6 +42,32 @@ Biomes:    must be distinguishable by more than hue — ground, scatter, rock
            form, grass density and light all change together.
 ```
 
+## Known issue: the palette only survives in mid-tones
+
+Measured on one frame at the meadow camera (pos 2160,0,-420, eye 6), sampled
+across the value range:
+
+  brightest lit   rgb(175,184,188)  H198 S0.07  V0.74   washed to grey
+  mid-lit         rgb(109,169,120)  H131 S0.35  V0.66   green, correct
+  shadow          rgb( 35, 70,119)  H213 S0.70  V0.45   blue
+
+Material colour only reaches the screen in the middle of the range. Highlights
+blow out toward white and lose all chroma; shadows are flooded by blue sky
+ambient and lose the albedo's hue entirely.
+
+NO PALETTE VALUE FIXES EITHER END. Two palette corrections were made and
+verified present in the defs while the render did not move, because the authored
+shadow colour is overwhelmed by ambient and the authored lit colour is
+overwhelmed by exposure. Chasing ground colour in assets/defs is the wrong layer
+until the lighting pipeline stops crushing both ends.
+
+The two things to fix, in the material and atmosphere rather than the data:
+  1. Ambient must TINT the shade, not replace it — §2 says shadows sit about 40
+     degrees off the lit hue and stay in the material family. Lit H99 to shadow
+     H136 is right; lit H99 to shadow H213 is the albedo being erased.
+  2. Highlights must retain chroma. The reference's brightest grass is H73 at
+     S0.34, pale but still green; ours reaches S0.07, which is grey.
+
 ## Known issue: rocks are buried
 
 A modelling critic measured this directly, via mesh spans with assets placed at
