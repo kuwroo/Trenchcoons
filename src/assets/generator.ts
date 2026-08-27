@@ -17,6 +17,18 @@ export interface GenContext {
   variant: number
   /** Already forked per (def, variant). Generators may use it freely. */
   rng: Rng
+  /**
+   * The def's params EXACTLY AS AUTHORED, before `seedJitter`.
+   *
+   * For decisions that must come out the same for every variant of a def. The
+   * params a generator receives are jittered per variant, so anything derived
+   * from them varies between siblings -- which is right for form and wrong for
+   * behaviour. `shrub` uses this to decide collision: with `size` jittered 30%
+   * and `height` 20%, one broadleaf came out 1.42 m and its sibling 1.92 m
+   * across a 1.5 m threshold, so the kart drove through one bush and bounced
+   * off the other.
+   */
+  authored: Readonly<Record<string, unknown>>
 }
 
 export interface RawPart {

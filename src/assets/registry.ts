@@ -250,7 +250,13 @@ export function scatterAsset(id: string, variant = 0): GeneratedAsset {
   // Seeded from the def id and the variant index and nothing else — no shared
   // stream, so adding a def cannot shift every other asset in the library.
   const rng = new Rng(hashSeed(`${id}#${variant}`))
-  const raw = gen.generate(jittered(def, gen, variant, rng), { id: key, variant, rng })
+  const authored: Record<string, unknown> = { ...(def.params ?? {}) }
+  for (const [k, spec] of Object.entries(gen.schema)) {
+    if (!(k in authored)) authored[k] = spec.default
+  }
+  const raw = gen.generate(
+    jittered(def, gen, variant, rng), { id: key, variant, rng, authored },
+  )
 
   const steps = def.lod?.switch
   const parts: AssetPart[] = raw.parts.map((part) => {

@@ -43,6 +43,10 @@ export const shrub = defineGenerator({
   info: { name: 'shrub', slots: ['body'], defaultSurfaces: { body: 'bush' } },
   schema,
   generate(p, ctx): RawAsset {
+    // Authored, not jittered — see `collider` at the end of this function and
+    // `authored` in GenContext.
+    const a = ctx.authored as Partial<Record<keyof typeof schema, number>>
+    const nominalHeight = (a.size ?? p.size) * (a.height ?? p.height)
     const rng = ctx.rng
 
     // Lobes are drawn ONCE and the ladder renders plane PREFIXES, exactly as in
@@ -138,7 +142,21 @@ export const shrub = defineGenerator({
       // straight THROUGH is the fastest way to make it feel like a hologram.
       // `solid` forces it on; anything over `solidAbove` metres tall gets a
       // proxy whether the def asked for one or not.
-      collider: p.solid || bounds.height >= p.solidAbove
+      //
+      // TESTED ON THE AUTHORED NOMINAL, NOT ON THE REALISED BOUNDS, so every
+      // variant of a def answers the same way. `shrub-broadleaf` authors 2.3 m
+      // wide x 0.6 = 1.38 m nominal, but the lobe scatter and sag push the
+      // realised height around it: variant 0 came out 1.42 m and variant 1
+      // 1.92 m, straddling the 1.5 m threshold, so the kart drove through one
+      // bush and bounced off its sibling. A knife-edge on an rng-jittered value
+      // is not a rule, it is a coin toss.
+      //
+      // Per-DEF is also the only honest scope for this decision: placement
+      // scales each instance by 0.8-1.4x (see the scatter table in
+      // src/terrain/biomes.ts), so no per-asset flag can track the size a given
+      // bush actually renders at. Deciding it from the authored form and letting
+      // every instance of that form agree is the behaviour a player can learn.
+      collider: p.solid || nominalHeight >= p.solidAbove
         ? solidCollider(cylinderShape(
           bounds.footprint * 0.72, bounds.height * 0.5, [0, bounds.height * 0.5, 0],
         ))
