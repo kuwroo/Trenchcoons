@@ -106,9 +106,15 @@ export class TerrainWorld {
   /** Palette maps, world-space. RGB is authored sRGB; A carries a scalar. */
   readonly baseMap = makeMap(PALETTE_RES)
   readonly shadowMap = makeMap(PALETTE_RES)
+  /** RGB = the lit stop, A = the biome's `rockSlope` (cosine of the tilt at
+   *  which ground becomes rock). The alpha of these maps was unused. */
   readonly litMap = makeMap(PALETTE_RES)
   /** RGB = the slope/exposure colour, A = grass density / 2. */
   readonly cliffMap = makeMap(PALETTE_RES)
+  /** RGB = the biome's SCATTER ROCK colour. Deliberately separate from
+   *  `cliffMap` — see `BiomeStyle.rock`; a forest's hillside breaks to soil and
+   *  a boulder standing in it is still stone. */
+  readonly rockMap = makeMap(PALETTE_RES)
   /** (refill, maskLife, collapse, dry), log-encoded. */
   readonly responseTimeMap = makeMap(RESPONSE_RES)
   /** (darken, chroma/1.5, expose, edge). */
@@ -442,10 +448,12 @@ export class TerrainWorld {
     const ps = this.shadowMap.image.data as Uint8Array
     const pl = this.litMap.image.data as Uint8Array
     const pc = this.cliffMap.image.data as Uint8Array
+    const pr = this.rockMap.image.data as Uint8Array
     const cBase = new THREE.Color()
     const cShadow = new THREE.Color()
     const cLit = new THREE.Color()
     const cCliff = new THREE.Color()
+    const cRock = new THREE.Color()
     const tmp = new THREE.Color()
     for (let j = 0; j < PALETTE_RES; j++) {
       for (let i = 0; i < PALETTE_RES; i++) {
@@ -453,12 +461,14 @@ export class TerrainWorld {
         const z = ((j + 0.5) / PALETTE_RES - 0.5) * this.span
         const c = this.climateAt(x, z)
         cBase.setRGB(0, 0, 0); cShadow.setRGB(0, 0, 0)
-        cLit.setRGB(0, 0, 0); cCliff.setRGB(0, 0, 0)
+        cLit.setRGB(0, 0, 0); cCliff.setRGB(0, 0, 0); cRock.setRGB(0, 0, 0)
         let grass = 0
+        let rockSlope = 0
         for (let b = 0; b < BIOME_COUNT; b++) {
           const w = c.weights[b]!
           if (w <= 0) continue
           const s = BIOME_STYLES[BIOME_IDS[b]!]
+          rockSlope += w * s.rockSlope
           // Blended in sRGB, deliberately: these are AUTHORED colours and the
           // authored midpoint between two of them is the sRGB one. Blending
           // ART_BIBLE's snow and its dune in linear space produces a
@@ -467,20 +477,24 @@ export class TerrainWorld {
           cShadow.add(hexRgb(tmp, s.shadow).multiplyScalar(w))
           cLit.add(hexRgb(tmp, s.lit).multiplyScalar(w))
           cCliff.add(hexRgb(tmp, s.cliff).multiplyScalar(w))
+          cRock.add(hexRgb(tmp, s.rock).multiplyScalar(w))
           grass += w * s.grassDensity
         }
         const o = (j * PALETTE_RES + i) * 4
         writeRgb(pb, o, cBase); pb[o + 3] = 255
         writeRgb(ps, o, cShadow); ps[o + 3] = 255
-        writeRgb(pl, o, cLit); pl[o + 3] = 255
+        writeRgb(pl, o, cLit)
+        pl[o + 3] = Math.round(clamp01(rockSlope) * 255)
         writeRgb(pc, o, cCliff)
         pc[o + 3] = Math.round(clamp01(grass / 2) * 255)
+        writeRgb(pr, o, cRock); pr[o + 3] = 255
       }
     }
     this.baseMap.needsUpdate = true
     this.shadowMap.needsUpdate = true
     this.litMap.needsUpdate = true
     this.cliffMap.needsUpdate = true
+    this.rockMap.needsUpdate = true
 
     const rt = this.responseTimeMap.image.data as Uint8Array
     const rn = this.responseToneMap.image.data as Uint8Array
@@ -506,7 +520,7 @@ export class TerrainWorld {
 
   dispose(): void {
     for (const t of [
-      this.baseMap, this.shadowMap, this.litMap, this.cliffMap,
+      this.baseMap, this.shadowMap, this.litMap, this.cliffMap, this.rockMap,
       this.responseTimeMap, this.responseToneMap,
     ]) t.dispose()
   }

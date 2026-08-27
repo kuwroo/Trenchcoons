@@ -419,7 +419,16 @@ export class Atmosphere {
     // surface-locked: `stroke` is the same world-space field the albedo uses, so
     // it stays stuck to the terrain instead of crawling like a screen overlay.
     const brushed = vec3(hazeColor.mul(stroke.mul(HAZE_BRUSH).add(1).max(0.15)))
-    const faded = setSaturation(color, f.mul(0.34).oneMinus())
+    // 0.42, up from 0.34. This is the DESATURATION half of "distance = haze +
+    // desaturation + hue shift toward sky", and it acts on the surface's own
+    // colour before the mix, which is the only place a surface can lose its
+    // identity gradually rather than be replaced. Measured on the reference, a
+    // grassland goes S0.63 in the foreground to S0.19 at the middle distance
+    // (#A5C8A8 at 830,495) — a two-thirds loss of chroma reached well before the
+    // haze itself is dominant. At 0.34, with f = 0.19 at 150 m, the surface kept
+    // 94% of its chroma exactly where the reference has already given up most of
+    // it, and the middle distance stayed a saturated green slab.
+    const faded = setSaturation(color, f.mul(0.42).oneMinus())
     return vec3(mix(faded, brushed, f))
   }
 

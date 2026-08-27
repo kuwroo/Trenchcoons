@@ -464,23 +464,47 @@ export const SHOTS = [
   {
     name: 'tracks-grass',
     q: 'time=0.62&car=1&deform=1&warmup=48&spawn=600,0&caryaw=0'
-      + '&drive=throttle:0-240@0.9&frame=240&camarm=2.8',
+      + '&drive=throttle:0-240@0.9,steerLeft:150-200@0.5&frame=250&camarm=3.4',
   },
-  // A ROCK COLLISION. `caryaw=1.34` points the kart at a 3.1 m boulder 18.3 m
-  // away — found by reading `__trench.solids()` at this spawn, not by eye — and
-  // the throttle is held down through the impact, so the frame is the kart
-  // stopped dead against the rock with the nose still loaded.
-  //   MEASURED at this URL through `__trench.car()`: contact false at frame 70
-  //   and true from 90 on, the chassis pinned at (2150.3, -416.1) at 0.5 m/s
-  //   with the throttle still at 0.8. Without the solver it drives through the
-  //   rock and is 60 m past it by frame 110. The proxy is the
-  // modeller's exact convex hull, flattened to its XZ shadow; see
+  // A ROCK COLLISION.
+  //
+  // RE-SITED AND RE-VERIFIED. The previous version of this entry claimed
+  // "contact false at frame 70 and true from 90 on, the chassis pinned at
+  // (2150.3, -416.1)", and replaying its own URL produced contact FALSE at
+  // frames 70, 90 and 110 with the kart still doing 35 m/s and the five nearest
+  // solids being 18-28 cm pebbles. Two critics caught it independently. The
+  // comment was measured at a site the climate fields had since moved, which is
+  // the failure mode this whole list is supposed to be immune to — so the
+  // procedure is written down here as well as the numbers.
+  //
+  // HOW THIS SITE WAS FOUND, reproducibly, by a script and not by eye:
+  //   1. spawn, then read `__trench.solids()` and `__trench.heightAt()`;
+  //   2. keep proxies with `top - heightAt > 1.2 m` AND `radius > 1.0 m` AND
+  //      12 m < distance < 90 m — i.e. things tall enough to stop a kart and far
+  //      enough away to reach 35 m/s before arriving;
+  //   3. aim with `yaw = atan2(-dx, -dz)`, which is the convention this build
+  //      uses; the three other sign combinations were tried and all three drive
+  //      past;
+  //   4. run the script and REQUIRE `contact === true`.
+  //
+  // MEASURED at this exact URL through `__trench.car()`: the kart spawns at
+  // (272.5, 755.1), the target is a 4.43 m-radius boulder at (258.2, 790.0)
+  // standing 4.03 m above the ground 37.7 m away, and at frame 150 the chassis
+  // is at (259.5, 786.5) doing 0.62 m/s with `contact` TRUE and the throttle
+  // still at 0.9 — 3.7 m from the rock's centre, i.e. against its face. Aimed at
+  // the same rock with any of the three wrong yaw conventions it ends up 54-96 m
+  // away at the full 35 m/s.
+  //
+  // `camarm=5` asks for five times the solved arm and gets 13.2 m, which is
+  // where the rig's own clamp lands; that is far enough back that the boulder,
+  // the kart and the flattened grass between them are all in frame. The proxy is
+  // the modeller's exact convex hull flattened to its XZ shadow — see
   // src/world/proxy.ts for why a horizontal solve is the only one a
   // raycast-suspension kart can consume.
   {
     name: 'rock-collision',
-    q: 'time=0.42&car=1&warmup=48&spawn=2160,-420&caryaw=1.34'
-      + '&drive=throttle:0-9999@0.8&frame=110&camyaw=1.15&camarm=1.1',
+    q: 'time=0.42&car=1&warmup=48&spawn=280,760&caryaw=2.7537'
+      + '&drive=throttle:0-9999@0.9&frame=150&camyaw=1.15&camarm=5',
   },
 ]
 

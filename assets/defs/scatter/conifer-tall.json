@@ -6,19 +6,19 @@
   "notes": "The reference's hero tree. Six plates, drooping tips, a golden-angle turn between courses so no two rims line up. `bare` leaves a sixth of the trunk clear at the bottom, which is what lets the eye read a trunk at all — the greybox's cones met the ground and the tree had no legs. LOD switches authored: the derived ladder would run LOD0 out to 250 m on a 16 m tree.",
   "params": {
     "height": 16,
-    "tiers": 5,
+    "tiers": 6,
     "spread": 0.29,
     "taper": 1.0,
     "lobes": 7,
     "notch": 0.64,
     "droop": 0.16,
-    "lift": 0.72,
+    "lift": 1.5,
     "bare": 0.2,
     "trunk": 0.038,
     "lean": 0.05
   },
   "surfaces": {
-    "foliage": "foliage",
+    "foliage": "needle",
     "trunk": "bark"
   },
   "variants": 2,
@@ -39,12 +39,5 @@
     "forest",
     "alpine",
     "meadow"
-  ],
-  "material": {
-    "foliage": {
-      "ambient": 0.55,
-      "gradientStrength": 0.42,
-      "rimStrength": 0.7
-    }
-  }
+  ]
 }

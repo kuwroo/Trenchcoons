@@ -48,14 +48,43 @@ export class Polytope {
 
   /** The starting block. Every rock in the library begins as one of these. */
   static box(hx: number, hy: number, hz: number): Polytope {
+    return Polytope.aabb([-hx, -hy, -hz], [hx, hy, hz])
+  }
+
+  /**
+   * The starting block from an arbitrary axis-aligned box.
+   *
+   * `box` is centred on the origin, which is the wrong seed for anything whose
+   * point cloud is not. `hullOf` used it with half-extents taken from `max|p|`
+   * and that put a MIRROR of the solid on the far side of the origin: an
+   * outcrop spanning 0..4.2 m seeded a box spanning -4.2..4.2, and no support
+   * direction in a decimated set ever pointed far enough down to cut the floor
+   * away again. Every coarse LOD rung in the library carried a phantom lower
+   * half — measured at exactly `-height` on seven assets — which is also where
+   * the "hollow wedge" LOD2 silhouettes came from.
+   */
+  static aabb(min: Vec3, max: Vec3): Polytope {
+    const [x0, y0, z0] = min
+    const [x1, y1, z1] = max
     const mk = (n: Vec3, d: number, loop: Vec3[]): Face => ({ plane: { n, d }, loop })
+    // WOUND OUTWARD. All six of these were wound the wrong way round, and it is
+    // the bug behind the "hollow wedge" coarse rungs: `clip` preserves the
+    // winding of a face it merely TRIMS and only orients the new cap it creates,
+    // so every surviving piece of the start block was back-facing and got culled
+    // — you saw the far interior through it. It hid at LOD0, where thirteen cut
+    // planes leave almost nothing of the original box (5 inverted triangles of
+    // 44), and became the whole silhouette at LOD2, where six planes leave most
+    // of it (18 of 32). Verified per face: `cross(loop[1]-loop[0],
+    // loop[2]-loop[0])` must point along the face's own outward normal, and
+    // `.critic/geo.mjs`-style closure checks cannot see this because the mesh is
+    // watertight either way.
     return new Polytope([
-      mk([1, 0, 0], hx, [[hx, -hy, hz], [hx, hy, hz], [hx, hy, -hz], [hx, -hy, -hz]]),
-      mk([-1, 0, 0], hx, [[-hx, -hy, -hz], [-hx, hy, -hz], [-hx, hy, hz], [-hx, -hy, hz]]),
-      mk([0, 1, 0], hy, [[-hx, hy, hz], [-hx, hy, -hz], [hx, hy, -hz], [hx, hy, hz]]),
-      mk([0, -1, 0], hy, [[-hx, -hy, -hz], [-hx, -hy, hz], [hx, -hy, hz], [hx, -hy, -hz]]),
-      mk([0, 0, 1], hz, [[-hx, -hy, hz], [-hx, hy, hz], [hx, hy, hz], [hx, -hy, hz]]),
-      mk([0, 0, -1], hz, [[hx, -hy, -hz], [hx, hy, -hz], [-hx, hy, -hz], [-hx, -hy, -hz]]),
+      mk([1, 0, 0], x1, [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]]),
+      mk([-1, 0, 0], -x0, [[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]]),
+      mk([0, 1, 0], y1, [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]]),
+      mk([0, -1, 0], -y0, [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]),
+      mk([0, 0, 1], z1, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]),
+      mk([0, 0, -1], -z0, [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]]),
     ])
   }
 
@@ -163,17 +192,39 @@ export class Polytope {
    */
   offsetPlanes(amount: number): Polytope {
     const b = this.bounds()
-    const hx = Math.max(Math.abs(b.min[0]), Math.abs(b.max[0])) + amount * 2 + 1
-    const hy = Math.max(Math.abs(b.min[1]), Math.abs(b.max[1])) + amount * 2 + 1
-    const hz = Math.max(Math.abs(b.min[2]), Math.abs(b.max[2])) + amount * 2 + 1
-    const out = Polytope.box(hx, hy, hz)
+    const pad = amount * 2 + 1
+    const out = Polytope.aabb(
+      [b.min[0] - pad, b.min[1] - pad, b.min[2] - pad],
+      [b.max[0] + pad, b.max[1] + pad, b.max[2] + pad],
+    )
     for (const f of this.faces) out.clip({ n: f.plane.n, d: f.plane.d + amount })
     return out
   }
 
-  /** Emit the solid, one flat facet per face. */
+  /**
+   * Emit the solid, one flat facet per face.
+   *
+   * SLIVERS ARE DROPPED. A cut that grazes a corner leaves a face of a few
+   * square micrometres whose loop normal is numerical noise, and those are what
+   * showed up as "boundary edges" on a solid this file's header promises is
+   * watertight — 19 on outcrop-shelf LOD1, 41 on bush-round LOD1 — plus the
+   * floating spike sliver in the shelf's coarse rung. A face under the
+   * tolerance cannot be seen and cannot close anything the neighbouring faces
+   * do not already close to within its own width, so dropping it strictly
+   * improves both the mesh and the triangle count.
+   *
+   * The tolerance is relative to the solid's own size, because the same
+   * absolute area is a whole facet on a 0.2 m pebble and dust on a 26 m cliff.
+   */
   emit(b: MeshBuilder, transform?: (p: Vec3) => Vec3): void {
+    const bb = this.bounds()
+    const span = Math.max(
+      1e-4,
+      bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2],
+    )
+    const minArea = span * span * 1e-5
     for (const f of this.faces) {
+      if (polygonArea(f.loop) < minArea) continue
       const loop = transform ? f.loop.map(transform) : f.loop
       // With a transform the stored plane normal is no longer right, so let the
       // builder recompute it from the (still planar, if the transform is
@@ -288,17 +339,69 @@ export function hullOf(
   points: readonly Vec3[], dirs: readonly Vec3[] = HULL_DIRECTIONS, inflate = 0,
 ): Polytope {
   if (points.length === 0) return Polytope.box(0.01, 0.01, 0.01)
-  let hx = 0; let hy = 0; let hz = 0
+  // Seed from the cloud's ACTUAL axis-aligned box, not from `max|p|` about the
+  // origin. See `Polytope.aabb` — seeding symmetrically mirrored every coarse
+  // rung in the library through y = 0, and the six axis planes here are what
+  // guarantees the result cannot exceed the true extents no matter how thin
+  // `dirs` gets.
+  const pad = inflate + 1e-3
+  const min: [number, number, number] = [Infinity, Infinity, Infinity]
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
   for (const p of points) {
-    hx = Math.max(hx, Math.abs(p[0]))
-    hy = Math.max(hy, Math.abs(p[1]))
-    hz = Math.max(hz, Math.abs(p[2]))
+    for (let a = 0; a < 3; a++) {
+      min[a] = Math.min(min[a]!, p[a]!)
+      max[a] = Math.max(max[a]!, p[a]!)
+    }
   }
-  const solid = Polytope.box(hx + inflate + 1e-3, hy + inflate + 1e-3, hz + inflate + 1e-3)
+  const solid = Polytope.aabb(
+    [min[0] - pad, min[1] - pad, min[2] - pad],
+    [max[0] + pad, max[1] + pad, max[2] + pad],
+  )
   for (const dir of dirs) {
     let d = -Infinity
     for (const p of points) d = Math.max(d, dot(dir, p))
     solid.clip({ n: dir, d: d + inflate })
   }
   return solid
+}
+
+/**
+ * A well-spread subset of `HULL_DIRECTIONS` of size `count`, always including
+ * the most upward and the most downward direction available.
+ *
+ * `HULL_DIRECTIONS.filter((_, i) => i % step === 0)` was the old decimation and
+ * it is not a spread: enumerated, the most-downward Y component of the subset
+ * is only -0.577 for 8, 10 and 14 directions alike, so nothing in a coarse rung
+ * ever cut the floor. Farthest-point sampling seeded with ±Y fixes both halves
+ * — the extremes are guaranteed present, and the rest are as far from each
+ * other as the parent set allows.
+ *
+ * Deterministic: no rng, and the parent set is built from the icosahedron in a
+ * fixed order.
+ */
+export function spreadDirections(count: number): Vec3[] {
+  const src = HULL_DIRECTIONS
+  const n = Math.max(2, Math.min(count, src.length))
+  let up = 0
+  let down = 0
+  for (let i = 1; i < src.length; i++) {
+    if (src[i]![1] > src[up]![1]) up = i
+    if (src[i]![1] < src[down]![1]) down = i
+  }
+  const picked = [down, up]
+  const chosen = new Set(picked)
+  while (picked.length < n) {
+    let best = -1
+    let bestDist = -Infinity
+    for (let i = 0; i < src.length; i++) {
+      if (chosen.has(i)) continue
+      let near = Infinity
+      for (const j of picked) near = Math.min(near, 1 - dot(src[i]!, src[j]!))
+      if (near > bestDist) { bestDist = near; best = i }
+    }
+    if (best < 0) break
+    chosen.add(best)
+    picked.push(best)
+  }
+  return picked.map((i) => src[i]!)
 }

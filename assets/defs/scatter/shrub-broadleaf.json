@@ -15,7 +15,7 @@
     "solid": false
   },
   "surfaces": {
-    "body": "bush"
+    "body": "leaf"
   },
   "variants": 2,
   "seedJitter": {
@@ -27,11 +27,5 @@
     "meadow",
     "forest",
     "wetland"
-  ],
-  "material": {
-    "body": {
-      "ambient": 0.52,
-      "gradientStrength": 0.4
-    }
-  }
+  ]
 }

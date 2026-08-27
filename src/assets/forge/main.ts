@@ -44,7 +44,26 @@ const numParam = (k: string, d: number): number => {
   return q.has(k) && Number.isFinite(v) ? v : d
 }
 
-const ids = (q.get('ids')?.split(',').map((s) => s.trim()).filter(Boolean)) ?? scatterIds()
+// FRAMING MODES, and they exist because the old contact sheets hid three
+// separate defects at once. One LOD at a time, at forty metres, on a mottled
+// meadow concealed a library that was 78% underground, a set of LOD1 rungs
+// mirrored through y = 0, and leopard-print facets — simultaneously. A sheet you
+// cannot see a defect in is not evidence.
+//
+//   focus   one asset at twice its own height, so form and ground contact read.
+//   ladder  every rung of ONE asset in ONE frame, so a silhouette jump or an
+//           origin shift is visible in a single image instead of across four.
+//   grid    a 1 m line grid exactly at y = 0. Burial is only readable against a
+//           known ground line; without it a half-sunk rock looks like a small
+//           rock.
+const focusId = q.get('focus')?.trim() ?? ''
+const ladderId = q.get('ladder')?.trim() ?? ''
+const ids = ladderId
+  ? [ladderId, ladderId, ladderId, ladderId]
+  : focusId
+    ? [focusId]
+    : (q.get('ids')?.split(',').map((s) => s.trim()).filter(Boolean)) ?? scatterIds()
+const showGrid = q.get('grid') === '1' || Boolean(focusId) || Boolean(ladderId)
 const variantSel = Math.max(0, Math.round(numParam('variant', 0)))
 const lodSel = q.get('lod') ?? '0'
 const showCollider = q.get('collider') === '1'
@@ -126,6 +145,27 @@ async function boot(): Promise<void> {
   const wireMat = new THREE.MeshBasicNodeMaterial({ wireframe: true })
   wireMat.color = new THREE.Color(0xff3d6e)
 
+  // THE GROUND LINE. A 1 m grid sitting exactly on y = 0: geometry below the
+  // plane occludes nothing and the lines run straight through it, geometry above
+  // it hides the lines behind it. That single cue is the difference between
+  // "small rock" and "large rock, 78% buried", which is a defect that shipped.
+  if (showGrid) {
+    const half = Math.max(colAt.total, rowAt.total) * 0.5 + 2
+    const step = Math.max(0.25, Math.min(2, maxTop * 0.25))
+    const seg: number[] = []
+    for (let v = -Math.ceil(half / step) * step; v <= half; v += step) {
+      seg.push(-half, 0, v, half, 0, v, v, 0, -half, v, 0, half)
+    }
+    const gg = new THREE.BufferGeometry()
+    gg.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3))
+    const gm = new THREE.LineBasicNodeMaterial()
+    gm.color = new THREE.Color(0xff3d6e)
+    const grid = new THREE.LineSegments(gg, gm)
+    grid.name = 'forge-groundline'
+    grid.frustumCulled = false
+    scene.add(grid)
+  }
+
   shown.forEach((s, i) => {
     const asset = s.asset
     const x = colAt.at[i % cols]!
@@ -143,10 +183,12 @@ async function boot(): Promise<void> {
       return
     }
 
+    // In ladder mode the CELL picks the rung, so all four sit in one frame.
+    const cellLod = ladderId ? (i === 3 ? 'imp' : String(i)) : lodSel
     for (const part of asset.parts) {
-      const entry = lodSel === 'imp'
+      const entry = cellLod === 'imp'
         ? part.impostor
-        : part.lods[Math.min(part.lods.length - 1, Math.max(0, Math.round(Number(lodSel) || 0)))]!
+        : part.lods[Math.min(part.lods.length - 1, Math.max(0, Math.round(Number(cellLod) || 0)))]!
       const mesh = new THREE.Mesh(entry.geometry, lib.material(part.material))
       mesh.position.set(x, 0, z)
       mesh.name = `${asset.id}#${asset.variant}/${part.slot}`
@@ -162,9 +204,14 @@ async function boot(): Promise<void> {
   const hFov = 2 * Math.atan(Math.tan(vFov * 0.5) * camera.aspect)
   const fitW = (colAt.total * 0.5) / Math.tan(hFov * 0.5)
   const fitH = (maxTop * 0.62) / Math.tan(vFov * 0.5)
-  const dist = (Math.max(fitW, fitH) * 1.12 + rowAt.total * 0.5) * numParam('dist', 1)
+  // A close-up is framed on the asset's own height, not on the sheet's width:
+  // `fitW` over one cell puts a 0.2 m pebble at the same distance as a 26 m
+  // cliff, which is how the pebble ended up four pixels across.
+  const dist = focusId
+    ? Math.max(1.2, maxTop * 2.2) * numParam('dist', 1)
+    : (Math.max(fitW, fitH) * 1.12 + rowAt.total * 0.5) * numParam('dist', 1)
   const elev = numParam('pitch', 0.2)
-  const aimY = maxTop * 0.45
+  const aimY = maxTop * (focusId ? 0.4 : 0.45)
   camera.position.set(0, aimY + Math.tan(elev) * dist, dist)
   camera.rotation.set(-elev, 0, 0)
 
@@ -177,7 +224,8 @@ async function boot(): Promise<void> {
   hud.textContent =
     `${budget.defs} defs / ${budget.assets} variants / ${budget.batches} batches` +
     `  worst-case draws ${budget.worstCaseDraws}\n` +
-    `showing ${shown.length}  lod=${lodSel}${showCollider ? '  COLLIDERS' : ''}\n` +
+    `showing ${shown.length}  lod=${ladderId ? '0/1/2/imp' : lodSel}` +
+    `${showCollider ? '  COLLIDERS' : ''}\n` +
     (budget.problems.length ? budget.problems.slice(0, 4).join('\n') : 'budget ok')
   if (q.get('shot') === '1') document.body.classList.add('shot')
 

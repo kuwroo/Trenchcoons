@@ -16,18 +16,12 @@
     "twist": 0.22
   },
   "surfaces": {
-    "body": "rock"
+    "body": "stone"
   },
   "variants": 1,
   "seedJitter": {},
   "biomes": [
     "meadow",
     "alpine"
-  ],
-  "material": {
-    "body": {
-      "shadow": "#6f86a8",
-      "shadowSkyTint": 0.62
-    }
-  }
+  ]
 }

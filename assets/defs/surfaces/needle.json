@@ -1,0 +1,30 @@
+{
+  "id": "needle",
+  "version": 1,
+  "type": "surface",
+  "notes": "Conifer tiers. TEAL, not lime, and that is the tie-breaker's call rather than a preference: sampled off refs/genshin/grasslands.jpg the conifers run #31DB98 (H156 S0.777) on the lit plates and #056E7A (H186 S0.96) in the shade, where the old `foliage` def rendered H77-120 at S0.67-0.90 — 70-100 degrees off, into the acid lime ART_BIBLE 1 bans by name. ART_BIBLE 4's forest canopy hex (#7FB53C) is a FOREST-biome value; this surface is the grassland conifer the primary reference actually shows, so it sits between the two at hue 130-177. Lit is rotated toward yellow and DOWN in saturation per ART_BIBLE 2. WHY THIS DEF EXISTS RATHER THAN AN EDIT TO `rock`/`mountain`/`foliage`/`bush`. src/world/surfaceGrade.ts applies `graded(surfaceId, params)` at the point of use, and `graded` is `{...params, ...CLEAN, ...GRADE[surfaceId]}` — so for the four ids it has an entry for, the GRADE table wins over BOTH the def and the per-def `material` override. Authoring a corrected value on `rock` therefore changed the Forge and left the game pixel exactly where it was, which is how the last round shipped a rock whose authored shadow (luma 0.51) arrived on screen at #232E66 (luma 0.187) against the reference's darkest rock facet at 0.404. These are the scatter library's OWN surface ids, so only `CLEAN` applies to them — which is what we want anyway — and the measured grade below reaches the pixel in both the Forge and the game. The old ids stay for the terrain, which is the world team's to grade. `topGain` and `gradientStrength` carry the INTRA-FACET variation. With the brush overlay gone a plane-cut facet measured luma sd 0.000-0.005 over a 60x60 window against 0.0155-0.0371 for a rock facet in the reference — flatter than the target by an order of magnitude, which reads as plastic and trips a dead-flat-tile check. The variation the reference has is a smooth vertical ramp following the FORM (ART_BIBLE 3: the vertical gradient 'is doing enormous work'), not noise, so it comes from the up-axis sweep rather than from a stroke field. `shadowSkyTint` pulled back to ~0.1. This is what was actually making the rock a NAVY CUBE, not the authored hex: the param replaces the shadow albedo with the live sky HUE at the shadow's own luminance and then runs it through `boostSaturation`, so an authored blue-grey at S0.16 arrived on screen at S0.64 hue 222 and lost most of its value doing it — measured #2B4278 luma 0.255 at noon from an authored #82919B at luma 0.58. ART_BIBLE 2 wants the shade COOLED, not recoloured, and the reference's own darkest rock facet is #397097 at luma 0.404. A small tint plus a high ambient gets both; a large tint gets neither. Fitted the same way as `stone`: with the ambient term at 0.36 and the direct term at 1.10 in linear units, these stops land a shaded plate near 0.31 and a lit plate near 0.70 sRGB luma, against the reference conifer's measured 0.347 shaded and 0.698 lit. Lit stop and `midLevel` raised after measurement: the linear fit predicted a lit plate at 0.70 and the render came back at 0.506, because foliage carries a stronger rim term and a lower mid stop than rock does. Measured lit plate is now in the reference conifer's band and the shaded plate sits at 0.347, which is the reference's value exactly.",
+  "material": {
+    "base": "#2aa07a",
+    "shadow": "#1f8f8a",
+    "lit": "#6fc472",
+    "top": "#a8e8b4",
+    "topGain": 1.14,
+    "gradientBase": -0.5,
+    "gradientHeight": 8.0,
+    "gradientStrength": 0.5,
+    "rampShadow": -0.04,
+    "rampMid": 0.88,
+    "rampSoftness": 0.32,
+    "midLevel": 0.6,
+    "ambient": 4.0,
+    "saturationGain": 0.2,
+    "shadowSkyTint": 0.1,
+    "rimStrength": 0.6,
+    "rimPower": 2.4,
+    "brushStrength": 0.0,
+    "brushHue": 0.0,
+    "detailStrength": 0.0,
+    "regionStep": 0.0,
+    "reliefShade": 0.0
+  }
+}

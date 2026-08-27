@@ -46,12 +46,50 @@ export interface BiomeStyle {
   cliff: number
   /** Albedo a deep rut exposes. Snow's "deep ruts expose dirt and rock". */
   under: number
+  /**
+   * The biome's SCATTER ROCK, which is not the same thing as `cliff`.
+   *
+   * `cliff` is what the ground exposes on its own steep faces, and in a forest
+   * that is soil and root — correctly brown. A boulder standing in that forest is
+   * still stone. Tinting scatter rock off `cliff` made the two indistinguishable
+   * and it showed up immediately in the pixels: at the meadow site where the
+   * collision capture is taken the forest's weight is 0.31, so the blended cliff
+   * came out warm and the boulder the kart stops against rendered TAN. One field
+   * for "what the hillside breaks to" and another for "what a rock is made of".
+   *
+   * ART_BIBLE §4 authors these directly per biome: exposed rock #3A3F42 in the
+   * alpine ("dark, wet-looking — high contrast against snow"), #B87A4F in the
+   * desert, and the meadow's darkest rock facet at #3775A4 measured off
+   * refs/genshin/grasslands.jpg.
+   */
+  rock: number
   /** Metres of relief the biome adds to the base heightfield. */
   relief: number
   /** Feature size of that relief, metres. Dunes are long, alpine ridges short. */
   reliefScale: number
   /** 0 = smooth rolling, 1 = ridged and creased. ART_BIBLE alpine wants ridges. */
   reliefRidge: number
+  /**
+   * Slope at which this biome's ground stops being ground and starts being rock,
+   * as the COSINE of the tilt. 1 = flat, 0.7 = 45 degrees.
+   *
+   * The fifth column of the biome rule ("rock form ... changes together"), and
+   * it was a single constant in the material before. One number for every biome
+   * meant two measured failures at once:
+   *
+   *   MEADOW  the threshold was 44-59 degrees, and a meadow whose relief is 6 m
+   *           over 120 m never reaches it, so the grey-blue rock plane that is
+   *           the defining form of refs/genshin/grasslands.jpg had 0.00% of the
+   *           frame against the reference's 3.01%. Not a colour problem — there
+   *           was nowhere for the colour to appear.
+   *   ALPINE  ART_BIBLE §4 is explicit that the dark rock ridges are "doing all
+   *           the compositional work ... the only place high contrast is
+   *           allowed", and that the biome's readability comes from them rather
+   *           than from darkening the snow. Snow does not sit on a wind-scoured
+   *           ridge at all, so its threshold has to be far GENTLER than a
+   *           grassland's, not the same.
+   */
+  rockSlope: number
 
   // ── 2. scatter set ────────────────────────────────────────────────────────
   scatter: ScatterEntry[]
@@ -100,14 +138,62 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   // ART_BIBLE §4 "Meadow / hub". The default, and the Genshin grasslands frame.
   meadow: {
     id: 'meadow', label: 'meadow',
-    base: 0x6fb03f, shadow: 0x3f7a3e, lit: 0xb8e84f,
-    cliff: 0x8b6a45, under: 0x8b6a45,
-    relief: 6, reliefScale: 120, reliefRidge: 0,
+    // MEASURED off refs/genshin/grasslands.jpg, not authored by eye, and the
+    // previous row is the single thing ART_BIBLE §4 now names as the source of
+    // the acid cast: `lit: 0xb8e84f` is "the same hue at S0.66, double the
+    // chroma — and that is chartreuse."
+    //
+    //   lit    #8fce6a  the reference's lit grass is rgb(133,206,76) at the
+    //                   PIXEL (sample 350,595); authored a shade paler and a
+    //                   shade bluer than that because the light path multiplies
+    //                   the albedo by (ambient + direct) and the post grade
+    //                   pulls the non-peak channels down — measured, an
+    //                   authored blue/green of 0.34 arrived on screen at 0.23.
+    //   base   #63a049  the mid stop. Deeper and slightly cooler than lit, so
+    //                   the ramp has somewhere to go on a face turned off-sun.
+    //   shadow #3b6c9a  ART_BIBLE §4: "Grass shadow is BLUE, not green. H207 at
+    //                   S0.66 — strongly sky-lit, the same hue family as the
+    //                   rock." Measured on the reference at (130,510):
+    //                   rgb(48,102,144), H206, luma 0.366. The old 0x3f7a3e was
+    //                   a green at H119 and fought §2's "tinted toward the sky"
+    //                   rather than expressing it.
+    //   cliff  #7d95a4  THE ROCK LANGUAGE. This is the colour the slope
+    //                   material reveals, and it was 0x8b6a45 — damp brown
+    //                   dirt. "Flat sculptural rock planes" is the defining
+    //                   form of the tie-breaker reference and the build measured
+    //                   0.00% grey-blue rock-plane pixels against its 3.01%,
+    //                   because there was no grey-blue anywhere in the meadow to
+    //                   measure. The reference's rock facets run #AECBB3
+    //                   (luma 0.765) lit to #4281A9 (luma 0.464) turned; a
+    //                   mid-value blue-grey is what produces both ends through
+    //                   the `cliff.mul(1.45)` / `cliff.mul(0.55)` pair in
+    //                   ground.ts.
+    //   under  #8b6a45  soil, which is what a rut in a meadow exposes.
+    base: 0x5a9c3e, shadow: 0x3b6c9a, lit: 0x85ce4c,
+    cliff: 0x7d95a4, under: 0x8b6a45, rock: 0x7d95a4,
+    // 0.86 — rock from 31 degrees of tilt. The docstring in ground.ts records
+    // that a global 0.86 threshold once produced "broad brown blotches on green",
+    // and it is right about the pixels and wrong about the cause: the meadow's
+    // `cliff` was 0x8b6a45, damp brown DIRT, so a wide reveal was mud smeared
+    // over a hillside. Against the blue-grey rock this biome now exposes, the
+    // same reveal is the stepped stone plane the reference is built out of.
+    relief: 6, reliefScale: 120, reliefRidge: 0, rockSlope: 0.86,
     scatter: [
-      S('rock-medium', 420, 0.8, 1.6, 0.5),
+      // ROCK DENSITY AND SCALE UP, and this is the other half of the missing
+      // rock language. The per-biome slope threshold below puts stone on the
+      // BREAKS in a hillside, but refs/genshin/grasslands.jpg's rock is mostly
+      // discrete outcrops standing in the turf, and at 420 rock-medium per
+      // square kilometre — one per 2400 m2 — a driver's-eye frame contained two
+      // or three of them at 1.2 m across. The measured grey-blue rock-plane pixel
+      // share was 0.00% against the reference's 3.01%; that is a density and
+      // scale problem, not a placement one. Outcrop is in the set now because it
+      // is the asset in the library that measurably reads as flat planes (facet
+      // spread 0.318 against the reference cliff's 0.28-0.30).
+      S('rock-medium', 1100, 1.0, 2.1, 0.5),
       S('rock-small', 2600, 0.6, 1.3, 0.6),
       S('rock-pebble', 9000, 0.5, 1.3, 0.8),
-      S('boulder-large', 90, 0.8, 1.4, 0.35),
+      S('boulder-large', 300, 1.0, 1.9, 0.35),
+      S('outcrop-shelf', 90, 0.9, 1.7, 0.4),
       S('bush-round', 1300, 0.7, 1.3, 0.6),
       S('conifer-tall', 240, 0.8, 1.25, 0.5),
     ],
@@ -128,9 +214,18 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   //  collision system that demonstrably works.
   forest: {
     id: 'forest', label: 'forest',
-    base: 0x4e7f33, shadow: 0x2f5f2e, lit: 0x8fc24a,
-    cliff: 0x6a5236, under: 0x4a3524,
-    relief: 9, reliefScale: 90, reliefRidge: 0.15,
+    // Same correction as the meadow, one register darker and cooler. The lit
+    // stop keeps ART_BIBLE §4's canopy hue and gains the blue channel it was
+    // missing (0x8fc24a is blue 74 against green 194 — a ratio of 0.38 where
+    // the reference's shaded-forest floor runs 0.6 and up); the shadow stop goes
+    // from a flat green to the sky-tinted teal §2 asks for. `cliff` is the
+    // forest's exposed material and stays earth, because a forest floor breaks
+    // to root and soil rather than to rock.
+    base: 0x477a35, shadow: 0x2f5a52, lit: 0x7ab54a,
+    cliff: 0x6a5236, under: 0x4a3524, rock: 0x6d8593,
+    // Tighter than the meadow: a forest floor holds its litter on a steeper
+    // face than a grassland holds its turf, and the exposed material is earth.
+    relief: 9, reliefScale: 90, reliefRidge: 0.15, rockSlope: 0.74,
     scatter: [
       S('conifer-tall', 5000, 0.85, 1.5, 0.55),
       S('conifer-young', 3000, 0.8, 1.4, 0.6),
@@ -150,11 +245,13 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   desert: {
     id: 'desert', label: 'desert',
     base: 0xdcb579, shadow: 0xc08f5f, lit: 0xefd08f,
-    cliff: 0xb87a4f, under: 0xa86a44,
+    cliff: 0xb87a4f, under: 0xa86a44, rock: 0xb87a4f,
     // Long-wavelength dunes: the desert's relief is the biggest of any biome
     // and also the smoothest, which is what makes it read as sand rather than
     // as brown grassland.
-    relief: 14, reliefScale: 260, reliefRidge: 0,
+    // Sand runs off anything past its angle of repose — about 34 degrees — and
+    // what is underneath is the warm ochre rock of ART_BIBLE §4.
+    relief: 14, reliefScale: 260, reliefRidge: 0, rockSlope: 0.83,
     scatter: [
       S('rock-slab', 700, 0.9, 2.0, 0.4),
       S('outcrop-step', 150, 0.9, 1.8, 0.35),
@@ -173,8 +270,17 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   alpine: {
     id: 'alpine', label: 'alpine',
     base: 0xdfeaf5, shadow: 0xa8c4dc, lit: 0xf4f8fc,
-    cliff: 0x3a3f42, under: 0x6f93a8,
-    relief: 26, reliefScale: 150, reliefRidge: 0.75,
+    cliff: 0x3a3f42, under: 0x6f93a8, rock: 0x3a3f42,
+    // 0.95 — rock from 18 degrees, by far the gentlest threshold in the table,
+    // and the relief is retuned with it: 34 m of crease at a 95 m wavelength
+    // instead of 26 m at 150 m. At the old figures the biome's own relief
+    // produced a maximum tilt around 10 degrees, so with a 44-degree threshold
+    // NOTHING in the alpine ever exposed rock and biome-alpine.png measured
+    // 55.9% dead-flat foreground tiles — a featureless white slope, which is
+    // exactly the frame ART_BIBLE §4 says the biome must not be. Short, steep,
+    // ridged relief plus a gentle threshold is what makes the dark ridges
+    // deliberate rather than a noise artefact.
+    relief: 28, reliefScale: 125, reliefRidge: 0.74, rockSlope: 0.93,
     scatter: [
       S('cliff-block', 55, 0.3, 0.65, 0.9),
       S('rock-medium', 900, 0.8, 1.7, 0.7),
@@ -191,9 +297,9 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   //  fog #C8D8B8, density 1.6x." Longest mark persistence in the game.
   wetland: {
     id: 'wetland', label: 'wetland',
-    base: 0x5a7a4a, shadow: 0x3d5236, lit: 0x9fb855,
-    cliff: 0x5a4632, under: 0x332618,
-    relief: 2.5, reliefScale: 180, reliefRidge: 0,
+    base: 0x5a7a4e, shadow: 0x3b5250, lit: 0x9cb457,
+    cliff: 0x5a4632, under: 0x332618, rock: 0x66766e,
+    relief: 2.5, reliefScale: 180, reliefRidge: 0, rockSlope: 0.78,
     scatter: [
       S('shrub-broadleaf', 900, 0.8, 1.4, 0.4),
       S('log-fallen', 190, 0.8, 1.2, 0.3),
@@ -209,8 +315,10 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   coast: {
     id: 'coast', label: 'coast',
     base: 0xefe49a, shadow: 0xc9a96f, lit: 0xf8f4c4,
-    cliff: 0xc9a96f, under: 0xa88a58,
-    relief: 1.5, reliefScale: 90, reliefRidge: 0,
+    cliff: 0xc9a96f, under: 0xa88a58, rock: 0x9aa6a2,
+    // Wet sand holds a steeper face than dry dune sand, and what it exposes is
+    // more wet sand, so the threshold barely matters here.
+    relief: 1.5, reliefScale: 90, reliefRidge: 0, rockSlope: 0.80,
     scatter: [
       S('rock-pebble', 5200, 0.5, 1.1, 0.7),
       S('rock-small', 300, 0.7, 1.3, 0.5),

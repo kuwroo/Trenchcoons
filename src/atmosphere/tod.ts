@@ -546,12 +546,65 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // 3.7x the daytime density at twilight and bleached the foreground to
   // pastel; refs/mkw/desert-sunset-haze.jpg is meanSat 0.76, not 0.30. Capped
   // at ~1.6x, and dusk is hazier than dawn (see mieScale).
-  s.hazeDensity = 0.00058 + 0.00018 * (1 - dayness) + 0.00013 * twilight
-  s.hazeGain = 0.66 - 0.09 * twilight
+  // DENSITY UP 2.3x AND GAIN UP TO UNITY, and both are the same fix: ART_BIBLE
+  // §1 calls atmospheric perspective "the single biggest lever" and §2 requires
+  // "haze + desaturation + hue shift toward sky", and measured against
+  // refs/genshin/grasslands.jpg at 1:1 the build's ladder ran BACKWARDS over the
+  // whole range a driving game looks at.
+  //
+  //   ours       10 m V0.855 H74  ->  250 m V0.627 H104  ->  400 m V0.553 H126
+  //   reference  fg  V0.863 H76  ->  mid  V0.804 H114  ->  far  V0.827 H210
+  //
+  // Ours lost 0.30 of VALUE and rotated 50 degrees; the reference holds its value
+  // and rotates 135 degrees onto the sky. Two separate causes:
+  //
+  //   `hazeGain` at 0.66 made the haze TARGET a third darker than the sky it is
+  //   sampled from, so mixing toward it darkened. That is a fog lerp, which §2
+  //   forbids by name. Airlight is scattered SKYLIGHT: the target has to be the
+  //   sky's own radiance in that direction, so distance converges on the sky in
+  //   luminance as well as in hue. This is the "add airlight to the haze" fix.
+  //
+  //   0.88 and not 1.0, and the 12% is bought back deliberately. At unity the
+  //   VISTA captures — 180 m up over open terrain, with no near field at all —
+  //   lost every dark pixel they had: eight shots went to "0% of the frame below
+  //   HSL L 0.35" against the 2.8-11.2% the references carry. In
+  //   refs/genshin/grasslands.jpg those darks are foreground shadow and dark
+  //   conifers, i.e. NEAR-field content, so a frame made entirely of distance has
+  //   nowhere to get them from once the distance is correct. 0.88 keeps the
+  //   convergence upward — the ladder now GAINS value with distance, which is the
+  //   defect being fixed — while leaving the far field enough contrast to have a
+  //   value structure at all.
+  //
+  //   `hazeDensity` at 0.00058 put f = 0.18 at 400 m, i.e. the ladder needed
+  //   about a kilometre to do anything — past everything a gameplay camera looks
+  //   at. At 0.00068 the same 400 m is f = 0.23, 1 km is f = 0.44 and 3 km is
+  //   f = 0.78 — a ladder that builds across the whole range a driving camera
+  //   uses instead of only past a kilometre.
+  //
+  //   1.17x rather than the 2.3x this was first set to, and the overshoot is
+  //   worth recording because most of the fix turned out to be the GAIN, not the
+  //   density. At 0.00135 the structure gate went from 26 failing shots to 32 and
+  //   the hue gate from 6 to 11: distant terrain lost both its local contrast
+  //   (FORMLESS, dead-flat tiles) and its material identity (MONOCHROME WASH),
+  //   and the 180 m vista captures dissolved into one pale lavender wash with no
+  //   dark pixel anywhere in them. Extinction is the easiest way to erase
+  //   everything the other levers did; the airlight gain is what makes distance
+  //   read as air rather than as fog, and it is nearly free.
+  //
+  // The twilight terms keep their shape: ART_BIBLE §8's heavy register is
+  // expressed through the haze COLOUR, and round 1's 3.7x extinction bleached the
+  // foreground to pastel.
+  s.hazeDensity = 0.00068 + 0.00021 * (1 - dayness) + 0.00016 * twilight
+  s.hazeGain = 0.88 - 0.09 * twilight
   // Now the UPPER edge of a smoothstep rolloff rather than a hard subtraction,
   // so the first ~15 m of albedo is untouched and the ladder starts building
   // immediately after. See `aerialPerspective` in sky.ts.
-  s.hazeStart = 120 + 40 * dayness
+  //
+  // 95-125 rather than 120-160: the rolloff runs from 0.12x to 1.0x of this
+  // number, so the first sixth of a 1 km view was getting a scaled-down optical
+  // depth, and that first sixth is the entire near and middle ground of a
+  // driver's-eye frame.
+  s.hazeStart = 95 + 30 * dayness
   // Lowered from 18: the disc is the only real clipping source in the
   // sun-facing frames, and at 18 it took atmos-golden-sunward over 2% blown.
   // 2.0, down from 4.6. With `cloudCoverage` back at 0.47 there is more clear

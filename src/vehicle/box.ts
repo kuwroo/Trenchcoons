@@ -324,7 +324,9 @@ function arrowGlyph(x: number, y: number, z: number, size: number): THREE.Buffer
 }
 
 /**
- * Printed marks and the lid seam, in ink.
+ * Printed marks, in ink. WALLS ONLY — there is no lid seam, because there is no
+ * lid; the docstring used to say "and the lid seam" and that was the last
+ * mention of one anywhere on the kart.
  *
  * Small, dark, and deliberately not symmetrical with the tape: a box that has
  * been through a depot has a couple of stencils on it in whatever order the

@@ -26,13 +26,15 @@
 // the same lift is applied to the collision proxy, so physics and pixels agree.
 
 import * as THREE from 'three/webgpu'
+import { float, positionWorld, texture, vec2, vec3 } from 'three/tsl'
+import type { Node } from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
 import { PainterlyMaterial } from '../material/painterly'
 import { ScatterLibrary } from '../assets'
 import type { TerrainWorld } from '../terrain/world'
 import { BIOME_COUNT, BIOME_IDS, BIOME_STYLES } from '../terrain/biomes'
 import { buildProxy, type ProxyPoly } from './proxy'
-import { graded } from './surfaceGrade'
+import { biomeTint, graded } from './surfaceGrade'
 
 /** Band outer radii, metres. */
 const BANDS = [80, 260, 900] as const
@@ -50,6 +52,51 @@ const BAND_CELL = [3.4, 13, 32] as const
 const BAND_CAP = [560, 900, 1000] as const
 /** Fraction of its own height an instance is sunk into the ground. */
 const EMBED = 0.06
+
+/**
+ * Which of the terrain's baked palette maps a surface takes its biome tint from,
+ * and how strongly.
+ *
+ * `rock` is the biome's own stone colour — a field of its own rather than the
+ * ground's `cliff`, because a forest hillside breaks to SOIL and a boulder
+ * standing in that forest is still stone (see `BiomeStyle.rock`): ART_BIBLE §4's exposed rock #3A3F42 in the alpine, #B87A4F in
+ * the desert, a lifted blue-grey in the meadow. Anything made of stone follows
+ * it. `lit` is the ground's own lit stop, which is what vegetation should follow
+ * — a bush at the desert's edge is a drier, paler bush.
+ *
+ * Rock is tinted HARD (0.85) and vegetation softly (0.5). The measured failure
+ * was entirely on the rock side: every scatter rock in the game rendered the
+ * same blue-grey everywhere, and in the alpine that meant slab faces at
+ * #94BFDD, luma 0.867 — LIGHTER than the snow shadow, so the dark ridges
+ * ART_BIBLE says carry that biome's whole compositional load could not punch
+ * through. Vegetation stays mostly its own colour because a conifer is a
+ * conifer; it is the ground under it that changes.
+ *
+ * `bark` is deliberately absent. A trunk is warm red-brown per ART_BIBLE §4 in
+ * every biome that has trees, and multiplying it by the alpine's snow map would
+ * bleach it.
+ */
+const TINT_SOURCE: Record<string, { map: 'rock' | 'lit'; strength: number }> = {
+  stone: { map: 'rock', strength: 0.85 },
+  massif: { map: 'rock', strength: 0.85 },
+  rock: { map: 'rock', strength: 0.85 },
+  mountain: { map: 'rock', strength: 0.85 },
+  cliff: { map: 'rock', strength: 0.85 },
+  needle: { map: 'lit', strength: 0.45 },
+  leaf: { map: 'lit', strength: 0.5 },
+  foliage: { map: 'lit', strength: 0.45 },
+  bush: { map: 'lit', strength: 0.5 },
+  scrub: { map: 'lit', strength: 0.7 },
+  grassMound: { map: 'lit', strength: 0.7 },
+}
+
+/**
+ * The meadow's own values for the two maps above — the biome every surface in
+ * the library was graded in, and therefore the colour at which `biomeTint`
+ * returns 1. Kept next to the table it belongs to rather than imported, because
+ * the pairing is "what this tint is measured AGAINST", not "what the meadow is".
+ */
+const TINT_REFERENCE = { rock: 0x7d95a4, lit: 0x85ce4c } as const
 
 export interface Obstacle {
   x: number
@@ -217,13 +264,35 @@ export class Scatter {
     atmosphere: Atmosphere, surfaceId: string, params: PainterlyMaterial['params'],
   ): THREE.Material {
     const clean = graded(surfaceId, params)
-    const key = JSON.stringify(clean)
+    // Keyed on the SURFACE as well as the params, because two surfaces can grade
+    // to the same numbers and take their tint from different maps.
+    const key = `${surfaceId}|${JSON.stringify(clean)}`
     const hit = this.byParams.get(key)
     if (hit) return hit.material
-    const pm = new PainterlyMaterial(atmosphere, clean)
+    // ── the biome tint ───────────────────────────────────────────────────────
+    // Read from the instance's own world position via the terrain's baked map,
+    // so it costs one texture fetch and cannot drift from the classification the
+    // placement, the ground and the deform response all share. `positionWorld`
+    // is per-fragment and the map is 16 m per texel, so an instance is uniformly
+    // tinted in practice without needing an attribute.
+    const src = TINT_SOURCE[surfaceId]
+    let tint: ReturnType<typeof biomeTint> | undefined
+    if (src) {
+      const map = src.map === 'rock' ? this.world.rockMap : this.world.litMap
+      tint = biomeTint(
+        texture(map, this.mapUv()).rgb, TINT_REFERENCE[src.map], src.strength,
+      )
+    }
+    const pm = new PainterlyMaterial(atmosphere, clean, null, tint ? { tint } : {})
     this.byParams.set(key, pm)
     this.materials.push(pm)
     return pm.material
+  }
+
+  /** World XZ of the fragment -> the terrain's baked-map UV. */
+  private mapUv(): Node<'vec2'> {
+    const wp = vec3(positionWorld)
+    return vec2(vec2(wp.x, wp.z).div(float(this.world.span)).add(0.5))
   }
 
   get instances(): number {

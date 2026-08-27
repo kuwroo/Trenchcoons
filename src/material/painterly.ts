@@ -649,6 +649,27 @@ function bumpNormal(
  * A live instance of the shared material. Params are uniforms, so the Forge and
  * the in-game inspector will be able to drive them without a recompile.
  */
+/** Per-INSTANCE modulation, supplied by whoever is instancing the material. */
+export interface PainterlyOptions {
+  /**
+   * Multiplied into the albedo, in LINEAR space, before the light.
+   *
+   * The channel through which a biome reaches instanced scatter and grass, and
+   * the reason it is a node rather than a param is that a param is per-material
+   * and the thing being expressed is per-instance: one grass batch covers a
+   * transition band and has to be green at one end and straw at the other.
+   *
+   * Measured need, not a nicety. Bright lime tufts were rendering on desert sand
+   * (2.4% of the chromatic ground pixels in shots/biome-desert.png at hue
+   * 135-165) and on the alpine snowfield, and every scatter rock rendered the
+   * same blue-grey in every biome — alpine slab #94BFDD at luma 0.867 against
+   * ART_BIBLE §4's exposed rock #3A3F42, i.e. lighter than the snow it was
+   * supposed to punch a dark hole in. src/world/scatter.ts imported BIOME_STYLES
+   * and used only the placement densities out of it.
+   */
+  tint?: Node<'vec3'>
+}
+
 export class PainterlyMaterial {
   readonly material = new THREE.MeshBasicNodeMaterial()
   readonly params: PainterlyParams
@@ -695,6 +716,7 @@ export class PainterlyMaterial {
     atmosphere: Atmosphere,
     params: Partial<PainterlyParams> = {},
     deform: DeformHook | null = null,
+    options: PainterlyOptions = {},
   ) {
     this.params = { ...PAINTERLY_DEFAULTS, ...params }
     const u = this.u
@@ -968,8 +990,41 @@ export class PainterlyMaterial {
       albedo = vec3(mix(albedo, disturbed, dm))
     }
 
+    // ── per-instance biome tint ───────────────────────────────────────────────
+    // Last thing before the light, so it modulates the finished albedo — every
+    // stop, the vertical gradient and the deformation response together — rather
+    // than one of them.
+    if (options.tint) albedo = vec3(albedo.mul(options.tint))
+
     // ── light: sky ambient (coloured, lifted) + ramped direct ─────────────────
-    const level = mix(float(0), u.midLevel, toMid)
+    //
+    // A FILL FLOOR of 0.13, the same term src/terrain/ground.ts carries at 0.12,
+    // and it is bounce light: the one direct-lighting contribution a diffuse-only
+    // NPR model has no other way to express. Without it a fragment sitting on the
+    // shadow stop received `albedo * ambient` and nothing else, so the value of
+    // every turned facet in the game was set solely by the sky irradiance — which
+    // is why the shipped rock had to run `ambient: 4.9` to reach the reference's
+    // 0.40, and why running it there painted every lit facet CYAN (measured hue
+    // 176-192 against the reference rock's 117-130): at 4.9 the blue sky LUT is
+    // the dominant term in `albedo * (ambient + direct)` and the albedo stops
+    // stop mattering.
+    //
+    // The floor is SUN-COLOURED, so it carries the key's warmth into the shade
+    // instead of more sky. That is the half of ART_BIBLE §2's "shadows are
+    // coloured and lifted ... never grey, never crushed" that a sky-only ambient
+    // cannot do, and it lets `ambient` come back down to a value at which the
+    // authored hue survives — see the `stone`/`massif`/`needle` entries in
+    // src/world/surfaceGrade.ts, which fall from 4.9/4.4/4.0 to 1.9/1.85/1.7 on
+    // the strength of this one term.
+    // A FLOOR rather than a pedestal — `mix(FILL, midLevel, toMid)`, so the term
+    // is worth 0.11 on the shadow stop and NOTHING on the mid or lit stops. The
+    // additive form lifted all three, which would have invalidated the fit the
+    // scatter library's four surface defs were measured against (see the notes in
+    // assets/defs/surfaces/stone.json — a two-sample solve for the ambient and
+    // the albedo pair together). This form leaves the mid and lit stops exactly
+    // where they were measured and touches only the thing that is crushed.
+    const FILL = 0.13
+    const level = mix(float(FILL), u.midLevel, toMid)
     const direct = vec3(atmosphere.sunColorNode.mul(mix(level, float(1), toLit)))
     let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(direct)))
 
@@ -1048,8 +1103,17 @@ export class PainterlyMaterial {
     // matter what colours those were authored with.
     //
     // `saturationGain` now reads as "fraction of chroma LOST at full light".
+    //
+    // `setSaturation`, not `gradeSaturation`, and that is a bug fix rather than a
+    // tuning change — the same one made in src/terrain/ground.ts. Every one of
+    // the measurements quoted above is a DESATURATION, so every amount this call
+    // site can produce is below 1; and `gradeSaturation` ends in
+    // `pow(ratio, k.max(0).mul(weight))`, whose `k.max(0)` makes it exactly the
+    // identity for any amount below 1. The whole comment above described a term
+    // that compiled to `color = color`. Measured across the shot set, lit-vs-
+    // shaded saturation ran +0.257 where the reference reads -0.043.
     const lum = luminance(color)
-    color = gradeSaturation(color, u.saturationGain.mul(smoothstep(0.03, 0.7, lum)).oneMinus())
+    color = setSaturation(color, u.saturationGain.mul(smoothstep(0.03, 0.7, lum)).oneMinus())
 
     // ── aerial perspective, in-shader ────────────────────────────────────────
     this.material.colorNode = atmosphere.aerialPerspective(color, vec3(positionWorld), stroke)

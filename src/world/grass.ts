@@ -26,16 +26,33 @@
 // `iRot` for why a world-space gust has to be rotated into instance space.
 
 import * as THREE from 'three/webgpu'
-import { attribute, float, positionLocal, pow, vec2, vec3 } from 'three/tsl'
+import {
+  attribute, float, positionLocal, pow, saturate, texture, vec2, vec3,
+} from 'three/tsl'
+import type { Node } from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
 import type { WindField } from '../atmosphere/wind'
-import { PainterlyMaterial } from '../material/painterly'
+import { PainterlyMaterial, type DeformHook } from '../material/painterly'
 import { ScatterLibrary } from '../assets'
 import type { TerrainWorld } from '../terrain/world'
-import { graded } from './surfaceGrade'
+import { biomeTint, graded } from './surfaceGrade'
 
 /** Ring outer radii, metres. */
 const BANDS = [22, 60, 150] as const
+/**
+ * Scale range on the authored tuft, multiplied by the biome's `grassScale`.
+ *
+ * Widened from 0.72..1.38 to 0.96..1.86, and it is a COVERAGE fix rather than a
+ * size preference. shots/grass-close.png measured 41.9% of its foreground tiles
+ * dead flat against 2.7% in refs/genshin/grasslands.jpg — bare untextured ground
+ * showing between individual sprigs, where the reference's grass is a continuous
+ * carpet with the ground only glimpsed through it. The lattice was already
+ * saturated (at 0.9 clumps/m2 and the near band's 0.62 m cell, essentially every
+ * cell carries a clump), so the missing coverage is per-clump WIDTH, not count —
+ * and width is free where count costs a draw's worth of instances each.
+ */
+const SCALE_LO = 0.96
+const SCALE_SPAN = 0.90
 /** Lattice the band is sampled on, metres. Coarser = fewer, larger clumps. */
 const BAND_CELL = [0.62, 1.7, 3.2] as const
 /** Extra thinning per band on top of the lattice. */
@@ -98,6 +115,7 @@ export class Grass {
     private readonly wind: WindField,
     library: ScatterLibrary,
     options: GrassOptions = {},
+    private readonly deform: DeformHook | null = null,
   ) {
     this.group.name = 'grass'
     this.ids = options.ids ?? ['grass-tuft', 'grass-cluster']
@@ -145,22 +163,73 @@ export class Grass {
   private buildMaterial(
     atmosphere: Atmosphere, params: PainterlyMaterial['params'], height: number,
   ): THREE.Material {
-    const pm = new PainterlyMaterial(atmosphere, params)
-    this.materials.push(pm)
     const root = vec2(attribute<'vec2'>('iRoot', 'vec2'))
     const rot = vec2(attribute<'vec2'>('iRot', 'vec2'))
     const inv = float(attribute<'float'>('iInv', 'float'))
+
+    // ── the biome tint ───────────────────────────────────────────────────────
+    //
+    // Sampled from the terrain's OWN baked palette map at the clump's root, so
+    // grass cannot disagree with the ground it grows out of. That is worth more
+    // than a per-instance colour computed on the CPU: it is one texture fetch, it
+    // costs the rebuild nothing, and it is by construction the same
+    // classification the ground material, the deform response and the scatter
+    // set are reading. Drive into the desert and the tufts go straw because the
+    // sand under them did.
+    //
+    // A RATIO against the meadow, not the colour itself — the tuft keeps its own
+    // authored albedo, its vertical gradient and its ramp, and only the biome's
+    // departure from the hub is applied. So the meadow is untouched by
+    // construction (the ratio is 1 there), which is what makes this safe to add
+    // to a surface that was already graded against the reference.
+    const tint = biomeTint(texture(this.world.litMap, this.mapUv(root)).rgb, 0x85ce4c, 0.9)
+
+    const pm = new PainterlyMaterial(atmosphere, params, null, { tint })
+    this.materials.push(pm)
+
     // Cubed-ish, so the blade BENDS rather than shearing: nearly nothing at the
     // base, everything at the tip.
     const weight = pow(positionLocal.y.div(float(height)).clamp(0, 1), float(1.7))
     const w = vec3(this.wind.sway(root, weight).mul(float(SWAY)))
-    const local = vec3(
+    let local = vec3(
       w.x.mul(rot.x).sub(w.z.mul(rot.y)),
       w.y,
       w.x.mul(rot.y).add(w.z.mul(rot.x)),
     ).mul(inv)
+
+    // ── the deformation field: grass is CRUSHED, not merely stained ───────────
+    //
+    // The fifth user complaint, and the half of it that was still visibly true.
+    // The marks are stamped world-wide and the ground material reads them, but
+    // nothing in src/world read the field at all — so on the meadow a tyre track
+    // was a 4 cm albedo darkening seen THROUGH 0.8 undisturbed tufts per square
+    // metre, and it measured as a soft stain rather than a rut. Flattening the
+    // blades is most of what a wheel actually does to grass and it is what makes
+    // the corridor legible from a driver's eye.
+    //
+    // Applied along the local up-axis and scaled by the same `weight` the wind
+    // uses, so the clump folds from the base instead of sinking into the ground,
+    // and pushed sideways along the field's own slope so the two ruts splay
+    // outward the way crushed grass does. Sampled at the ROOT, in the vertex
+    // stage, at one texture tap per vertex.
+    if (this.deform) {
+      const d = this.deform.shade(vec3(root.x, float(0), root.y))
+      const crush = saturate(d.mask).mul(0.86).toVar()
+      // Fold: keep a tenth of the height at full crush, so the corridor still
+      // reads as flattened grass rather than as bare ground.
+      local = vec3(local.add(vec3(
+        d.slope.x.clamp(-1, 1).negate().mul(crush).mul(weight).mul(0.5),
+        positionLocal.y.negate().mul(crush).mul(weight),
+        d.slope.y.clamp(-1, 1).negate().mul(crush).mul(weight).mul(0.5),
+      )))
+    }
     pm.material.positionNode = vec3(positionLocal.add(local))
     return pm.material
+  }
+
+  /** World XZ -> the terrain's baked-map UV. */
+  private mapUv(root: Node<'vec2'>): Node<'vec2'> {
+    return vec2(root.div(float(this.world.span)).add(0.5))
   }
 
   /** Number of live clumps. For the HUD and the acceptance test. */
@@ -233,11 +302,18 @@ export class Grass {
         }
 
         const yaw = hash2(i, j, 67) * Math.PI * 2
-        const scale = g.scale * (0.72 + hash2(i, j, 89) * 0.66)
+        const scale = g.scale * (SCALE_LO + hash2(i, j, 89) * SCALE_SPAN)
         this.p.set(x, y - 0.03, z)
         this.e.set(0, yaw, 0)
         this.q.setFromEuler(this.e)
-        this.s.set(scale, scale * (0.85 + hash2(i, j, 97) * 0.4), scale)
+        // WIDE AND SHORT, not uniformly bigger. The XZ scale above carries the
+        // coverage the reference has (see SCALE_LO) and the Y factor takes the
+        // height back out of it: at a uniform 0.96-1.86 the tufts stood roughly a
+        // metre tall, which buried the chase camera in shots/tracks-grass.png and
+        // made the capture a picture of the inside of a lawn. Genshin's turf is
+        // dense and low with the occasional taller clump, which is exactly a wide
+        // footprint and a Y factor under one.
+        this.s.set(scale, scale * (0.58 + hash2(i, j, 97) * 0.36), scale)
         batch.mesh.setMatrixAt(n, this.m.compose(this.p, this.q, this.s))
         batch.root.setXY(n, x, z)
         batch.rot.setXY(n, Math.cos(yaw), Math.sin(yaw))

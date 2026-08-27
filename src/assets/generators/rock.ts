@@ -24,6 +24,7 @@
 // 0.45, which is roughly one flat surface for every one and a bit walls.
 
 import { Polytope, type Plane } from '../hull'
+import type * as THREE from 'three/webgpu'
 import { MeshBuilder, dot, normalize, type Vec3 } from '../mesh'
 import { boundsFromPoints, hullShape, solidCollider } from '../collider'
 import { defineGenerator, randomDirection, type GenContext, type RawAsset } from '../generator'
@@ -117,21 +118,92 @@ export const rock = defineGenerator({
         ? p.bite * ctx.rng.range(0.6, 1.1)
         : p.bite * (1 - p.jag * 0.5 + ctx.rng.float() * p.jag),
     )
-    const counts = [
+    // 62% and 45%, not 55% and 28%.
+    //
+    // The first three planes are AUTHORED — the tilted top and two base bevels
+    // — so a rung with only four planes is a box cut by top-plus-bevels-plus-one,
+    // which is a WEDGE. Put side by side with LOD0 in one frame
+    // (shots/forge/forge-ladder-rock-medium.png) the old 28% rung read as a
+    // completely different object: a wide flat overhang where LOD0 is a chunky
+    // block. A rock's coarsest rung is also its impostor, so that silhouette is
+    // what everything past the LOD2 distance sees, forever.
+    const targets = [
       planes.length,
-      Math.max(3, Math.round(planes.length * 0.55)),
-      Math.max(3, Math.round(planes.length * 0.28)),
+      Math.max(5, Math.round(planes.length * 0.62)),
+      Math.max(5, Math.round(planes.length * 0.45)),
     ]
-    const drop = p.size * p.height * p.embed
-    const shift = (q: Vec3): Vec3 => [q[0], q[1] - drop, q[2]]
+    // WHERE THE BLOCK SITS. `Polytope.box` is centred on y = 0, so the cut
+    // solid straddles the origin — and the first version of this line was
+    // `q[1] - drop`, which sank it FURTHER. Measured against a ground plane at
+    // y = 0, rock-medium spanned -1.188..0.612 (66% underground against an
+    // authored embed of 0.16) and rock-slab variant 1 lay entirely below the
+    // turf and rendered nothing at all. Flat sculptural rock is the defining
+    // form in refs/genshin/grasslands.jpg and the library was hiding three
+    // quarters of it.
+    //
+    // Derived from the solid's OWN measured extent rather than from the
+    // authored block height, because the cuts move both ends: `embed` then
+    // means exactly what the schema says it means — the fraction of the visible
+    // form that is under the turf — and the invariant below is exact rather
+    // than approximate.
+    const full = solidFrom(p, planes, targets[0]!, depths)
+    const fb = full.bounds()
+    const span = Math.max(1e-6, fb.max[1] - fb.min[1])
+    const lift = -fb.min[1] - p.embed * span
+    const shift = (q: Vec3): Vec3 => [q[0], q[1] + lift, q[2]]
 
-    const lods = counts.map((c) => {
-      const b = new MeshBuilder()
-      solidFrom(p, planes, c, depths).emit(b, shift)
-      return b.build()
-    })
-    const full = solidFrom(p, planes, counts[0]!, depths)
-    const pts = full.points().map(shift)
+    // A FLAT FLOOR AT THE EMBED DEPTH, on every rung.
+    //
+    // Dropping cut planes can only make a solid bigger, and one of the
+    // directions it grows in is DOWN — the base bevels are among the planes a
+    // coarse rung drops, so boulder-large's LOD1 hung 0.66 m lower than its
+    // LOD0 and the coarse rungs sank as they simplified. Clipping every rung
+    // with the same horizontal plane at the authored embed depth makes the
+    // whole ladder share one base, and the face it adds is under the turf where
+    // nothing can see it.
+    const floor: Plane = { n: [0, -1, 0], d: -fb.min[1] }
+
+    /**
+     * The ladder, with each rung verified STRICTLY cheaper than the one above.
+     *
+     * Not just `planes.length * 0.55`: dropping a cut sometimes GROWS the
+     * triangle count, because the faces the cut used to trim come back as
+     * wider polygons that fan into more triangles. rock-small variant 1 went
+     * 28 -> 32 that way. So the target is a starting point and the rung walks
+     * down from it until it is genuinely cheaper, which makes the ladder
+     * monotone by construction instead of by hope.
+     */
+    const lods: THREE.BufferGeometry[] = []
+    let prev = Infinity
+    for (const target of targets) {
+      let built: THREE.BufferGeometry | null = null
+      for (let c = target; c >= 1; c--) {
+        const b = new MeshBuilder()
+        solidFrom(p, planes, c, depths).clip(floor).emit(b, shift)
+        const geo = b.build()
+        const tris = (geo.index?.count ?? 0) / 3
+        if (tris < prev) { built = geo; prev = tris; break }
+        geo.dispose()
+      }
+      if (!built) {
+        // Nothing cheaper exists; repeat the previous rung rather than emit an
+        // inverted one. The registry's ladder is allowed to be short.
+        break
+      }
+      lods.push(built)
+    }
+    const pts = full.clone().clip(floor).points().map(shift)
+    // Self-checking, because this is the exact bug that shipped: the buried
+    // fraction of the rock must be the authored `embed`. A future edit to the
+    // cut order or the plane families cannot silently sink the library again.
+    const bounds = boundsFromPoints(pts)
+    const buried = -(fb.min[1] + lift) / Math.max(1e-6, bounds.height)
+    if (Math.abs(buried - p.embed) > 1e-3) {
+      throw new Error(
+        `${ctx.id}: rock sits ${(buried * 100).toFixed(1)}% underground, ` +
+        `authored embed ${(p.embed * 100).toFixed(1)}%`,
+      )
+    }
     return {
       // The impostor IS the coarsest rung. A rock at LOD2 is already a ten-face
       // block of a couple of dozen triangles; a crossed card would cost more
@@ -141,7 +213,7 @@ export const rock = defineGenerator({
       // Exact, and free: the render mesh is already convex, so the proxy is the
       // same solid. Nothing else in the library gets a proxy this tight.
       collider: solidCollider(hullShape(pts)),
-      bounds: boundsFromPoints(pts),
+      bounds,
     }
   },
 })

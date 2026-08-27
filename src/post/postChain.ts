@@ -98,9 +98,43 @@ export const POST_DEFAULTS: PostSettings = {
   // of its own; now that the key runs ~2 stops over the fill, a toe on top of
   // it just crushes the shadow stop the ramp worked to author.
   toneGamma: 1.27,
-  satBase: 1.98,
-  satHighlight: 0.80,
-  satShadow: 0.95,
+  // 1.42, down from 1.98, and 0.26 down from 0.80. This pair was the AMPLIFIER
+  // behind "the terrain still carries an acid-yellow-green cast", and it was
+  // amplifying it non-linearly rather than uniformly.
+  //
+  // `gradeSaturation` scales the NON-PEAK channels by ratio^k. Measured on the
+  // shipped numbers: lit ground reached this chain at an authored blue/green of
+  // 0.34, k came out near 0.8 after the chroma rolloff, and 0.34^0.8 = 0.43 —
+  // so the grade alone took blue from 0.34 of green to 0.15 of it. That is the
+  // whole distance between the reference's lit grass at rgb(133,206,76) and the
+  // build's rgb(164,217,50): identical red and green, blue at a third.
+  // Whatever the palette upstream is authored at, at 1.98 + 0.80 the frame
+  // arrives chartreuse.
+  //
+  // It also ran the wrong way round on SURFACES. ART_BIBLE §2 is measured and
+  // explicit — a lit surface "rotates ~50deg toward yellow, jumps ~0.4 in value,
+  // and LOSES ~0.15 saturation" — and `satHighlight` at 0.80 over
+  // smoothstep(0.12, 0.7) is a direct instruction to do the opposite to every
+  // sunlit pixel in the frame. The measured consequence was dS +0.257 lit-vs-
+  // shaded where the reference measures -0.043.
+  //
+  // The WHOLE-IMAGE statistic tools/palette.mjs measures still rises with
+  // luminance, and that is not a contradiction: §2 says so in as many words.
+  // The rise comes from the sky, which is both the brightest and the most
+  // chromatic thing in frame, and it survives at these numbers with margin —
+  // the reference's own satByLum is [0.93, 0.637, 0.56, 0.71, 0.556], a ratio of
+  // only 1.11 between the bins the gate compares, against 1.63 in the build.
+  // `satShadow` goes UP, 0.95 -> 1.20, which is the same measurement read from
+  // the other end. The reference's satByLum bin for the darks is 0.637 against
+  // 0.28 in shots/biome-meadow.png, and that frame failed the gate
+  // "undersaturated (0.38 vs ref 0.595)" with 22% of itself below HSL lightness
+  // 0.35. The sun-coloured fill floor added to the shadow stop (see the FILL note
+  // in painterly.ts and ground.ts) lifts a blue shade toward neutral by
+  // construction, so the darks needed the chroma putting back. `keepLuma` below
+  // makes that free under lightness 0.30.
+  satBase: 1.90,
+  satHighlight: 0.30,
+  satShadow: 1.20,
   // A whisper, and 0.075 was not one; 0.048 is.
   //
   // 0.048 rather than 0.034 now that the frames underneath it are exposed rather
@@ -125,9 +159,25 @@ export const POST_DEFAULTS: PostSettings = {
   // now directional (see `ambientDirectional` in tod.ts) and the low-sun fill
   // has a real floor, so "never crushed" is paid for multiplicatively, by light
   // that shades, instead of additively by a constant that cannot.
-  shadowLift: 0.021,
-  chromaStrength: 0.27,
-  chromaScale: 0.45,
+  // 0.014, down from 0.021. The lift is the horizon anchor, a pale LAVENDER,
+  // added in proportion to how dark a pixel is — so the darkest thing in a green
+  // field collects the most of it. A tyre mark on grass is by construction the
+  // darkest thing in a green field, and shots/tracks-grass.png measured #A78586
+  // and #AC8786 inside the corridor: hue 297, a mauve stain rather than a rut.
+  // Some of that is the mark's own albedo (see the note on `disturbed` in
+  // src/terrain/ground.ts, which no longer multiplies toward black) and some of
+  // it was this term.
+  shadowLift: 0.014,
+  // 0.16, down from 0.27. ART_BIBLE §7 keeps chromatic aberration as a
+  // deliberate signature — "tasteful at the centre" — and at 0.27 every grass
+  // blade in shots/grass-close.png and near-noon.png carried a visible red/cyan
+  // fringe AT THE FRAME CENTRE. Grass is the highest-frequency geometry in the
+  // game and it is exactly what a fixed-radius channel offset destroys: the
+  // fringe on a 2 px blade is the blade. Strength down, falloff exponent up, so
+  // the effect is still clearly present at the frame edge and effectively
+  // absent in the middle third.
+  chromaStrength: 0.16,
+  chromaScale: 0.62,
   // "Very slight", per ART_BIBLE §7, and 0.2 was not: it multiplied the frame
   // corners by 0.8, which on a near-field camera is terrain, and those corners
   // are most of what tools/shadow.mjs averages when it takes the darkest fifth.

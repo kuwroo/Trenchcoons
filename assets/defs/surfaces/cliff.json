@@ -2,23 +2,27 @@
   "id": "cliff",
   "version": 1,
   "type": "surface",
-  "notes": "Cliff cream (#EFE4D0) as the mid, lavender shadow, warm cream lit. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead \u2014 the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 0.95 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
+  "notes": "Cliff cream (#EFE4D0) as the mid, lavender shadow, warm cream lit. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead — the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 0.95 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. PAINTERLY OVERLAY REMOVED IN THE DATA, all five knobs, not just the obvious one. `brushStrength` was already 0 on this def and the surface still rendered as leopard print, because `brushHue` (an albedo hue rotation), `detailStrength` (a normal perturbation), `regionStep` (a coarse mass mask) and `reliefShade` (an AMBIENT mottle) are all read independently of it in painterly.ts. Measured on one flat rock facet, a 20x20 window ran luma sd 0.106-0.148 against 0.015-0.042 for a facet in refs/genshin/grasslands.jpg — 3.5-10x. The whole point of a plane-cut solid is that a facet is exactly planar so the 3-stop ramp reads it as ONE flat value, and this was destroying that on every asset in the library. ART_BIBLE 1: \"No brush-stroke overlay on terrain. Surfaces are clean.\"",
   "material": {
     "base": "#e8cf9e",
-    "shadow": "#a08cc8",
+    "shadow": "#a89a86",
     "lit": "#fff3d1",
     "top": "#ffe8b0",
     "topGain": 1.06,
     "gradientHeight": 1,
     "gradientStrength": 0.4,
-    "rampSoftness": 0.09,
+    "rampSoftness": 0.4,
     "brushScale": 2.2,
     "brushStrength": 0.0,
-    "saturationGain": 0.24,
+    "saturationGain": 0.16,
     "rimStrength": 0.36,
-    "ambient": 0.8,
+    "ambient": 0.95,
     "midLevel": 0.6,
     "gradientBase": -0.5,
-    "brushHue": 0.17
+    "brushHue": 0.0,
+    "detailStrength": 0.0,
+    "regionStep": 0.0,
+    "reliefShade": 0.0,
+    "rampShadow": -0.12
   }
 }

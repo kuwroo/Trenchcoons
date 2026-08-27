@@ -16,7 +16,7 @@
     "jag": 0.65
   },
   "surfaces": {
-    "body": "rock"
+    "body": "stone"
   },
   "variants": 2,
   "seedJitter": {
@@ -28,11 +28,5 @@
     "meadow",
     "alpine",
     "forest"
-  ],
-  "material": {
-    "body": {
-      "shadow": "#6f86a8",
-      "shadowSkyTint": 0.62
-    }
-  }
+  ]
 }

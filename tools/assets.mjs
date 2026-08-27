@@ -36,6 +36,13 @@ const TREES = 'conifer-young,conifer-tall'
 const VEG = 'grass-tuft,grass-cluster,bush-round,shrub-broadleaf'
 const PROPS = 'log-fallen,stump-broken,roots-exposed'
 const HERO = 'rock-slab,rock-medium,boulder-large,outcrop-shelf,conifer-tall,shrub-broadleaf'
+// One close-up per FORM FAMILY, not per def: the point is to see the form
+// language, and two rock sizes tell you the same thing twice.
+const CLOSEUPS = [
+  'rock-slab', 'rock-medium', 'boulder-large', 'outcrop-shelf', 'cliff-block',
+  'conifer-tall', 'shrub-broadleaf', 'grass-cluster', 'log-fallen', 'roots-exposed',
+]
+const LADDERS = ['rock-medium', 'outcrop-shelf', 'conifer-tall', 'shrub-broadleaf']
 
 export const SHEETS = [
   // Hour 0.62, not the 0.36 hero hour, and for the reason tools/shots.mjs gives
@@ -69,6 +76,18 @@ export const SHEETS = [
   // all that survives is outline. ART_BIBLE 2: "every asset reads as a clear
   // silhouette at its LOD2 distance."
   { name: 'forge-backlit',   q: `ids=${HERO}&row=6&time=0.36` },
+  // ── close-ups, ladders and the ground line ────────────────────────────────
+  // The sheets above are a contact sheet: one LOD at a time, at ~40 m, on a
+  // meadow. That framing simultaneously hid a library that was 78% underground,
+  // a set of LOD1 rungs mirrored through y = 0, and leopard-print facets. Three
+  // additions fix that, and all three are about being able to SEE the defect:
+  //   * a per-asset close-up at roughly twice the asset's own height;
+  //   * every rung of one asset in ONE frame, so a silhouette or origin jump is
+  //     a single image rather than a diff across four;
+  //   * a 1 m grid exactly on y = 0, because burial is only readable against a
+  //     known ground line.
+  ...CLOSEUPS.map((id) => ({ name: `forge-close-${id}`, q: `focus=${id}&time=0.62&pitch=0.16` })),
+  ...LADDERS.map((id) => ({ name: `forge-ladder-${id}`, q: `ladder=${id}&row=4&time=0.62&pitch=0.24` })),
 ]
 
 function table(budget) {

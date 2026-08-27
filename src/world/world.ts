@@ -140,7 +140,11 @@ export function buildWorld(
   const library = new ScatterLibrary(atmosphere)
   const scatter = new Scatter(atmosphere, terrain, library)
   group.add(scatter.group)
-  const grass = new Grass(atmosphere, terrain, wind, library)
+  // The deformation hook reaches the GRASS as well as the ground now. Without
+  // it a tyre track through a meadow is an albedo stain under a field of
+  // undisturbed tufts; with it the blades in the corridor fold. See the note on
+  // the crush term in src/world/grass.ts.
+  const grass = new Grass(atmosphere, terrain, wind, library, {}, deform)
   group.add(grass.group)
   materials.push(...scatter.materials)
 

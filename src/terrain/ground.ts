@@ -25,7 +25,9 @@ import {
 import type { Node } from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
 import type { DeformHook } from '../material/painterly'
-import { boostSaturation, clampChroma, gradeSaturation } from '../atmosphere/scattering'
+import {
+  boostSaturation, clampChroma, gradeSaturation, setSaturation,
+} from '../atmosphere/scattering'
 import type { TerrainWorld } from './world'
 
 /** sRGB byte -> linear. The maps store authored sRGB; this undoes it. */
@@ -66,7 +68,8 @@ export class GroundMaterial {
 
     const rawBase = decode(vec3(texture(world.baseMap, mapUv).rgb))
     const rawShade = decode(vec3(texture(world.shadowMap, mapUv).rgb))
-    const rawLit = decode(vec3(texture(world.litMap, mapUv).rgb))
+    const litTap = texture(world.litMap, mapUv)
+    const rawLit = decode(vec3(litTap.rgb))
     const cliffTap = texture(world.cliffMap, mapUv)
     const cliff = decode(vec3(cliffTap.rgb)).toVar()
 
@@ -100,14 +103,34 @@ export class GroundMaterial {
     // grass-fading-into-rock look this art direction was abandoned for. The
     // transition is ~15 degrees of slope wide.
     //
-    // 0.72..0.52 is 44 to 59 degrees, and the numbers matter. At the first
-    // attempt (0.86..0.72, i.e. 31 to 44 degrees) the terrain's own 150 m-over-
-    // 380 m relief put most of every hillside past the threshold and the near
-    // field came back as broad brown blotches on green — the exact mottled
-    // camouflage look this art direction was abandoned for, arrived at from the
-    // opposite direction. Bare rock belongs on the BREAKS in slope, which in
-    // refs/genshin/grasslands.jpg is the last third of a face, not its middle.
-    const rock = smoothstep(float(0.72), float(0.52), n.y).toVar()
+    // THE THRESHOLD IS NOW PER BIOME, out of the litMap's alpha channel, and it
+    // was one global constant. Two things were wrong with the constant at once:
+    //
+    //   It was 0.72..0.52 — 44 to 59 degrees — and a MEADOW whose own relief is
+    //   6 m over 120 m never gets there, so the grey-blue rock plane that is the
+    //   defining form of refs/genshin/grasslands.jpg occupied 0.00% of the frame
+    //   against the reference's 3.01%. This file's docstring blamed a wide
+    //   threshold for "broad brown blotches on green" and was reading its own
+    //   symptom: the meadow's `cliff` colour was damp brown DIRT, so a wide
+    //   reveal WAS mud. Against blue-grey rock the same reveal is the thing the
+    //   reference is made of. The colour and the threshold had to move together
+    //   and only one of them did.
+    //
+    //   And the same 44 degrees was applied to the ALPINE, where ART_BIBLE §4
+    //   says the dark rock ridges are "doing all the compositional work" and are
+    //   "the only place high contrast is allowed". Snow does not lie on a
+    //   wind-scoured ridge; that biome needs its rock from about 18 degrees, and
+    //   at 44 it had none at all (55.9% dead-flat foreground tiles, a
+    //   featureless white slope).
+    //
+    // So `rockSlope` joins ground colour, scatter set, grass density and light as
+    // a per-biome field — which is the whole "a hue shift is not a biome" rule,
+    // applied to the one column that was still global. The window is kept narrow
+    // (+0.05 / -0.13 around the centre, roughly 15 degrees of slope) because a
+    // wide blend is the airbrushed grass-fading-into-rock look this art direction
+    // was abandoned for.
+    const rockMid = litTap.a.toVar()
+    const rock = smoothstep(rockMid.add(0.05), rockMid.sub(0.13), n.y).toVar()
     const base = vec3(mix(rawBase, cliff, rock)).toVar()
     const shade = vec3(mix(rawShade, cliff.mul(0.55), rock)).toVar()
     const lit = vec3(mix(rawLit, cliff.mul(1.45), rock)).toVar()
@@ -151,7 +174,7 @@ export class GroundMaterial {
     // detail 0.096 against a reference band of 0.056-0.080) with 0.12% speckle
     // — the 32 cm octave landing at roughly a pixel and aliasing. The gate has
     // a ceiling as well as a floor for exactly this reason and it is right to.
-    const FINE = 0.11
+    const FINE = 0.085
     const toCam = vec3(wp.sub(cameraPosition)).length()
     const nearFade = smoothstep(float(90), float(18), toCam)
     const fine = mx_noise_float(vec3(wp.x.mul(1 / 0.9), wp.y.mul(1 / 1.4), wp.z.mul(1 / 0.9)))
@@ -182,10 +205,20 @@ export class GroundMaterial {
     // from 5.33 to 1.09 against a 1.25 floor, with bare sand's own local
     // contrast going from 1.03 to 10.21. Sand is smooth; grass is not; the map
     // already knows which is which.
-    const grain = cliffTap.a.mul(1.9).add(0.12).clamp(0.12, 1.1)
+    // THE FLOOR IS 0.55, up from 0.12, and the 0.12 was measured to be wrong in
+    // the other direction. The reasoning behind it stands — a noisy sand pan
+    // out-contrasts the tyre marks it exists to display, and `npm run distinct`
+    // caught exactly that — but 0.12 does not suppress the surface's own
+    // contrast, it deletes the surface. Measured on the sand shots at 0.12:
+    // median tile detail 0.0018 with 84% of foreground tiles DEAD FLAT, against
+    // 0.0799 for refs/painterly/desert-hazy.jpeg, which is sand and is not flat.
+    // A dune has litter, ripple and grain; what it does not have is a root mat.
+    // The corridor ratio the old floor was protecting has 2.3x of headroom over
+    // its 1.25 requirement, which is what pays for this.
+    const grain = cliffTap.a.mul(1.1).add(0.55).clamp(0.55, 1.15)
     const toneGain = tone.mul(TINT)
       .add(fine.mul(FINE).mul(nearFade).mul(grain))
-      .add(micro.mul(0.085).mul(microFade).mul(grain))
+      .add(micro.mul(0.062).mul(microFade).mul(grain))
       .add(1).toVar()
 
     // ── 3-stop ramp, identical in shape to the props' ────────────────────────
@@ -280,8 +313,17 @@ export class GroundMaterial {
     // the reference's shaded grass at 0.30-0.40. It is bounce light, which is
     // the one direct-lighting term a diffuse-only NPR model has no other way to
     // express.
+    // 0.16, raised from 0.12, and the alpine is what set it. ART_BIBLE §4 authors
+    // snow shadow at #A8C4DC and says the biome is "HIGH KEY, LOW CONTRAST ...
+    // the whole biome sits in the top third of the value range. Resist adding
+    // contrast to 'make it read'." An authored stop at luma 0.72 was arriving on
+    // screen at p05 0.179 — a navy wall — because a fragment inside a cast shadow
+    // gets `ambient + 0.12 x sun` and nothing else. The shadow gate agrees
+    // independently: five shots CRUSHED against a 0.299 floor, and shadow/lit
+    // ratios of 0.205-0.359 against a 0.364 one.
+    const FILL = float(0.16)
     const direct = vec3(
-      atmosphere.sunColorNode.mul(mix(toMid.mul(0.36).add(0.12), float(1), toLit)),
+      atmosphere.sunColorNode.mul(mix(toMid.mul(0.36).add(FILL), float(1), toLit)),
     )
     let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(direct)))
 
@@ -300,9 +342,24 @@ export class GroundMaterial {
       color = vec3(color.add(atmosphere.sunColorNode.mul(spec).mul(vis).mul(0.9)))
     }
 
-    // Chroma FALLS with luminance (ART_BIBLE §2, measured).
+    // ── chroma FALLS with luminance (ART_BIBLE §2, measured) ────────────────
+    //
+    // `setSaturation`, not `gradeSaturation`, and that is a BUG FIX rather than a
+    // preference. `gradeSaturation` ends in `pow(ratio, k.max(0).mul(weight))`,
+    // and the `k.max(0)` means it is a strict no-op for any amount below 1 —
+    // which is every amount this call site has ever passed it. So the one term in
+    // the terrain material that implements §2's measured "a lit surface ... LOSES
+    // ~0.15 saturation" compiled to `color = color`, in this file and in the
+    // identical line in painterly.ts. Measured consequence, against the
+    // reference at 1:1: ours lit S0.769 / shaded S0.512, dS +0.257, where
+    // refs/genshin/grasslands.jpg reads lit S0.603 / shaded S0.560, dS -0.043.
+    // The rule was authored, documented, gated for, and never ran.
+    //
+    // `setSaturation` mixes toward the grey of the SAME luminance, so it takes
+    // chroma out without touching the value the shadow gate measures. Its own
+    // docstring names it as the operator for the amount < 1 case.
     const lum = luminance(color)
-    color = gradeSaturation(color, float(0.3).mul(smoothstep(0.03, 0.7, lum)).oneMinus())
+    color = setSaturation(color, float(0.16).mul(smoothstep(0.03, 0.7, lum)).oneMinus())
 
     // Aerial perspective in-shader, with a ZERO stroke term — the haze may not
     // carry a brush pattern any more, because there is no brush.

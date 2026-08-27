@@ -6,19 +6,19 @@
   "notes": "Sapling. Fewer, wider plates relative to height and almost no bare trunk, so it reads as a different age of the same species rather than as the tall one scaled down — which is the tell that gives a procedural forest away.",
   "params": {
     "height": 5.2,
-    "tiers": 4,
+    "tiers": 5,
     "spread": 0.36,
     "taper": 0.85,
     "lobes": 6,
     "notch": 0.68,
     "droop": 0.2,
-    "lift": 0.78,
+    "lift": 1.5,
     "bare": 0.1,
     "trunk": 0.05,
     "lean": 0.1
   },
   "surfaces": {
-    "foliage": "foliage",
+    "foliage": "needle",
     "trunk": "bark"
   },
   "variants": 2,
@@ -38,12 +38,5 @@
     "forest",
     "alpine",
     "meadow"
-  ],
-  "material": {
-    "foliage": {
-      "ambient": 0.55,
-      "gradientStrength": 0.42,
-      "rimStrength": 0.7
-    }
-  }
+  ]
 }

@@ -34,6 +34,8 @@
 //            lands as leopard print. It is the last live piece of the abandoned
 //            direction and it has to go with the rest of it.
 
+import { float, mix, pow, vec3 } from 'three/tsl'
+import type { Node } from 'three/webgpu'
 import type { PainterlyParams } from '../material/painterly'
 
 /**
@@ -58,6 +60,81 @@ const CLEAN: Partial<PainterlyParams> = {
  * Anything not listed keeps its authored value.
  */
 const GRADE: Record<string, Partial<PainterlyParams>> = {
+  // ── the scatter library's own surface ids ─────────────────────────────────
+  //
+  // `stone`, `massif`, `needle` and `leaf` are new, and they were authored with
+  // one measured constraint that has since changed under them: in painterly.ts
+  // the shadow stop used to be `albedo x ambient` and NOTHING else, so the only
+  // way to lift a turned facet to the reference's luma 0.40 was to run the sky
+  // ambient at 4.9 — 4.4x the material default. The defs say so, and the fit is
+  // sound arithmetic on a broken premise.
+  //
+  // The premise is now fixed: painterly.ts carries a sun-coloured FILL FLOOR on
+  // the shadow stop (see the long note there), which is bounce light and the one
+  // direct term a diffuse-only NPR model otherwise has no way to express. So the
+  // ambient can come back down, and it has to, because at 4.9 the blue sky LUT
+  // is the dominant term in `albedo * (ambient + direct)` and the authored hue
+  // stops mattering: every lit rock facet in the build measured hue 176-192
+  // against the reference's rock at 117-130. A near-neutral grey-green albedo
+  // was arriving on screen as cyan.
+  //
+  // The numbers are solved, not guessed. Taking the defs' own measured
+  // decomposition — sky irradiance x gain = 0.0388 per unit of `ambient`, direct
+  // term 1.10, both in linear units at noon — the shadow stop was
+  // 4.9 x 0.0388 = 0.190 and is now `A x 0.0388 + 0.11 x 1.10`. Solving that for
+  // the same 0.190 gives A = 1.8; `midLevel` is raised by the matching amount so
+  // the MID stop lands where it was measured too. The shaded facet therefore
+  // stays at the reference's 0.40 and roughly two thirds of the light reaching it
+  // is now the warm key rather than the blue sky, which is what moves the hue.
+  //
+  // `rampShadow` and `rampMid` are the second half, and they are the modelling
+  // critic's measured finding rather than a preference. At the authored
+  // `rampShadow: -0.05` the shadow stop needs `n.l < -0.05` — a facet more than
+  // 93 degrees off the sun, i.e. one that does not exist on a convex solid — and
+  // at `rampMid: 0.88` the lit stop needs a facet within 28 degrees of it.
+  // Everything between, which is every interesting facet on a fractured rock,
+  // was one flat `midLevel`. Measured: rock-medium's five facets read 0.764 /
+  // 0.764 / 0.805 / 0.816 / 0.864, with the front and right faces — normals ~70
+  // degrees apart — at IDENTICAL luma. Facet spread 0.10 against the reference
+  // cliff's 0.28-0.30. Brought back toward the material defaults (0.3 / 0.88 ->
+  // 0.26 / 0.74) a facet 75 degrees off the sun selects the shadow stop and one
+  // within 42 degrees selects the lit stop, so a three-plane rock reads as three
+  // values. The albedo stops are re-separated for the same reason: the def has
+  // base #9AA5A4 / shadow #96A3AF / lit #9BA698, all within 0.01 luma, so there
+  // was nothing for the ramp to select even where it did fire.
+  //
+  // The stops are also COOLED, and that is a measurement rather than a taste.
+  // The def authors them near-neutral (base #9AA5A4, all three within 0.01 luma
+  // of each other), and a neutral albedo under a warm key takes the key's colour:
+  // the boulder in shots/rock-collision.png rendered pale CREAM. The reference's
+  // rock is not neutral — its lit facets measure #AECBB3 (H129, green-grey) and
+  // its turned ones #4281A9 (H204, blue) — so the lit stop goes green-grey, the
+  // shadow stop goes properly blue, and the pair spans a hue range the ramp can
+  // now actually select between.
+  stone: {
+    shadow: 0x7d97ba, base: 0x93a6a4, lit: 0xa8bda6,
+    ambient: 1.75, midLevel: 0.60, rampShadow: 0.26, rampMid: 0.74,
+  },
+  massif: {
+    shadow: 0x7b96bd, base: 0x8fa3ab, lit: 0xa2b7aa,
+    ambient: 1.8, midLevel: 0.60, rampShadow: 0.28, rampMid: 0.76,
+  },
+  // Conifer tiers. The def's teal is the tie-breaker's own measurement and is
+  // kept; only the light rig moves. `rampShadow` stays soft on foliage — a tier
+  // plate is not a fracture plane and does not want a hard terminator — but it
+  // has to be above zero for the underside of a plate to read as an underside.
+  // Ambient 0.8 and midLevel 0.56, both measured against the tie-breaker rather
+  // than fitted: refs/genshin/grasslands.jpg's conifers read luma 0.698 on a lit
+  // plate and 0.347 on a shaded one, and at 1.1/0.70 over the new fill floor the
+  // build's plates came back at 0.63 lit / 0.51 shaded — a pale mint tree with
+  // almost no value range, where the reference's has a 2:1 spread. The teal
+  // itself is the def's own reference measurement and is untouched.
+  needle: { ambient: 0.8, midLevel: 0.56, rampShadow: 0.16, rampMid: 0.80 },
+  // The dark anchor. Ambient down for the fill floor; nothing else, because the
+  // def's own fit against the meadow ground (body at 0.84x the ground it sits
+  // on) is the right relationship and this file must not undo it.
+  leaf: { ambient: 0.8, midLevel: 0.48 },
+
   // Forest canopy. ART_BIBLE §4: canopy lit #7FB53C, canopy shadow #3F7A2E.
   foliage: {
     base: 0x4f8f2c, shadow: 0x3f7a2e, lit: 0x9fd45c, top: 0xc2ef78,
@@ -75,8 +152,17 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // driver's-eye capture measured 0.14% speckle against a 0.02% reference and
   // tile detail 1.5x the reference ceiling. The tip gradient is doing the right
   // thing on one tuft and the wrong thing on ten thousand.
+  // Measured against refs/genshin/grasslands.jpg rather than authored: the
+  // reference's lit grass is hue 93-96 at S0.61-0.64 and this lit stop was
+  // 0x8bbb52, hue 84 — on the chartreuse side of the same measurement the
+  // terrain palette was just corrected for, and the one surface in the frame
+  // there are ten thousand instances of. Blue up, so the hue rotates into the
+  // reference's band and the chroma falls into it at the same time. The shadow
+  // stop goes sky-tinted for §2, matching the terrain's own new 0x3b6c9a rather
+  // than fighting it — grass tufts standing in the shade of a hill that has gone
+  // blue cannot stay green.
   scrub: {
-    base: 0x487f37, shadow: 0x2f6b39, lit: 0x8bbb52,
+    base: 0x477f42, shadow: 0x33655a, lit: 0x84bb5c,
     ambient: 0.88, gradientStrength: 0.22,
   },
   // "bark #8B4A3A (warm red-brown ... not grey-brown)".
@@ -112,7 +198,10 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // Coast: "wet sand #C9A96F, dry sand #EFE49A".
   sand: { shadow: 0xc9a96f },
   sandPan: { shadow: 0xc9a96f },
-  grassMound: { ambient: 1.0, gradientStrength: 0.34 },
+  grassMound: {
+    base: 0x4d8544, shadow: 0x37685c, lit: 0x8ac262,
+    ambient: 1.0, gradientStrength: 0.34,
+  },
 }
 
 /**
@@ -125,4 +214,48 @@ export function graded(
   surfaceId: string, params: PainterlyParams,
 ): PainterlyParams {
   return { ...params, ...CLEAN, ...(GRADE[surfaceId] ?? {}) }
+}
+
+
+/**
+ * A per-instance biome tint, as a RATIO against one reference colour.
+ *
+ * `map` is an sRGB-encoded tap from one of the terrain's baked palette maps —
+ * `litMap` for anything growing out of the ground, `cliffMap` for anything made
+ * of the same rock the slopes expose. `referenceHex` is what that tap reads in
+ * the biome the surface was GRADED in, which for everything in this build is the
+ * meadow. The result is 1 in that biome by construction, so adding this to a
+ * surface already fitted against refs/genshin/grasslands.jpg cannot move the
+ * frame the fit was measured in — it only expresses the DEPARTURE from the hub.
+ *
+ * Why a ratio and not the colour. Replacing an asset's albedo with the ground's
+ * would throw away everything the surface def authors: its three ramp stops, its
+ * vertical gradient, the fact that a rock's turned facet is bluer than its lit
+ * one. A multiply keeps all of that and moves the whole family, which is what a
+ * biome does to a material in the references — the alpine's rock is the meadow's
+ * rock in colder light on darker stone, not a different object.
+ *
+ * @param strength 0 leaves the asset untinted, 1 takes the ground's full
+ *   departure. Below 1 on purpose: scatter belongs to its biome without becoming
+ *   camouflage against it.
+ */
+export function biomeTint(
+  map: Node<'vec3'>, referenceHex: number, strength: number,
+): Node<'vec3'> {
+  const lin = vec3(pow(vec3(map), float(2.2)))
+  const ref = vec3(
+    ((referenceHex >> 16) & 0xff) / 255,
+    ((referenceHex >> 8) & 0xff) / 255,
+    (referenceHex & 0xff) / 255,
+  )
+  const refLin = vec3(pow(ref, float(2.2)))
+  // Clamped, and both ends matter. Without a ceiling the alpine's near-white
+  // snow map divided by the meadow's mid green sends the green channel past 4x
+  // and every tuft in the snowfield blows out; without a floor a very dark biome
+  // colour divides to near zero and the asset becomes a hole. The floor is 0.10
+  // rather than 0.22 because at 0.22 all three channels of ART_BIBLE §4's alpine
+  // rock (#3A3F42) hit it at once, which flattens the ratio to a neutral grey and
+  // throws away the hue the clamp is supposed to be protecting.
+  const ratio = vec3(lin.div(refLin.max(1e-4)).clamp(0.10, 2.4))
+  return vec3(mix(vec3(1, 1, 1), ratio, float(strength)))
 }

@@ -23,7 +23,7 @@
 // correctly from every side. `coarseSolid` is the entry point for those.
 
 import { MeshBuilder, normalize, type Vec3 } from './mesh'
-import { HULL_DIRECTIONS, hullOf } from './hull'
+import { hullOf, spreadDirections } from './hull'
 import type * as THREE from 'three/webgpu'
 
 /** Andrew's monotone chain, in a plane picked by dropping one axis. */
@@ -150,12 +150,38 @@ export function billboard(points: readonly Vec3[], taper = 0.45): THREE.BufferGe
  * rock, and the coarse rungs of every solid asset's LOD ladder.
  */
 export function emitCoarse(b: MeshBuilder, points: readonly Vec3[], dirs = 10): void {
-  const step = Math.max(1, Math.floor(HULL_DIRECTIONS.length / dirs))
-  hullOf(points, HULL_DIRECTIONS.filter((_, i) => i % step === 0)).emit(b)
+  hullOf(points, spreadDirections(dirs)).emit(b)
 }
 
 export function coarseSolid(points: readonly Vec3[], dirs = 10): THREE.BufferGeometry {
   const b = new MeshBuilder()
   emitCoarse(b, points, dirs)
   return b.build()
+}
+
+/**
+ * The coarsest solid that is STRICTLY cheaper than `maxTriangles`, by walking
+ * the support-direction count down.
+ *
+ * A support hull's triangle count is not a function of its direction count
+ * alone — how many directions actually bite depends on the cloud — so picking a
+ * fixed number and hoping produced ladders where the last rung cost MORE than
+ * the one before it (outcrop-shelf 56 -> 60). Searching makes the ladder
+ * monotone by construction, which is the invariant `budget.ts` now enforces.
+ */
+export function coarseUnder(
+  points: readonly Vec3[], maxTriangles: number, startDirs = 12,
+): THREE.BufferGeometry {
+  let fallback: THREE.BufferGeometry | null = null
+  for (let dirs = startDirs; dirs >= 4; dirs--) {
+    const geo = coarseSolid(points, dirs)
+    const tris = (geo.index?.count ?? 0) / 3
+    if (tris < maxTriangles) {
+      fallback?.dispose()
+      return geo
+    }
+    fallback?.dispose()
+    fallback = geo
+  }
+  return fallback ?? coarseSolid(points, 4)
 }

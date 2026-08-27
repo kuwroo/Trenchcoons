@@ -14,7 +14,7 @@
 
 import { MeshBuilder, loft, normalize, rotY, type Vec3 } from '../mesh'
 import { crossCards, emitCoarse } from '../impostor'
-import { boundsFromPoints, cylinderShape, hullShape, noCollision, solidCollider } from '../collider'
+import { boundsFromPoints, cylinderShape, hullShape, solidCollider } from '../collider'
 import { defineGenerator, type GenContext, type RawAsset } from '../generator'
 import { int, num, oneOf, type Params } from '../schema'
 import type { Rng } from '../../core/rng'
@@ -70,7 +70,14 @@ function bole(
     const r = radiusAt(t)
     const ring: Vec3[] = []
     for (let i = 0; i < sides; i++) {
-      const a = (i / sides) * Math.PI * 2
+      // QUARTER-TURN PHASE, and it is what puts the log ON the ground. `v` is
+      // the ring's downward axis for a horizontal bole, so the lowest point of
+      // the ring is at a = PI/2 — and with an even facet count and no phase
+      // that angle is a vertex at 8 sides and a mid-edge at 5, which floated
+      // LOD1 a centimetre clear of the turf while LOD0 touched it. Phasing so
+      // the bottom is always a vertex makes ground contact independent of the
+      // facet count.
+      const a = Math.PI * 0.5 + (i / sides) * Math.PI * 2
       // The tear is applied along the AXIS, not radially: a snapped trunk has
       // splinters of different lengths, not a lumpy circumference.
       const pull = (c === courses ? tear : 0) * rng.range(-1, 1) * r
@@ -103,7 +110,9 @@ function pointsOf(rings: readonly (readonly Vec3[])[]): Vec3[] {
   return out
 }
 
-function build(p: P, ctx: GenContext, sides: number, courses: number): {
+function build(
+  p: P, ctx: GenContext, sides: number, courses: number, rootFrac = 1,
+): {
   b: MeshBuilder
   pts: Vec3[]
 } {
@@ -117,13 +126,18 @@ function build(p: P, ctx: GenContext, sides: number, courses: number): {
     const L = p.length
     const bow = L * p.bow
     const roll = rng.range(0, Math.PI * 2)
+    // The axis height FOLLOWS THE RADIUS, so a tapered log rests on the ground
+    // along its whole length. Holding the centre at a constant `r0` while the
+    // radius tapered to 0.72 of it left the thin end hanging 28% of a radius —
+    // eight centimetres of daylight under one end of every log in the set.
+    const radiusAt = (t: number): number => r0 + (r1 - r0) * t
     const axis = (t: number): Vec3 => rotY([
       (t - 0.5) * L,
-      r0 * (1 - 0.12 * Math.sin(t * Math.PI)),
+      radiusAt(t) * (1 - 0.06 * Math.sin(t * Math.PI)),
       Math.sin(t * Math.PI) * bow,
     ], roll)
     pts.push(...pointsOf(bole(
-      b, sides, courses, axis, (t) => r0 + (r1 - r0) * t, true, true, p.torn * 0.5, rng,
+      b, sides, courses, axis, radiusAt, true, true, p.torn * 0.5, rng,
     )))
   } else if (p.form === 'stump') {
     const H = p.length
@@ -146,7 +160,7 @@ function build(p: P, ctx: GenContext, sides: number, courses: number): {
   if (p.form === 'roots') {
     pts.push(...pointsOf(bole(
       b, sides, 2,
-      (t) => [0, -r0 * 0.25 + t * r0 * 0.85, 0],
+      (t) => [0, -r0 * 0.42 + t * r0 * 0.85, 0],
       (t) => r0 * (0.78 - 0.3 * t), false, true, p.torn, rng,
     )))
   }
@@ -154,7 +168,12 @@ function build(p: P, ctx: GenContext, sides: number, courses: number): {
   // Roots, shared by `stump` and `roots`. Arcs that leave the bole, crest, and
   // dive back under y=0 — the underground half is never drawn.
   const nRoots = p.form === 'roots' ? Math.max(2, p.roots || 4) : p.roots
-  for (let i = 0; i < nRoots; i++) {
+  // Roots thin out with the ladder like everything else. Kept as a FRACTION of
+  // the full count and indexed against the full count, so a coarse rung's roots
+  // sit where a subset of the fine rung's did rather than at fresh angles —
+  // otherwise the prop appears to rotate at the switch distance.
+  const drawn = Math.max(rootFrac >= 1 ? nRoots : 1, Math.round(nRoots * rootFrac))
+  for (let i = 0; i < Math.min(drawn, nRoots); i++) {
     const a = (i / nRoots) * Math.PI * 2 + rng.range(-0.3, 0.3)
     const len = p.rootLength * rng.range(0.65, 1.25)
     const rise = p.rootRise * rng.range(0.6, 1.3)
@@ -182,14 +201,18 @@ export const deadwood = defineGenerator({
   generate(p, ctx): RawAsset {
     const lod0 = build(p, ctx, p.sides, 5)
     const lod1 = build(p, ctx, Math.max(5, p.sides - 3), 3)
-    const lodFar = new MeshBuilder()
-    emitCoarse(lodFar, lod0.pts, 10)
+    // LOD2 is the SAME CONSTRUCTION at four facets and two courses, not a
+    // support hull. A hull needs a face per support direction to stay a tube,
+    // so log-fallen's hulled coarse rung came out at 52 triangles against
+    // LOD1's 38 — the ladder got dearer as it simplified. Four facets and half
+    // the roots is 20 triangles and still reads as a log.
+    const lod2 = build(p, ctx, Math.max(4, p.sides - 5), 2, 0.5)
 
     const bounds = boundsFromPoints(lod0.pts)
     return {
       parts: [{
         slot: 'body',
-        lods: [lod0.b.build(), lod1.b.build(), lodFar.build()],
+        lods: [lod0.b.build(), lod1.b.build(), lod2.b.build()],
         // A log is solid and opaque, so it gets a card only at the range where
         // it is a few pixels of brown; low splay keeps it from ballooning.
         impostor: crossCards(lod0.pts, 0.35),
@@ -204,10 +227,18 @@ export const deadwood = defineGenerator({
             ? solidCollider(cylinderShape(
               p.radius * 1.15, p.length * 0.5, [0, p.length * 0.5, 0],
             ))
-            // Roots sit ankle-high and sprawl. Colliding them would stop the
-            // kart dead on scenery the player cannot read as an obstacle, which
-            // is the worst kind of collision in a driving game.
-            : noCollision(),
+            // Roots ARE solid, but only their woody centre is.
+            //
+            // The first version made them pass-through on the grounds that
+            // ankle-high sprawling scenery is the worst thing to be stopped by,
+            // and that argument does not survive log-fallen — which is the same
+            // 0.6 m tall, is unambiguously solid, and is made of the same wood.
+            // The honest answer is a proxy over the KNOT, at the stub's own
+            // radius rather than over the 1.9 m root spread: the kart is stopped
+            // by the mass it can see, and drives over the thin tips.
+            : solidCollider(cylinderShape(
+              p.radius * 1.5, bounds.height * 0.45, [0, bounds.height * 0.3, 0],
+            )),
       bounds,
     }
   },
