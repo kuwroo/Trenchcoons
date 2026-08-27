@@ -63,11 +63,17 @@ const BAND_CAP = [3600, 3000, 3000] as const
  * Global density scale on the art-bible numbers.
  *
  * The biome table authors "clumps per square metre" as a look, and a clump here
- * is fourteen blades and 168 triangles. 0.5 is where the near ring lands at
- * ~95k triangles, which is a third of what the whole greybox used to cost and
- * reads as a full lawn at the driver's eye height.
+ * is fourteen blades and 168 triangles.
+ *
+ * 2.2 rather than 3.0, and it is paid for by the WIDTH increase in `SCALE_LO`
+ * rather than given up: the same coverage from fewer, broader clumps. Two things
+ * wanted it down. The near meadow captures measured median tile detail 0.102-0.111
+ * against the structure gate's 0.031-0.093 band — OVER-DETAILED, which for
+ * instanced grass means the blades are landing at roughly a pixel — and the
+ * driving perf scene runs its cost through this number more directly than through
+ * anything else in the file.
  */
-const DENSITY = 3.0
+const DENSITY = 2.2
 /** Tip travel at full gust, metres. */
 const SWAY = 0.075
 /** Steepest ground grass will grow on, radians. */

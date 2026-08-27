@@ -131,10 +131,11 @@ export const POST_DEFAULTS: PostSettings = {
   // 0.35. The sun-coloured fill floor added to the shadow stop (see the FILL note
   // in painterly.ts and ground.ts) lifts a blue shade toward neutral by
   // construction, so the darks needed the chroma putting back. `keepLuma` below
-  // makes that free under lightness 0.30.
+  // makes most of that free, and 1.20 was measured to be past the point where it
+  // is: it bought 0.02 of mean saturation and cost two shots on the shadow gate.
   satBase: 1.90,
   satHighlight: 0.30,
-  satShadow: 1.20,
+  satShadow: 1.05,
   // A whisper, and 0.075 was not one; 0.048 is.
   //
   // 0.048 rather than 0.034 now that the frames underneath it are exposed rather
@@ -250,7 +251,7 @@ export function buildPostChain(
   // 0.08) span lifted the peak channel of half the frame with it and cost
   // greybox-sunrise 0.12 of value range to buy 0.09 of shadow luma. Confined to
   // the genuinely dark end it buys the lift without the pedestal.
-  const keepLuma = smoothstep(0.30, 0.05, lum)
+  const keepLuma = smoothstep(0.36, 0.06, lum)
   const restore = luminance(mapped).div(luminance(gradedRaw).max(1e-5))
   const graded = vec3(
     gradedRaw.mul(mix(float(1), restore, keepLuma))

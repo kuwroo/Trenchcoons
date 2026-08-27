@@ -129,7 +129,7 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // build's plates came back at 0.63 lit / 0.51 shaded — a pale mint tree with
   // almost no value range, where the reference's has a 2:1 spread. The teal
   // itself is the def's own reference measurement and is untouched.
-  needle: { ambient: 0.8, midLevel: 0.56, rampShadow: 0.16, rampMid: 0.80 },
+  needle: { ambient: 0.62, midLevel: 0.54, rampShadow: 0.16, rampMid: 0.80 },
   // The dark anchor. Ambient down for the fill floor; nothing else, because the
   // def's own fit against the meadow ground (body at 0.84x the ground it sits
   // on) is the right relationship and this file must not undo it.
@@ -163,7 +163,7 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // blue cannot stay green.
   scrub: {
     base: 0x477f42, shadow: 0x33655a, lit: 0x84bb5c,
-    ambient: 0.88, gradientStrength: 0.22,
+    ambient: 0.88, gradientStrength: 0.16,
   },
   // "bark #8B4A3A (warm red-brown ... not grey-brown)".
   bark: { shadow: 0x6b4436, ambient: 0.82 },
@@ -200,7 +200,7 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   sandPan: { shadow: 0xc9a96f },
   grassMound: {
     base: 0x4d8544, shadow: 0x37685c, lit: 0x8ac262,
-    ambient: 1.0, gradientStrength: 0.34,
+    ambient: 1.0, gradientStrength: 0.20,
   },
 }
 

@@ -998,7 +998,7 @@ export class PainterlyMaterial {
 
     // ── light: sky ambient (coloured, lifted) + ramped direct ─────────────────
     //
-    // A FILL FLOOR of 0.13, the same term src/terrain/ground.ts carries at 0.12,
+    // A FILL FLOOR of 0.12, the same term src/terrain/ground.ts carries at 0.12,
     // and it is bounce light: the one direct-lighting contribution a diffuse-only
     // NPR model has no other way to express. Without it a fragment sitting on the
     // shadow stop received `albedo * ambient` and nothing else, so the value of
@@ -1023,7 +1023,7 @@ export class PainterlyMaterial {
     // assets/defs/surfaces/stone.json — a two-sample solve for the ambient and
     // the albedo pair together). This form leaves the mid and lit stops exactly
     // where they were measured and touches only the thing that is crushed.
-    const FILL = 0.13
+    const FILL = 0.12
     const level = mix(float(FILL), u.midLevel, toMid)
     const direct = vec3(atmosphere.sunColorNode.mul(mix(level, float(1), toLit)))
     let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(direct)))

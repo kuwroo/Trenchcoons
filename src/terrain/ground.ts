@@ -174,7 +174,21 @@ export class GroundMaterial {
     // detail 0.096 against a reference band of 0.056-0.080) with 0.12% speckle
     // — the 32 cm octave landing at roughly a pixel and aliasing. The gate has
     // a ceiling as well as a floor for exactly this reason and it is right to.
-    const FINE = 0.085
+    // 0.34, and the jump from 0.085 is a UNIT correction, not a taste change.
+    // `mx_noise_float`'s nominal range is [-1, 1] and its measured standard
+    // deviation is 0.17 (see MARK_SIGMA in src/atmosphere/scattering.ts, which
+    // measures exactly this), so an authored 0.085 was moving value by 1.4% and
+    // the term that exists to keep sand from being a flat wash was contributing
+    // half a percent of it. Measured: the sand captures came back at median tile
+    // detail 0.0018-0.0025 against refs/painterly/desert-hazy.jpeg's 0.0799 —
+    // the reference IS sand and is forty times more textured. At 0.26 the same
+    // surface lands in the low end of the gate's 0.031-0.093 band; pushed further
+    // it starts to trip the ANTI-GAMING metric instead (gradient concentration
+    // fell to 3.2-8.2 against a reference floor of 11.9 at 0.34), which is the
+    // gate correctly saying that uniform wobble is not the same thing as flat
+    // masses meeting at hard edges. Noise can stop a surface being empty; it
+    // cannot make it painted.
+    const FINE = 0.26
     const toCam = vec3(wp.sub(cameraPosition)).length()
     const nearFade = smoothstep(float(90), float(18), toCam)
     const fine = mx_noise_float(vec3(wp.x.mul(1 / 0.9), wp.y.mul(1 / 1.4), wp.z.mul(1 / 0.9)))
@@ -205,20 +219,30 @@ export class GroundMaterial {
     // from 5.33 to 1.09 against a 1.25 floor, with bare sand's own local
     // contrast going from 1.03 to 10.21. Sand is smooth; grass is not; the map
     // already knows which is which.
-    // THE FLOOR IS 0.55, up from 0.12, and the 0.12 was measured to be wrong in
-    // the other direction. The reasoning behind it stands — a noisy sand pan
-    // out-contrasts the tyre marks it exists to display, and `npm run distinct`
-    // caught exactly that — but 0.12 does not suppress the surface's own
-    // contrast, it deletes the surface. Measured on the sand shots at 0.12:
-    // median tile detail 0.0018 with 84% of foreground tiles DEAD FLAT, against
-    // 0.0799 for refs/painterly/desert-hazy.jpeg, which is sand and is not flat.
-    // A dune has litter, ripple and grain; what it does not have is a root mat.
-    // The corridor ratio the old floor was protecting has 2.3x of headroom over
-    // its 1.25 requirement, which is what pays for this.
-    const grain = cliffTap.a.mul(1.1).add(0.55).clamp(0.55, 1.15)
+    // GRAIN IS NOW INVERTED, and the inversion is the whole insight. It used to
+    // rise with grass density on the argument that litter and root mat are what
+    // the noise models; the trouble is that where there is grass there are also
+    // ten thousand instanced TUFTS, and they supply that detail as geometry. The
+    // two measurements that force the flip:
+    //
+    //   shots/ground-noon.png, dense meadow    tile detail 0.102  — OVER-DETAILED
+    //   shots/tracks-fresh.png, bare coast     tile detail 0.002  — FORMLESS
+    //
+    // Same material, same term, both ends of the gate's 0.031-0.093 band and both
+    // outside it, because the term was strongest exactly where the geometry had
+    // already filled the budget and weakest where nothing else could. So: the
+    // near-field detail budget is filled by grass where grass exists, and by the
+    // surface where it does not.
+    //
+    // The original note this replaces is still right about the risk it names —
+    // CLAUDE.md records a builder making the sand pan noisier to clear the
+    // structure gate until "the surface's own blotches out-contrasted the tyre
+    // marks the pan exists to display" — so the number is checked against
+    // `npm run distinct`'s corridor ratio, not just against the structure gate.
+    const grain = cliffTap.a.mul(1.9).oneMinus().clamp(0.28, 1.0)
     const toneGain = tone.mul(TINT)
       .add(fine.mul(FINE).mul(nearFade).mul(grain))
-      .add(micro.mul(0.062).mul(microFade).mul(grain))
+      .add(micro.mul(0.18).mul(microFade).mul(grain))
       .add(1).toVar()
 
     // ── 3-stop ramp, identical in shape to the props' ────────────────────────
@@ -249,7 +273,25 @@ export class GroundMaterial {
     // off the sun onto the shadow stop, which on rolling terrain is half the
     // frame. The reference's grassland is almost entirely mid-to-lit with the
     // shadow stop kept for faces genuinely turned away.
-    const shadowT = float(0.22).mul(scaleShadow).toVar()
+    // 0.34, up from 0.22, and this is the term that gives a LANDSCAPE its value
+    // structure. The note above is right that "the reference's grassland is
+    // almost entirely mid-to-lit", and it drew the wrong conclusion from it: the
+    // reference is mid-to-lit because most of the ground in it FACES the sun, not
+    // because its threshold is low. At 0.22 every face within about 77 degrees of
+    // the sun took the mid stop, which on rolling terrain is essentially all of
+    // it, and the measured result was a frame with no dark pixels at all — the
+    // palette gate reported "0% of the frame below HSL L 0.35" on five vista
+    // captures against the 2.8-11.2% the references carry, and the structure gate
+    // called the same frames FORMLESS.
+    //
+    // Raising the threshold rather than darkening the stop is the right side of
+    // that trade, and the two gates read differently enough for it to be free:
+    // tools/shadow.mjs averages the darkest FIFTH, so putting more area into the
+    // shadow stop moves the boundary of that fifth UP rather than pulling its
+    // mean down, while tools/palette.mjs counts pixels under a lightness and
+    // therefore gets more of them. Darkening the authored stop would have done
+    // the opposite to the first gate.
+    const shadowT = float(0.34).mul(scaleShadow).toVar()
     const litT = float(0.88).mul(scaleHigh).toVar()
     const toMid = smoothstep(shadowT.sub(softLow), shadowT.add(softLow), ndotl).mul(vis).toVar()
     const toLit = smoothstep(litT.sub(softHigh), litT.add(softHigh), ndotl).mul(vis).toVar()
@@ -313,7 +355,7 @@ export class GroundMaterial {
     // the reference's shaded grass at 0.30-0.40. It is bounce light, which is
     // the one direct-lighting term a diffuse-only NPR model has no other way to
     // express.
-    // 0.16, raised from 0.12, and the alpine is what set it. ART_BIBLE §4 authors
+    // 0.14, raised from 0.12, and the alpine is what set it. ART_BIBLE §4 authors
     // snow shadow at #A8C4DC and says the biome is "HIGH KEY, LOW CONTRAST ...
     // the whole biome sits in the top third of the value range. Resist adding
     // contrast to 'make it read'." An authored stop at luma 0.72 was arriving on
@@ -321,7 +363,7 @@ export class GroundMaterial {
     // gets `ambient + 0.12 x sun` and nothing else. The shadow gate agrees
     // independently: five shots CRUSHED against a 0.299 floor, and shadow/lit
     // ratios of 0.205-0.359 against a 0.364 one.
-    const FILL = float(0.16)
+    const FILL = float(0.14)
     const direct = vec3(
       atmosphere.sunColorNode.mul(mix(toMid.mul(0.36).add(FILL), float(1), toLit)),
     )

@@ -157,10 +157,27 @@ so the sampled numbers are given with their sample points.
                           measured on the reference        sample (u,v)
 lit grass       #7BCA4F   H 99  S0.61  V0.79               0.30, 0.72
 bright grass    #E0F2A1   H 73  S0.34  V0.95               0.55, 0.82
-grass shadow    #3B6C9A   H207  S0.66  V0.60               0.12, 0.62
+grass shadow    #2B8A44   H136  S0.69  V0.54               green-family mean
 mid-distance    #9EC8A6   H131  S0.21  V0.78               0.70, 0.60
-rock, darkest   #3775A4   H205  S0.66  V0.64
+rock, darkest   #3775A4   H205  S0.66  V0.64               0.12, 0.62
 ```
+
+**Grass shadow is GREEN, and an earlier revision of this table got that wrong.**
+It specified #3B6C9A, a blue at H207, sampled from (0.12, 0.62) — which is a
+shadowed ROCK in that frame, not shadowed grass. Applied to the meadow it turned
+every shadowed slope into flat blue with no green left in it at all.
+
+The trustworthy figure comes from filtering the reference to the green family
+(hue 55-165) and taking the darkest fifth: H136 S0.69 V0.54. Shadowed grass in
+the reference still reads unmistakably as grass.
+
+So the rule from §2 stands as written — shadows are TINTED toward sky, biased
+about 40 degrees off the lit hue, not REPLACED by it. Lit grass H99 to shadow
+H136 is a 37-degree bias that stays green. Rock is the thing that goes blue at
+H205, and confusing the two costs the ground its material identity.
+
+Value matters as much as hue: reference shadowed grass sits at V0.54. The build
+has rendered shadowed slopes at V0.41-0.46, which is why they read as holes.
 
 **Where the reference goes yellow, it goes PALE.** Bright grass is H73 at
 saturation 0.34. This section previously authored a "grass tip" of #B8E84F —
