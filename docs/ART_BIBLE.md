@@ -44,6 +44,38 @@ A player moving through the world has to see that they have entered somewhere
 else. If two biomes differ only in a hue shift, they are one biome. Ground
 material, scatter set, rock form, grass density and light all change together.
 
+## 1b. Rock form — the measurable version
+
+"Flat sculptural planes with clear facets" is the defining form in
+`refs/genshin/grasslands.jpg` and was the least testable sentence in this doc.
+Here is the number.
+
+**A rock's facets must differ in value. Target spread >= 0.25, measured as the
+luma range across its visible faces under one light in one frame.**
+
+```
+reference cliff (grasslands.jpg)   lit 0.765 / 0.688   shaded 0.483 / 0.464
+                                   spread 0.28 - 0.30
+outcrop-shelf (ours, passing)      0.763 / 0.547 / 0.445      spread 0.318
+rock-medium (ours, failing)        0.764 / 0.764 / 0.805 /
+                                   0.816 / 0.864              spread 0.10
+```
+
+`rock-medium`'s front and right faces have normals roughly 70 degrees apart and
+render at IDENTICAL luma 0.764. That is the failure: a rock reading as one pale
+mass rather than a set of planes.
+
+It is a FORM problem, not a colour one, and the proof is that `outcrop-shelf`
+reaches 0.318 on the same surface def, under the same sun, in the same frame.
+No palette change fixes a shape whose faces are nearly coplanar — the geometry
+has to present genuinely distinct normals.
+
+Corollary for value: getting rock HUE right and value wrong is worse than
+either alone. The build has rendered rock facets at #232E66, luma 0.187, while
+the reference's darkest facet is #3775A4 at 0.64 — the right blue family
+crushed to a third of its value, which reads as a hole punched in the ground
+rather than a rock.
+
 ## 2. Non-negotiable rules
 
 - **Shadows are coloured and lifted.** Tinted toward the sky hue, never neutral,
