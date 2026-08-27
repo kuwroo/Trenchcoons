@@ -117,11 +117,32 @@ const sample = async (pos) => {
   await load(`shot=1&car=0&warmup=30&pos=${pos}&look=0,-0.15`)
   return bandStats(await shot(page), 0.5, 1.0)
 }
-const A = await sample('0,40,0'), B = await sample('1400,40,-1200')
-const dRGB = Math.hypot(A.r-B.r, A.g-B.g, A.b-B.b)
-const dSD = Math.abs(A.sd - B.sd)
-check('two locations look different', dRGB > 25 && dSD > 0.01,
-  `colour dist ${dRGB.toFixed(1)} (>25), detail delta ${dSD.toFixed(3)} (>0.01)`)
+// Sample a WIDE GRID, not two points. One pair scored 55.8 and "passed" while
+// the user reported seeing no different environments — two arbitrary spots
+// differing proves nothing about whether the world contains distinct places.
+// Cluster the samples and count how many genuinely separate environments exist.
+const GRID = [
+  '0,40,0', '900,40,0', '-900,40,0', '0,40,900',
+  '1400,40,-1200', '-1400,40,1200', '2200,40,600',
+]
+const samples = []
+for (const g of GRID) samples.push({ pos: g, ...(await sample(g)) })
+
+// Same environment = close in BOTH colour and per-tile detail. A hue shift
+// alone is not a biome (ART_BIBLE §1: ground, scatter, rock form, grass density
+// and light must all change together).
+const near = (a, b) =>
+  Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b) < 28 && Math.abs(a.sd - b.sd) < 0.012
+const clusters = []
+for (const s0 of samples) {
+  const hit = clusters.find((c) => near(c[0], s0))
+  if (hit) hit.push(s0); else clusters.push([s0])
+}
+const spread = Math.max(...samples.map((a) =>
+  Math.max(...samples.map((b) => Math.hypot(a.r-b.r, a.g-b.g, a.b-b.b)))))
+check('world has distinct environments', clusters.length >= 3,
+  `${clusters.length} distinct of ${GRID.length} sampled (want >=3), max spread ${spread.toFixed(0)}`)
+
 
 // 3. "the sky is weirdly blobby" — cloud should be thin and high, not dominant.
 //    Measure the fraction of the upper frame that departs from a clean gradient.
