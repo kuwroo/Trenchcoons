@@ -5,53 +5,44 @@ those images and are now grounded, not guessed.
 
 ## 1. The target
 
-**Painterly, hyper-saturated, soft-lit.** Not photoreal, not flat-cel — *painted*.
+**Genshin Impact's grasslands.** `refs/genshin/grasslands.jpg` is the primary
+reference and the tie-breaker in any disagreement.
 
-Every reference in `refs/` shares four traits, and these are the whole brief:
+Clean stylised realism: crisp cel-ish shading with soft gradients, saturated but
+NOT acid greens, clear flat sculptural rock planes, chunky readable conifers,
+and strong blue atmospheric perspective carrying distance. Skies are a clean
+gradient with thin wispy cloud, never heavy blobs.
 
-1. **Saturation pushed well past natural** — lime greens, turquoise seas,
-   pink-lavender clouds
-2. **Painterly surface treatment** — visible brush character, not photo texture
-3. **Soft, tinted, low-contrast shadows** — never neutral grey, never crushed
-4. **Atmospheric perspective as the primary depth cue** — distance reads as haze
-   and desaturation, not as detail falloff
+### The painterly direction is ABANDONED
 
-Simple sculptural forms carry it. Detail lives in the *light and colour*, not in
-the geometry or the texel density.
+Earlier revisions of this doc specified a painterly, hyper-saturated,
+gouache-like surface treatment led by Capy Castaway, with a triplanar
+brush-stroke overlay and visible stroke character on every surface. That is
+withdrawn. It produced a mottled camouflage look on terrain that never resolved
+across three gauntlet rounds, and it is not what the reference shows.
 
-### Who governs what
+Concretely:
+- **No brush-stroke overlay on terrain.** Surfaces are clean.
+- **No hyper-saturation.** Genshin's greens are saturated and *clean*; the
+  acid-lime cast the painterly path produced is a failure, not the target.
+- Capy Castaway still governs CHARACTER form language only — chunky rounded
+  shapes, simple dot eyes. It no longer governs environment surface treatment.
+- The measured colour rules in §2 stay. They were derived from Genshin and
+  Tohad in the first place and remain correct.
 
-| Domain | Reference |
-|---|---|
-| Character art style | **Capy Castaway** — `refs/character/` |
-| Vibrance ceiling, shallow water | **Capy Castaway** — `refs/capycastaway/` |
-| Master palette | **Tohad cliffs** — `refs/painterly/` |
-| Terrain + foliage forms | **Genshin** — `refs/genshin/` |
-| Open-world structure, water driving, tire tracks | **Mario Kart** — `refs/mkw/` |
-| Heavy-atmosphere register | **MKW desert sunset**, **painterly desert** |
+### What carries the fidelity
 
-### Correction to the earlier direction
+1. **Lighting and atmospheric perspective** — distance reads as blue haze and
+   desaturation. This is the single biggest lever and Genshin leans on it hard.
+2. **Silhouette and form** — big readable shapes, flat sculptural rock planes.
+3. **Density** — instanced grass, scattered rock and foliage, populated ground.
+4. **Clean colour** — saturated, not garish; the grade is restrained.
 
-An earlier draft of this doc specced an MKW-forward, physically-plausible PBR
-look with AgX tonemapping. **The reference board does not support that.** Capy
-Castaway and the Tohad painting are non-photorealistic and far more saturated
-than PBR-plus-grade will produce. Two concrete consequences:
+### Environments must be DISTINGUISHABLE
 
-- **The material model is NPR, not PBR.** No metal/roughness workflow for nature.
-- **AgX is the wrong tonemap.** It desaturates highlights hard — exactly the
-  opposite of what these references do. Use a gentle filmic curve with highlight
-  desaturation disabled, then push saturation in the per-biome LUT.
-
-Mario Kart still governs *structure* — biome variety, open-world flow, driving
-through water, tracks in wet sand. It no longer governs *surface*.
-
-### The honest ceiling
-
-Painterly stylisation is genuinely cheaper than realism, so this direction is
-well within reach in a browser. The hard part isn't fidelity, it's **coherence**:
-procedural generation tends to produce noisy, evenly-detailed surfaces, and the
-references are all about big simple shapes with restrained detail. Fighting that
-tendency is the real work.
+A player moving through the world has to see that they have entered somewhere
+else. If two biomes differ only in a hue shift, they are one biome. Ground
+material, scatter set, rock form, grass density and light all change together.
 
 ## 2. Non-negotiable rules
 

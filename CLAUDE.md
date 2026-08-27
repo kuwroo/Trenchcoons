@@ -21,20 +21,25 @@ Rapier · vanilla Three for rendering, React for Forge/debug UI only.
 
 ## The look, in one box
 
-**Painterly, hyper-saturated, soft-lit.** Not photoreal, not flat-cel — painted.
-Capy Castaway for character style and vibrance; Tohad's cliffs for palette;
-Genshin for terrain and foliage forms; Mario Kart for open-world structure,
-water driving, and tire tracks.
+**Genshin Impact's grasslands** — `refs/genshin/grasslands.jpg` is the primary
+reference and the tie-breaker. Clean stylised realism: crisp shading, saturated
+but not acid greens, flat sculptural rock planes, strong blue atmospheric
+perspective, clean gradient skies with thin wispy cloud.
+
+**The painterly direction is ABANDONED.** No brush-stroke overlay on terrain, no
+hyper-saturation. It produced a mottled camouflage look that never resolved.
+Capy Castaway now governs CHARACTER form language only.
 
 ```
 Shadows:   coloured and lifted, tinted toward sky. Never grey, never crushed.
 Specular:  water, wet surfaces, ice, vehicle paint. Never nature.
-Lit surfaces warm ~50deg toward yellow and jump ~0.4 in VALUE, while LOSING
-           ~0.15 saturation. Measured across the references. Do not chase glow
-           with saturation — that is what makes it look like acid plastic.
-Distance:  haze + desaturation + hue shift toward sky. Never a grey fog lerp.
-Forms:     big and simple. Detail lives in the light, not the geometry.
-Clouds:    pink and lavender, not white.
+Lit surfaces warm ~50deg toward yellow and jump ~0.4 in VALUE while LOSING
+           ~0.15 saturation. Measured across the references.
+Distance:  blue haze + desaturation. The main fidelity lever.
+Forms:     big, readable, sculptural. Flat rock planes.
+Sky:       clean gradient, thin wispy cloud. NOT heavy blobs.
+Biomes:    must be distinguishable by more than hue — ground, scatter, rock
+           form, grass density and light all change together.
 ```
 
 ## Invariants — do not break these
