@@ -42,6 +42,31 @@ Biomes:    must be distinguishable by more than hue — ground, scatter, rock
            form, grass density and light all change together.
 ```
 
+## Known issue: rocks are buried
+
+A modelling critic measured this directly, via mesh spans with assets placed at
+y=0 on a ground plane at y=0:
+
+  rock-medium    -1.188 .. 0.612   66% below ground (authored embed 0.16)
+  boulder-large  -2.635 .. 0.766   77%
+  rock-slab      -0.523 .. 0.071   88%
+  rock-slab v1   entirely below ground, renders nothing
+
+`Polytope.box` is centred on y=0, so half the block is under the origin before
+`embed` applies. `src/assets/generators/rock.ts` then does `shift = q[1] - drop`
+and never adds `+hy`. Every OTHER generator lifts correctly — outcrop's `put`
+adds `y0 + hy`, the conifer trunk starts at y0 = 0 — so rock is the outlier.
+
+Flat sculptural rock is the defining form in refs/genshin/grasslands.jpg, so
+this costs the world its rock language.
+
+NOT YET FIXED, deliberately. Adding `+hy` typechecks and produced no visible
+change in a before/after capture (rock-like pixel share 0.35% either way), which
+leaves an unresolved risk: if scatter placement already compensates for the
+un-lifted geometry, the lift makes rocks FLOAT instead. Whoever fixes it should
+verify against generator mesh spans directly rather than pixels, and check how
+the terrain scatter derives its y.
+
 ## Known issue: "I don't see tyre marks"
 
 Measured, so nobody re-diagnoses it from scratch:
