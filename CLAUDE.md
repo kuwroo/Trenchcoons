@@ -90,30 +90,24 @@ The two things to fix, in the material and atmosphere rather than the data:
   2. Highlights must retain chroma. The reference's brightest grass is H73 at
      S0.34, pale but still green; ours reaches S0.07, which is grey.
 
-## Known issue: rocks are buried
+## Resolved: rocks were buried
 
-A modelling critic measured this directly, via mesh spans with assets placed at
-y=0 on a ground plane at y=0:
+Fixed. `src/assets/generators/rock.ts` now derives its lift from the solid's own
+measured extent and THROWS if the buried fraction does not match the authored
+`embed`, so the bug cannot come back silently. The budget report carries a
+`buried` invariant and passes. Left here because the diagnosis was re-derived
+from scratch twice.
 
-  rock-medium    -1.188 .. 0.612   66% below ground (authored embed 0.16)
-  boulder-large  -2.635 .. 0.766   77%
-  rock-slab      -0.523 .. 0.071   88%
-  rock-slab v1   entirely below ground, renders nothing
+## Resolved: "distance doesn't read as blue haze"
 
-`Polytope.box` is centred on y=0, so half the block is under the origin before
-`embed` applies. `src/assets/generators/rock.ts` then does `shift = q[1] - drop`
-and never adds `+hy`. Every OTHER generator lifts correctly — outcrop's `put`
-adds `y0 + hy`, the conifer trunk starts at y0 = 0 — so rock is the outlier.
-
-Flat sculptural rock is the defining form in refs/genshin/grasslands.jpg, so
-this costs the world its rock language.
-
-NOT YET FIXED, deliberately. Adding `+hy` typechecks and produced no visible
-change in a before/after capture (rock-like pixel share 0.35% either way), which
-leaves an unresolved risk: if scatter placement already compensates for the
-un-lifted geometry, the lift makes rocks FLOAT instead. Whoever fixes it should
-verify against generator mesh spans directly rather than pixels, and check how
-the terrain scatter derives its y.
+There was never an engine fault. The gate that reported it ran a camera at
+`eye=6` looking along a near hillside -- a frame with no depth range in it, in
+which no aerial-perspective term can rotate anything. On a vista the build
+scores 111 degrees of hue rotation against the reference's 126. Two further
+faults in the same gate: band means were confounded by shadow (shadowed ground
+goes blue here, so a shadowed foreground reads as distant -- greybox-noon's
+plainly green near hill measured H178), and the metric was unsigned, scoring an
+INVERTED ladder as highly as a correct one. See tools/complaints.mjs.
 
 ## Known issue: "I don't see tyre marks"
 
