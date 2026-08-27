@@ -163,7 +163,9 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // blue cannot stay green.
   scrub: {
     base: 0x477f42, shadow: 0x33655a, lit: 0x84bb5c,
-    ambient: 0.88, gradientStrength: 0.16,
+    // See `grassMound` — same tip treatment, slightly gentler on a broader leaf.
+    top: 0xfff6c0, topGain: 1.16, gradientStrength: 0.42,
+    ambient: 0.88,
   },
   // "bark #8B4A3A (warm red-brown ... not grey-brown)".
   bark: { shadow: 0x6b4436, ambient: 0.82 },
@@ -200,7 +202,17 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   sandPan: { shadow: 0xc9a96f },
   grassMound: {
     base: 0x4d8544, shadow: 0x37685c, lit: 0x8ac262,
-    ambient: 1.0, gradientStrength: 0.20,
+    // BRIGHT WARM TIPS. `top` is a MULTIPLIER on the albedo, not a replacement,
+    // so a warm near-white with the blue pulled down both lifts the tip and
+    // rotates it toward yellow — which is what the reference's grass does and
+    // what ART_BIBLE 2 asks of a lit surface.
+    //
+    // Only usable since the gradient was fixed: `positionLocal` was
+    // self-referential for any material overriding `positionNode`, which grass
+    // does for wind, so this whole term silently did nothing on every blade in
+    // the game. See the note in src/material/painterly.ts.
+    top: 0xfff6c0, topGain: 1.2, gradientStrength: 0.5,
+    ambient: 1.0,
   },
 }
 
