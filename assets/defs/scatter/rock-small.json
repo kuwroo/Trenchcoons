@@ -1,0 +1,33 @@
+{
+  "id": "rock-small",
+  "version": 1,
+  "type": "scatter",
+  "generator": "rock",
+  "notes": "Knee-to-waist rock, the workhorse of the scatter set. Even mix of bedding and fracture: one flat top the key lands on, two or three vertical faces that fall to the shadow stop. That pairing is what gives a rock its value contrast against the grass, and it is why this reads at 80 m while a noise-displaced blob does not.",
+  "params": {
+    "size": 1.15,
+    "height": 0.66,
+    "cuts": 8,
+    "bedding": 0.45,
+    "bite": 0.2,
+    "tilt": 0.16,
+    "embed": 0.2,
+    "jag": 0.55
+  },
+  "surfaces": {
+    "body": "rock"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.3,
+    "height": 0.2,
+    "bedding": 0.35
+  },
+  "biomes": [
+    "meadow",
+    "forest",
+    "alpine",
+    "desert",
+    "coast"
+  ]
+}

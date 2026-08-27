@@ -1,0 +1,32 @@
+{
+  "id": "rock-medium",
+  "version": 1,
+  "type": "scatter",
+  "generator": "rock",
+  "notes": "Car-height rock. First size in the set the kart can be stopped by, so the collision proxy starts to matter here — it is the exact convex solid, inflated four centimetres, which is as tight as a proxy gets.",
+  "params": {
+    "size": 2.5,
+    "height": 0.72,
+    "aspect": 0.8,
+    "cuts": 10,
+    "bedding": 0.42,
+    "bite": 0.2,
+    "tilt": 0.18,
+    "embed": 0.16,
+    "jag": 0.6
+  },
+  "surfaces": {
+    "body": "rock"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.28,
+    "height": 0.22,
+    "aspect": 0.15
+  },
+  "biomes": [
+    "meadow",
+    "forest",
+    "alpine"
+  ]
+}

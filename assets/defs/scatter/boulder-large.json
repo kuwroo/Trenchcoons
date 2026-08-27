@@ -1,0 +1,32 @@
+{
+  "id": "boulder-large",
+  "version": 1,
+  "type": "scatter",
+  "generator": "rock",
+  "notes": "Landmark boulder — tall enough to hide a kart, which makes it navigation furniture rather than decoration. More cuts than the smaller sizes because the form is close enough for a bare six-plane block to read as a crate, and a lower `embed` because a boulder sits ON the ground, it is not part of it.",
+  "params": {
+    "size": 5.4,
+    "height": 0.85,
+    "aspect": 0.86,
+    "cuts": 13,
+    "bedding": 0.4,
+    "bite": 0.19,
+    "tilt": 0.2,
+    "embed": 0.12,
+    "jag": 0.65
+  },
+  "surfaces": {
+    "body": "rock"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.25,
+    "height": 0.2,
+    "cuts": 0.25
+  },
+  "biomes": [
+    "meadow",
+    "alpine",
+    "forest"
+  ]
+}

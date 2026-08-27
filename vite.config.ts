@@ -13,7 +13,14 @@ export default defineConfig({
     // frames before `__ready`). None of these directories is ever imported.
     watch: { ignored: ['**/shots/**', '**/.scratch/**', '**/dist/**'] },
   },
-  build: { target: 'esnext' },
+  build: {
+    target: 'esnext',
+    // Two entry points: the game, and the Asset Forge viewport
+    // (ARCHITECTURE, "The Forge UI": "Separate Vite entry at /forge, sharing
+    // the game's renderer, sky, and material"). `index.html` has to be listed
+    // explicitly once `input` is set, or the game stops being built.
+    rollupOptions: { input: { main: 'index.html', forge: 'forge.html' } },
+  },
   // refs/ is served so the in-browser reference overlay can A/B against them
   publicDir: 'public',
 })

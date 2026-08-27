@@ -42,6 +42,23 @@ Biomes:    must be distinguishable by more than hue — ground, scatter, rock
            form, grass density and light all change together.
 ```
 
+## Known issue: "I don't see tyre marks"
+
+Measured, so nobody re-diagnoses it from scratch:
+
+- Marks ARE stamped world-wide. Probing `__trench.deform` 500 m from the sand
+  pan after a short drive finds 23 cells at peak 0.817.
+- The main ground material DOES sample the field — `mat('meadow', deform)` in
+  greybox.ts, and the ground mesh uses `meadow`.
+- The cause is the RESPONSE, not the plumbing. `BIOMES.grass` is
+  `maxDepth 0.07` against sand's 0.10 and snow's 0.35, with `refill: 20` — so on
+  the default surface a mark is shallow and gone in twenty seconds. ART_BIBLE §4
+  authored that on purpose ("grass flattens then springs back over ~20s"), and
+  the consequence is that a player driving normally never sees one.
+
+So the fix is an art-direction call about grass, not a bug hunt in src/deform.
+Any change here must keep `npm run distinct`'s corridor ratio >= 1.25.
+
 ## Invariants — do not break these
 
 - **Units are metres.**

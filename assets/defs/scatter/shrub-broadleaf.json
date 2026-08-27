@@ -1,0 +1,31 @@
+{
+  "id": "shrub-broadleaf",
+  "version": 1,
+  "type": "scatter",
+  "generator": "shrub",
+  "notes": "The frame's dark anchor — see assets/defs/surfaces/bush.json, which is authored two and a half stops under the meadow for exactly this. Four lobes at different sizes with real concavities between them; the concavities are where the darkest values in the picture live. Not solid: being stopped by a waist-high shrub is the fastest way to make an open world feel like a corridor.",
+  "params": {
+    "size": 2.3,
+    "height": 0.6,
+    "lobes": 4,
+    "lobeSize": 0.64,
+    "cuts": 7,
+    "scatter": 0.34,
+    "sag": 0.2,
+    "solid": false
+  },
+  "surfaces": {
+    "body": "bush"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.3,
+    "height": 0.2,
+    "lobes": 0.3
+  },
+  "biomes": [
+    "meadow",
+    "forest",
+    "wetland"
+  ]
+}

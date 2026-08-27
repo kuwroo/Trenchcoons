@@ -1,0 +1,31 @@
+{
+  "id": "log-fallen",
+  "version": 1,
+  "type": "scatter",
+  "generator": "deadwood",
+  "notes": "The only strong HORIZONTAL in the set. Rock is blocky, trees and grass are vertical, bushes are round — a meadow built from those alone reads as a repeating stamp, and one log lying across the slope breaks it. Collided with a single convex hull: a bowed tube is convex to within a few centimetres and a hull needs no canonical axis, which a lying log does not have.",
+  "params": {
+    "form": "log",
+    "length": 4.2,
+    "radius": 0.3,
+    "taper": 0.72,
+    "sides": 8,
+    "bow": 0.11,
+    "roots": 0,
+    "torn": 0.4
+  },
+  "surfaces": {
+    "body": "bark"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "length": 0.3,
+    "radius": 0.25,
+    "bow": 0.6
+  },
+  "biomes": [
+    "forest",
+    "meadow",
+    "alpine"
+  ]
+}

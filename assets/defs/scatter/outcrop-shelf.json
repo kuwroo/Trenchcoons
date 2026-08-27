@@ -1,0 +1,31 @@
+{
+  "id": "outcrop-shelf",
+  "version": 1,
+  "type": "scatter",
+  "generator": "outcrop",
+  "notes": "Three-course shelf, the mid-ground structure of the reference. Each layer sets back and slides so the stack is not a wedding cake, and every layer gets its own convex hull — a single hull would fill the steps in and the kart would collide with open air above each one.",
+  "params": {
+    "size": 9,
+    "height": 3.4,
+    "strata": 3,
+    "setback": 0.24,
+    "step": 0.4,
+    "cuts": 5,
+    "aspect": 0.7,
+    "lip": 0.12,
+    "twist": 0.2
+  },
+  "surfaces": {
+    "body": "rock"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.22,
+    "height": 0.25,
+    "setback": 0.3
+  },
+  "biomes": [
+    "meadow",
+    "alpine"
+  ]
+}

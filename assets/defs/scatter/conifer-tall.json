@@ -1,0 +1,43 @@
+{
+  "id": "conifer-tall",
+  "version": 1,
+  "type": "scatter",
+  "generator": "conifer",
+  "notes": "The reference's hero tree. Six plates, drooping tips, a golden-angle turn between courses so no two rims line up. `bare` leaves a sixth of the trunk clear at the bottom, which is what lets the eye read a trunk at all — the greybox's cones met the ground and the tree had no legs. LOD switches authored: the derived ladder would run LOD0 out to 250 m on a 16 m tree.",
+  "params": {
+    "height": 16,
+    "tiers": 6,
+    "spread": 0.26,
+    "taper": 1.05,
+    "lobes": 7,
+    "notch": 0.64,
+    "droop": 0.26,
+    "lift": 0.55,
+    "bare": 0.17,
+    "trunk": 0.038,
+    "lean": 0.05
+  },
+  "surfaces": {
+    "foliage": "foliage",
+    "trunk": "bark"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "height": 0.22,
+    "spread": 0.15,
+    "lean": 0.8,
+    "droop": 0.3
+  },
+  "lod": {
+    "switch": [
+      60,
+      150,
+      400
+    ]
+  },
+  "biomes": [
+    "forest",
+    "alpine",
+    "meadow"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "conifer-young",
+  "version": 1,
+  "type": "scatter",
+  "generator": "conifer",
+  "notes": "Sapling. Fewer, wider plates relative to height and almost no bare trunk, so it reads as a different age of the same species rather than as the tall one scaled down — which is the tell that gives a procedural forest away.",
+  "params": {
+    "height": 5.2,
+    "tiers": 4,
+    "spread": 0.33,
+    "taper": 0.85,
+    "lobes": 6,
+    "notch": 0.68,
+    "droop": 0.3,
+    "lift": 0.6,
+    "bare": 0.07,
+    "trunk": 0.05,
+    "lean": 0.1
+  },
+  "surfaces": {
+    "foliage": "foliage",
+    "trunk": "bark"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "height": 0.3,
+    "spread": 0.2,
+    "lean": 0.9
+  },
+  "lod": {
+    "switch": [
+      35,
+      90,
+      240
+    ]
+  },
+  "biomes": [
+    "forest",
+    "alpine",
+    "meadow"
+  ]
+}

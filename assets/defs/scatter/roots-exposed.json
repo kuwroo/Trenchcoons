@@ -1,0 +1,33 @@
+{
+  "id": "roots-exposed",
+  "version": 1,
+  "type": "scatter",
+  "generator": "deadwood",
+  "notes": "Roots arcing out of the ground and back under it, with no trunk — the thing that appears where a slope has eroded away from a tree. The underground half is generated and never drawn; the arcs end below y = 0 so the terrain cuts them off instead of leaving them stopped in mid-air. Deliberately NOT solid: ankle-high sprawling scenery the player cannot read as an obstacle is the worst thing to be stopped by.",
+  "params": {
+    "form": "roots",
+    "length": 0.4,
+    "radius": 0.5,
+    "taper": 0.6,
+    "sides": 7,
+    "bow": 0.1,
+    "roots": 5,
+    "rootLength": 1.35,
+    "rootRise": 0.3,
+    "torn": 0.2
+  },
+  "surfaces": {
+    "body": "bark"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "rootLength": 0.3,
+    "rootRise": 0.4,
+    "roots": 0.25
+  },
+  "biomes": [
+    "forest",
+    "wetland",
+    "alpine"
+  ]
+}

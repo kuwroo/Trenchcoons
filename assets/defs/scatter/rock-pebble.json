@@ -1,0 +1,32 @@
+{
+  "id": "rock-pebble",
+  "version": 1,
+  "type": "scatter",
+  "generator": "rock",
+  "notes": "Ankle-height debris. In refs/genshin/grasslands.jpg the foreground is littered with these and they are what stops the near ground reading as a lawn — they are also the cheapest way to break up a tyre track. Few cuts on purpose: at this size a rock is three or four planes and nothing else, and adding facets only makes it read as gravel.",
+  "params": {
+    "size": 0.34,
+    "height": 0.6,
+    "cuts": 5,
+    "bedding": 0.5,
+    "bite": 0.24,
+    "tilt": 0.22,
+    "embed": 0.3,
+    "jag": 0.6
+  },
+  "surfaces": {
+    "body": "rock"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.35,
+    "height": 0.25,
+    "tilt": 0.5
+  },
+  "biomes": [
+    "meadow",
+    "forest",
+    "alpine",
+    "coast"
+  ]
+}

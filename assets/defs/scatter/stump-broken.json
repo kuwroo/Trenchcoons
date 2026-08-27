@@ -1,0 +1,32 @@
+{
+  "id": "stump-broken",
+  "version": 1,
+  "type": "scatter",
+  "generator": "deadwood",
+  "notes": "Snapped trunk with a root flare and four exposed roots. The tear is applied along the axis rather than radially, because a snapped trunk has splinters of different lengths, not a lumpy circumference. Solid: it is knee-to-waist high, clearly reads as an obstacle, and stopping on one is fair.",
+  "params": {
+    "form": "stump",
+    "length": 0.95,
+    "radius": 0.42,
+    "taper": 0.86,
+    "sides": 9,
+    "bow": 0.08,
+    "roots": 4,
+    "rootLength": 1.0,
+    "rootRise": 0.22,
+    "torn": 0.55
+  },
+  "surfaces": {
+    "body": "bark"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "length": 0.3,
+    "radius": 0.22,
+    "torn": 0.4
+  },
+  "biomes": [
+    "forest",
+    "alpine"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "bush-round",
+  "version": 1,
+  "type": "scatter",
+  "generator": "shrub",
+  "notes": "Small tight bush for filling verges and rock bases. Three lobes and few cuts keeps it chunky, which matters more at this size than at any other: a small round form with many facets just reads as noise.",
+  "params": {
+    "size": 1.05,
+    "height": 0.78,
+    "lobes": 3,
+    "lobeSize": 0.7,
+    "cuts": 6,
+    "scatter": 0.26,
+    "sag": 0.12,
+    "solid": false
+  },
+  "surfaces": {
+    "body": "bush"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.35,
+    "height": 0.25
+  },
+  "biomes": [
+    "meadow",
+    "forest",
+    "coast"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "rock-slab",
+  "version": 1,
+  "type": "scatter",
+  "generator": "rock",
+  "notes": "The half-buried flat slab. This is the single most literal thing in the reference: the grass in the foreground of grasslands.jpg is broken by wide, flat, barely-tilted plates of blue-grey rock lying almost level with the ground, catching the key on one face. High `bedding` so nearly every cut is horizontal, low `height` so the form is a plate, and `embed` 0.38 so a third of it is under the turf and the silhouette is an interrupted edge rather than a floating tile.",
+  "params": {
+    "size": 2.7,
+    "height": 0.22,
+    "aspect": 0.78,
+    "cuts": 7,
+    "bedding": 0.78,
+    "bite": 0.18,
+    "tilt": 0.07,
+    "embed": 0.38,
+    "jag": 0.5
+  },
+  "surfaces": {
+    "body": "rock"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "size": 0.3,
+    "aspect": 0.15,
+    "tilt": 0.6
+  },
+  "biomes": [
+    "meadow",
+    "alpine"
+  ]
+}

@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "shots": "node tools/shots.mjs",
+    "assets": "node tools/assets.mjs",
     "shots:serve": "vite build && vite preview --port 4173 & sleep 3 && BASE_URL=http://127.0.0.1:4173 node tools/shots.mjs",
     "palette": "node tools/palette.mjs",
     "distinct": "node tools/distinct.mjs",
@@ -19,7 +20,8 @@
     "structure": "node tools/structure.mjs",
     "hue": "node tools/hue.mjs",
     "perf": "node tools/perf.mjs",
-    "regress": "node tools/regress.mjs"
+    "regress": "node tools/regress.mjs",
+    "complaints": "node tools/complaints.mjs"
   },
   "repository": {
     "type": "git",

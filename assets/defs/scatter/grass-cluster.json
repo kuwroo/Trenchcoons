@@ -1,0 +1,31 @@
+{
+  "id": "grass-cluster",
+  "version": 1,
+  "type": "scatter",
+  "generator": "grassTuft",
+  "notes": "Taller, wider clump for the strappy stands the reference puts at the base of every rock and along every break in slope. On the `scrub` surface rather than `grassMound`: this layer exists for silhouette density, not value punch, and it must not out-contrast the ground it grows out of.",
+  "params": {
+    "height": 0.7,
+    "blades": 14,
+    "width": 0.038,
+    "bend": 0.95,
+    "fan": 0.24,
+    "vary": 0.45,
+    "splay": 0.6,
+    "lift": 0.5
+  },
+  "surfaces": {
+    "body": "scrub"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "height": 0.3,
+    "fan": 0.3,
+    "blades": 0.2
+  },
+  "biomes": [
+    "meadow",
+    "wetland",
+    "forest"
+  ]
+}
