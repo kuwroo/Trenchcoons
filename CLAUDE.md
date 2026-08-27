@@ -146,6 +146,13 @@ Any change here must keep `npm run distinct`'s corridor ratio >= 1.25.
 - **No hardcoded assets.** Every asset is a JSON def in `assets/defs/` driven by
   a Forge generator — including imported and AI-generated meshes.
 - **Ambient comes from the sky LUT**, never a constant.
+- **The Forge must render exactly like the game.** Both go through
+  `graded(surfaceId, params)`. The Forge used to use the raw def while the game
+  used the GRADE override — for `stone` that is ambient 4.9 against 1.75 — so
+  every rock in the preview was a flat cyan lump and every rock in the game was
+  correctly faceted. A whole gauntlet round was then spent respeccing geometry
+  that was already right. Grading now happens inside `ScatterLibrary.material()`
+  so neither caller has to remember. If you add another viewer, route it there.
 - Perf: 16.6ms @ 1080p, <1500 draw calls, <400MB GPU memory.
 
 ## Controls — couch co-op (confirmed)
@@ -160,6 +167,22 @@ body roll, UI, idle — goes through the shared spring/easing utility. A parked
 car must still be visibly alive. See MILESTONES M3.
 
 ## Verifying visual work
+
+**Before believing a defect, check that the harness renders what ships.** Five
+apparatus failures this session (HMR reload, perf measuring a pit, a dead
+preview server, concurrent builds, blank `drawImage` on a WebGPU canvas) and a
+sixth — the ungraded Forge — each produced a confident, specific, WRONG
+diagnosis. The ungraded Forge cost the most: it read as a geometry problem,
+came with a plane-area histogram, and was a one-line material bug.
+
+Two habits that caught it:
+* **Reproduce the critic's number with your own instrument before acting on
+  it.** Matching their ungraded reading exactly (`#adc9c8 H178 luma 0.764`) is
+  what proved the instrument sound and left the material as the only variable.
+* **Check where a measurement box actually lands.** The two boxes offered as
+  "facets 70 deg apart at identical luma" were on the same face. Look at the
+  frame.
+
 
 Screenshots are the feedback signal — not "it compiles".
 
