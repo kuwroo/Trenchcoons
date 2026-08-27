@@ -95,12 +95,15 @@ const EMBED = 0.06
  * it. `lit` is the ground's own lit stop, which is what vegetation should follow
  * — a bush at the desert's edge is a drier, paler bush.
  *
- * Rock is tinted HARD (0.85) and vegetation softly (0.5). The measured failure
+ * Rock is tinted almost fully (0.95) and vegetation softly (0.45-0.5). The measured failure
  * was entirely on the rock side: every scatter rock in the game rendered the
  * same blue-grey everywhere, and in the alpine that meant slab faces at
  * #94BFDD, luma 0.867 — LIGHTER than the snow shadow, so the dark ridges
  * ART_BIBLE says carry that biome's whole compositional load could not punch
- * through. Vegetation stays mostly its own colour because a conifer is a
+ * through. 0.95 rather than 0.85 because at 0.85 an alpine slab still measured
+ * luma 0.515 against snow at 0.79-0.89, and "high contrast against snow" is not
+ * 0.6x; at 0.95 it lands near 0.35, which is 0.4x and reads as the dark rock the
+ * biome is navigated by. Vegetation stays mostly its own colour because a conifer is a
  * conifer; it is the ground under it that changes.
  *
  * `bark` is deliberately absent. A trunk is warm red-brown per ART_BIBLE §4 in
@@ -108,11 +111,11 @@ const EMBED = 0.06
  * bleach it.
  */
 const TINT_SOURCE: Record<string, { map: 'rock' | 'lit'; strength: number }> = {
-  stone: { map: 'rock', strength: 0.85 },
-  massif: { map: 'rock', strength: 0.85 },
-  rock: { map: 'rock', strength: 0.85 },
-  mountain: { map: 'rock', strength: 0.85 },
-  cliff: { map: 'rock', strength: 0.85 },
+  stone: { map: 'rock', strength: 0.95 },
+  massif: { map: 'rock', strength: 0.95 },
+  rock: { map: 'rock', strength: 0.95 },
+  mountain: { map: 'rock', strength: 0.95 },
+  cliff: { map: 'rock', strength: 0.95 },
   needle: { map: 'lit', strength: 0.45 },
   leaf: { map: 'lit', strength: 0.5 },
   foliage: { map: 'lit', strength: 0.45 },

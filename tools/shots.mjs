@@ -461,10 +461,30 @@ export const SHOTS = [
   //   (a 1 m grid walks straight past a 32 cm track — it did, for a round):
   //   287 cells above mask 0.05 with a peak of 0.788, the strongest at world
   //   (487.3, -68.8) against a car at (488.0, -84.1).
+  //   RE-SITED AND RE-FRAMED, both by measurement. The previous site, (600, 0),
+  //   resolved to a 25.6-degree hillside with a 5.2 m boulder 7 m from the chase
+  //   camera, so the frame was a grey slab and a slope. Six candidate spawns were
+  //   swept reading `__trench` at the capture frame for ground slope, the largest
+  //   solid within 40 m of the CAMERA, and the mark field behind the car;
+  //   (1900, -300) is meadow at 20.6 degrees with nothing over 2.4 m inside 12 m.
+  //
+  //   `camarm=5` matters as much as the site and for the same reason it does on
+  //   the sand captures: the chase rig looks along the car's FORWARD axis and a
+  //   tyre mark is behind it, so at the gameplay arm the corridor is off the
+  //   bottom of the frame entirely. Five times the solved arm hits the rig's own
+  //   clamp at 13.2 m back and ~2.8 m up, which puts thirteen metres of fresh
+  //   track between the camera and the car. Three shorter arms were tried and the
+  //   corridor is not in shot in any of them.
+  //
+  //   MEASURED at this URL: 182 cells above mask 0.05 with a peak of 0.68 along
+  //   the wheel line behind the car, probed on a 0.25 m grid in the car's own
+  //   frame rather than in world axes — a world-axis probe walks diagonally
+  //   across a corridor two metres wide and reports a tenth of what is there.
   {
     name: 'tracks-grass',
-    q: 'time=0.62&car=1&deform=1&warmup=48&spawn=600,0&caryaw=0'
-      + '&drive=throttle:0-240@0.9,steerLeft:150-200@0.5&frame=250&camarm=3.4',
+    q: 'time=0.62&car=1&deform=1&warmup=48&spawn=1900,-300&caryaw=0'
+      + '&drive=throttle:0-200@0.85,steerLeft:120-190@0.55,brake:200-250'
+      + '&frame=300&camarm=5',
   },
   // A ROCK COLLISION.
   //

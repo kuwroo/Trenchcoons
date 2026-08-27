@@ -34,7 +34,7 @@
 //            lands as leopard print. It is the last live piece of the abandoned
 //            direction and it has to go with the rest of it.
 
-import { float, mix, pow, vec3 } from 'three/tsl'
+import { float, luminance, mix, pow, vec3 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
 import type { PainterlyParams } from '../material/painterly'
 
@@ -248,7 +248,25 @@ export function biomeTint(
     ((referenceHex >> 8) & 0xff) / 255,
     (referenceHex & 0xff) / 255,
   )
-  const refLin = vec3(pow(ref, float(2.2)))
+  // The reference is partly DESATURATED before the divide, and without this the
+  // operator inverts the reference's own hue onto every other biome. Worked
+  // example, measured: the meadow's rock reference is #7D95A4, strongly blue, and
+  // the alpine's authored rock is ART_BIBLE §4's #3A3F42. Dividing one by the
+  // other gives per-channel (0.184, 0.151, 0.136) — blue cut hardest, because the
+  // DENOMINATOR is bluest — so the alpine's dark grey rock arrived on the
+  // snowfield as dark OLIVE. The same thing happened on the grass side: the
+  // desert's near-yellow sand over the meadow's green sent red and blue past the
+  // 2.4 ceiling while green barely moved, so desert tufts went pale and neutral
+  // instead of straw.
+  //
+  // Mixing the reference 55% toward the grey of its own luminance keeps what the
+  // ratio is for — the VALUE and the broad warm/cool shift between biomes — and
+  // stops it carrying the hub biome's chromaticity as a negative. The meadow's own
+  // ratio is no longer exactly 1 (its rock gets a slight blue push, which is the
+  // direction refs/genshin/grasslands.jpg's rock already sits in) and every other
+  // biome keeps most of its authored hue.
+  const refRaw = vec3(pow(ref, float(2.2)))
+  const refLin = vec3(mix(vec3(luminance(refRaw)), refRaw, float(0.45)))
   // Clamped, and both ends matter. Without a ceiling the alpine's near-white
   // snow map divided by the meadow's mid green sends the green channel past 4x
   // and every tuft in the snowfield blows out; without a floor a very dark biome
@@ -256,6 +274,6 @@ export function biomeTint(
   // rather than 0.22 because at 0.22 all three channels of ART_BIBLE §4's alpine
   // rock (#3A3F42) hit it at once, which flattens the ratio to a neutral grey and
   // throws away the hue the clamp is supposed to be protecting.
-  const ratio = vec3(lin.div(refLin.max(1e-4)).clamp(0.10, 2.4))
+  const ratio = vec3(lin.div(refLin.max(1e-4)).clamp(0.07, 2.4))
   return vec3(mix(vec3(1, 1, 1), ratio, float(strength)))
 }

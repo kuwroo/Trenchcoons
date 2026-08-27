@@ -151,12 +151,22 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     //                   authored blue/green of 0.34 arrived on screen at 0.23.
     //   base   #63a049  the mid stop. Deeper and slightly cooler than lit, so
     //                   the ramp has somewhere to go on a face turned off-sun.
-    //   shadow #3b6c9a  ART_BIBLE §4: "Grass shadow is BLUE, not green. H207 at
-    //                   S0.66 — strongly sky-lit, the same hue family as the
-    //                   rock." Measured on the reference at (130,510):
-    //                   rgb(48,102,144), H206, luma 0.366. The old 0x3f7a3e was
-    //                   a green at H119 and fought §2's "tinted toward the sky"
-    //                   rather than expressing it.
+    //   shadow #2b8a44  ART_BIBLE §4's corrected figure, and the correction is
+    //                   the whole story of this row. The table used to say
+    //                   #3B6C9A, "H207, strongly sky-lit", sampled at (0.12,
+    //                   0.62) — and that sample point is a shadowed ROCK in the
+    //                   reference frame, not shadowed grass. Authored on the
+    //                   ground it turned every shaded slope flat blue: measured
+    //                   in the build at H211-215 across the whole foreground, and
+    //                   the acceptance test's own green-family probe came back
+    //                   "no green-family pixels found".
+    //                   Filtering the reference to the green family and taking
+    //                   its darkest fifth gives H136 S0.69 V0.54. Shadowed grass
+    //                   in refs/genshin/grasslands.jpg still reads unmistakably as
+    //                   GRASS, which is §2's rule ("tinted toward the sky hue",
+    //                   about 40 degrees off the lit hue, staying in the material
+    //                   family) rather than replaced by it. Rock is the thing
+    //                   that goes blue, at H205, and it does — see `rock` below.
     //   cliff  #7d95a4  THE ROCK LANGUAGE. This is the colour the slope
     //                   material reveals, and it was 0x8b6a45 — damp brown
     //                   dirt. "Flat sculptural rock planes" is the defining
@@ -169,7 +179,7 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     //                   the `cliff.mul(1.45)` / `cliff.mul(0.55)` pair in
     //                   ground.ts.
     //   under  #8b6a45  soil, which is what a rut in a meadow exposes.
-    base: 0x5a9c3e, shadow: 0x3b6c9a, lit: 0x85ce4c,
+    base: 0x5a9c3e, shadow: 0x2b8a44, lit: 0x85ce4c,
     cliff: 0x7d95a4, under: 0x8b6a45, rock: 0x7d95a4,
     // 0.86 — rock from 31 degrees of tilt. The docstring in ground.ts records
     // that a global 0.86 threshold once produced "broad brown blotches on green",
@@ -189,10 +199,16 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
       // scale problem, not a placement one. Outcrop is in the set now because it
       // is the asset in the library that measurably reads as flat planes (facet
       // spread 0.318 against the reference cliff's 0.28-0.30).
-      S('rock-medium', 1100, 1.0, 2.1, 0.5),
+      S('rock-medium', 1100, 0.9, 1.9, 0.5),
       S('rock-small', 2600, 0.6, 1.3, 0.6),
       S('rock-pebble', 9000, 0.5, 1.3, 0.8),
-      S('boulder-large', 300, 1.0, 1.9, 0.35),
+      // Scale capped at 1.65, not 1.9. At 1.9 the generator's 3.7 m boulder became
+      // a 6.6 m-radius, 6 m-tall slab, and one landed 7.4 m from the chase camera
+      // in shots/tracks-grass.png — a featureless blue-grey wall across a third of
+      // the frame. A boulder that is taller than the trees next to it is not a
+      // boulder, and this asset's form (a compact convex solid) does not carry a
+      // silhouette at that size.
+      S('boulder-large', 300, 0.9, 1.65, 0.35),
       S('outcrop-shelf', 90, 0.9, 1.7, 0.4),
       S('bush-round', 1300, 0.7, 1.3, 0.6),
       S('conifer-tall', 240, 0.8, 1.25, 0.5),
@@ -221,7 +237,7 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     // from a flat green to the sky-tinted teal §2 asks for. `cliff` is the
     // forest's exposed material and stays earth, because a forest floor breaks
     // to root and soil rather than to rock.
-    base: 0x477a35, shadow: 0x2f5a52, lit: 0x7ab54a,
+    base: 0x477a35, shadow: 0x2c6b34, lit: 0x7ab54a,
     cliff: 0x6a5236, under: 0x4a3524, rock: 0x6d8593,
     // Tighter than the meadow: a forest floor holds its litter on a steeper
     // face than a grassland holds its turf, and the exposed material is earth.
@@ -278,7 +294,18 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   alpine: {
     id: 'alpine', label: 'alpine',
     base: 0xdfeaf5, shadow: 0xa8c4dc, lit: 0xf4f8fc,
-    cliff: 0x3a3f42, under: 0x6f93a8, rock: 0x3a3f42,
+    // `rock` is DARKER than ART_BIBLE §4's authored #3A3F42, deliberately, and the
+    // reason is that the two numbers are not the same kind of thing. The art
+    // bible's hex is what the exposed rock should MEASURE in a frame ("dark,
+    // wet-looking — high contrast against snow"); this field is a per-biome tint
+    // MULTIPLIER on a scatter albedo that then gets multiplied by the light, so
+    // authoring the target pixel value here lands the pixel a stop and a half
+    // brighter than the target. Measured: at #3A3F42 an alpine slab rendered luma
+    // 0.44 against snow at 0.79-0.89 — 0.5x, where the reference's dark rock sits
+    // at 0.3-0.4x its snow. #2A2F32 puts it at ~0.36. The art bible says the
+    // hexes are "anchors, not law"; the anchor here is the CONTRAST RATIO, which
+    // is what §4 actually asks for.
+    cliff: 0x3a3f42, under: 0x6f93a8, rock: 0x2a2f32,
     // 0.95 — rock from 18 degrees, by far the gentlest threshold in the table,
     // and the relief is retuned with it: 34 m of crease at a 95 m wavelength
     // instead of 26 m at 150 m. At the old figures the biome's own relief
@@ -305,7 +332,7 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
   //  fog #C8D8B8, density 1.6x." Longest mark persistence in the game.
   wetland: {
     id: 'wetland', label: 'wetland',
-    base: 0x5a7a4e, shadow: 0x3b5250, lit: 0x9cb457,
+    base: 0x5a7a4e, shadow: 0x3a5735, lit: 0x9cb457,
     cliff: 0x5a4632, under: 0x332618, rock: 0x66766e,
     relief: 2.5, reliefScale: 180, reliefRidge: 0, rockSlope: 0.78,
     scatter: [

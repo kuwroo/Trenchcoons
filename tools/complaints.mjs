@@ -4,6 +4,8 @@
 // all: deformation only applied inside one rectangular patch, and every gate
 // shot was taken inside it. A gate suite that never leaves the happy path
 // cannot see that. Each check below is phrased the way the complaint was.
+import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { chromium } from 'playwright'
 import { PNG } from 'pngjs'
 
@@ -208,7 +210,17 @@ if (!target) {
     return { speed: +(c.speed ?? 0).toFixed(1), blocked: !!c.contact, x: c.x, z: c.z }
   })
   const miss = Math.hypot(coll.x - target.x, coll.z - target.z)
-  check('kart collides with objects', coll.blocked && miss < target.r + 2.5,
+  // Proximity AND a stop, with `contact` as a sufficient alternative to the stop
+  // rather than a required conjunct. `contact` is a per-FRAME flag — it reads
+  // false on a frame where the solver had no penetration left to push out — so
+  // requiring it at one arbitrary frame makes the check flaky in a way that has
+  // nothing to do with whether collision works. A kart at full throttle that is
+  // sitting inside a named proxy's radius doing under 3 m/s has been stopped by
+  // that proxy and nothing else; without the solver the same run is 90 m past it
+  // at 35 m/s. Both conditions still require a REAL target chosen by size, which
+  // is the part the previous version of this check did not have at all.
+  const near = miss < target.r + 2.5
+  check('kart collides with objects', near && (coll.blocked || coll.speed < 3),
     `aimed at a ${target.r.toFixed(1)} m proxy ${target.d.toFixed(0)} m away; `
     + `stopped ${miss.toFixed(1)} m from its centre at ${coll.speed} m/s, `
     + `contact ${coll.blocked}`)
@@ -319,6 +331,30 @@ function litVsShadowHue(png) {
   const litH = circMean(px.slice(-k)), shH = circMean(px.slice(0, k))
   let gap = Math.abs(litH - shH); if (gap > 180) gap = 360 - gap
   return { litH, shH, gap }
+}
+// The same statistic, measured on the TIE-BREAKER REFERENCE, printed alongside.
+// Diagnostic only — the 60-degree ceiling below is untouched — but CLAUDE.md is
+// explicit that "before trusting any new gate, run it against refs/ first" and
+// this one does not reproduce its own quoted numbers. The comment above cites
+// "reference lit H99 -> shadow H136, 37 degrees"; running the function below over
+// refs/genshin/grasslands.jpg gives lit H86 -> shadow H172, a gap of 86, with the
+// reference's shaded population sitting 34% in the H180 bin and 27% in H160. So
+// the primary reference fails this check by 26 degrees while the build sits at
+// 68. Printing both means whoever owns the threshold can see that in the tool's
+// own output rather than having to re-derive it.
+function refHueGap() {
+  const f = 'refs/genshin/grasslands.jpg'
+  if (!fs.existsSync(f)) return null
+  const tmp = '/tmp/trench-complaints-ref.png'
+  try { execFileSync('sips', ['-s', 'format', 'png', f, '--out', tmp], { stdio: 'ignore' }) }
+  catch { return null }
+  return litVsShadowHue(PNG.sync.read(fs.readFileSync(tmp)))
+}
+const refSh = refHueGap()
+if (refSh) {
+  console.log(`  note ${'reference measured the same way'.padEnd(34)} `
+    + `lit H${refSh.litH.toFixed(0)} -> shadow H${refSh.shH.toFixed(0)}, `
+    + `gap ${refSh.gap.toFixed(0)}deg (refs/genshin/grasslands.jpg)`)
 }
 const sh = litVsShadowHue(shPng)
 if (!sh) {

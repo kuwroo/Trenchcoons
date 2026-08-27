@@ -231,7 +231,7 @@ export class Grass {
     // stage, at one texture tap per vertex.
     if (this.deform) {
       const d = this.deform.shade(vec3(root.x, float(0), root.y))
-      const crush = saturate(d.mask).mul(0.86).toVar()
+      const crush = saturate(d.mask).mul(0.94).toVar()
       // Fold: keep a tenth of the height at full crush, so the corridor still
       // reads as flattened grass rather than as bare ground.
       local = vec3(local.add(vec3(

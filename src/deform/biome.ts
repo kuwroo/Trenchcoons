@@ -100,9 +100,18 @@ export const BIOMES: Record<string, DeformResponse> = {
   //   darken   0.44 -> 0.60   crushed grass is bruised, not merely dented.
   //   edge     0.42 -> 0.60   a wheel track through grass has a definite edge;
   //                           the old value put it below dune sand's.
+  //   darken  0.60 -> 0.70   and this is the second half of the same call. On
+  //                           SAND a mark reads as tone against a bare surface;
+  //                           on grass it is seen through 0.7 tufts per square
+  //                           metre, so the same albedo delta arrives at the eye
+  //                           at a fraction of its contrast. `chroma` moves with
+  //                           it, and only now does it do anything at all — see
+  //                           the `setSaturation` note in src/terrain/ground.ts,
+  //                           where the operator this column feeds was the
+  //                           identity for every value below 1.
   grass: {
     maxDepth: 0.12, refill: 55, maskLife: 95, collapse: 1.5,
-    wet: 0.10, dry: 40, darken: 0.60, chroma: 0.88, expose: 0.42, edge: 0.60,
+    wet: 0.10, dry: 40, darken: 0.70, chroma: 0.84, expose: 0.46, edge: 0.66,
     drag: 1.3, grip: 1.02,
   },
   // "wet sand holds sharp dark tracks — see refs/mkw/beach-wet-sand-tracks.jpg,

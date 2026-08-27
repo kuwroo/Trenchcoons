@@ -349,9 +349,26 @@ export class GroundMaterial {
     const toLit = smoothstep(litT.sub(softHigh), litT.add(softHigh), ndotl).mul(vis).toVar()
 
     // ── ambient from the sky LUT (never a constant — CLAUDE.md) ──────────────
-    const ambient = vec3(
-      atmosphere.skyIrradiance(n).mul(atmosphere.ambientGainNode).mul(this.ambientScaleNode),
-    ).toVar()
+    // CHROMA-CAPPED at 1.6, and this is the term that was erasing the ground's
+    // own hue in shade. Rec.709 weights blue at 0.0722, so a clear noon sky's
+    // irradiance comes back with its peak channel about 2.7x its own luminance —
+    // multiply any albedo by that and the product is the SKY's chromaticity, not
+    // the material's. Measured: shaded ground rendered rgb(36,88,125) at H205
+    // while the lit grass beside it sat at H88, a 117-degree gap where ART_BIBLE
+    // §2 asks for about 40 ("shadows are tinted toward the sky hue ... never
+    // grey" — tinted, not replaced) and where the reference measures 37.
+    //
+    // 1.6 is a cap, not a conversion: anything already inside it is untouched, so
+    // dawn and dusk keep their warmth and the noon sky still cools the shade
+    // clearly. It is the same operator, for the same reason, that `skyShadow`
+    // below and painterly.ts's ambient chain already use — this call site was
+    // simply the one that had been missed, and it is the one that multiplies the
+    // albedo.
+    const ambient = vec3(clampChroma(
+      vec3(atmosphere.skyIrradiance(n)
+        .mul(atmosphere.ambientGainNode).mul(this.ambientScaleNode)),
+      float(1.6),
+    )).toVar()
     const skyHue = vec3(ambient.div(luminance(ambient).max(1e-4))).toVar()
     // Shadows coloured and lifted, tinted toward the sky. Chroma-capped, or the
     // dawn sky's near-pure blue turns every shaded slope navy — see
@@ -465,7 +482,19 @@ export class GroundMaterial {
     // diffuse-only model with one irradiance sample has no way to give a
     // sun-facing slope in shadow the extra bounce it actually receives from the
     // sunlit ground around it.
-    const shadeLift = vec3(ambient.mul(toMid.oneMinus().mul(0.60)))
+    // CHROMA-CAPPED, or the lift becomes the shade's hue instead of its value.
+    // Raw sky irradiance is nearly pure blue at noon — Rec.709 weights blue at
+    // 0.0722, so its peak channel runs ~2.7x its own luminance — and adding 60%
+    // more of it to the shaded stop took the ground's shadow to H205 while the lit
+    // grass sat at H88. That is a 117-degree gap where ART_BIBLE §2 asks for about
+    // 40 ("tinted toward the sky hue ... stays in the material family") and
+    // tools/complaints.mjs gates 60. The `ambient` term above still carries the
+    // full sky tint; this term exists to carry VALUE, so it is capped to a peak
+    // 1.15x its luminance and lifts without recolouring. Same operator and the
+    // same reasoning as `skyShadow` a few lines up.
+    const shadeLift = vec3(
+      clampChroma(ambient, 1.15).mul(toMid.oneMinus().mul(0.60)),
+    )
     let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(shadeLift).add(direct)))
 
     // A small sky rim, weighted by the albedo itself so it cannot recolour the
