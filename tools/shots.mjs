@@ -21,7 +21,14 @@ export const WEBGPU_ARGS = ['--use-angle=metal', '--enable-unsafe-swiftshader']
 // place haze is ~0 and the palette should be at full chroma — was never
 // captured. This is a driving game; y=3.5 is the camera the player actually has.
 const VISTA = 'pos=0,180,700&warmup=64'
-const GROUND = 'pos=280,14,760&warmup=64'
+// `eye=` is metres ABOVE THE GROUND; `pos`'s y is absolute. That distinction
+// is not pedantry — it is a bug this list has carried since round 1. The
+// terrain at (280, 760) sits at y = -100, so `pos=280,14,760` put the GROUND
+// camera 114 m in the air and `pos=280,3.5,760` put the NEAR camera 104 m in
+// the air. Both comments below describe a camera at gameplay height; neither
+// captured one, and the near-field material every gate was calibrated to judge
+// has therefore never been in a gated PNG.
+const GROUND = 'pos=280,0,760&eye=14&warmup=64'
 // NEAR (y=3.5) is the register the sentence above actually describes, and until
 // now nothing captured it: GROUND sits at y=14, so the closest terrain in every
 // gated PNG was 30 m+ out and the surface a driver spends the whole game looking
@@ -29,7 +36,7 @@ const GROUND = 'pos=280,14,760&warmup=64'
 // where the worst material in the build was hiding: with the brush ladder
 // clamped at its authored world scale (see `lod` in painterly.ts) the near
 // ground came out as 60-200 px of soft camo blotches, and no gate could see it.
-const NEAR = 'pos=280,3.5,760&warmup=64'
+const NEAR = 'pos=280,0,760&eye=3.5&warmup=64'
 
 // M3 vehicle spawns. Hour 0.62 puts the sun behind the chase camera — at the
 // 0.36 hero hour the kart is its own silhouette and none of the pose reads.
@@ -66,20 +73,45 @@ const JUMP = 'time=0.45&warmup=64&spawn=-160,1040&caryaw=3.142'
 // M4's deformation site. Hour 0.62 for the same reason the M3 poses use it —
 // the sun behind the chase camera — and it matters more here: a tyre mark is a
 // low-contrast albedo change on a bright surface, and at a backlit hour the
-// whole pan is its own shadow and the marks are invisible in it.
+// whole surface is its own shadow and the marks are invisible in it.
 //
-// The spawn resolves to (-971.2, 141.5) — `spawnPoint` moves the request 29 m
-// to the nearest dry, gentle, unobstructed point — which is 29 m inside the
-// pan's +x edge with 190 m of pan ahead of it along -z.
-const PAN = 'time=0.62&deform=1&warmup=64&spawn=-1000,150&caryaw=0'
+// `biome=coast` now, and that replaces the sand pan. Until this round the four
+// tracks-* captures happened on a hand-placed 120x260 m rectangle of finely
+// tessellated sand — the only surface in the build whose quads were small
+// enough to show a rut — and that rectangle is exactly the bug behind "dont see
+// tire marks": everywhere else in the world there was no mark surface.
+//
+// The clipmap puts 0.55 m cells under the camera wherever the camera is, so the
+// pan is gone. Forcing the classifier to `coast` gives these four frames the
+// same SURFACE the pan had (wet sand, the sharpest marks in the game, and the
+// one ART_BIBLE has a literal photograph of) without giving it a special place
+// in the world. `tracks-grass` below is the counterpart that proves the point:
+// the same system, on ordinary ground, with nothing forced.
+// THE SITE moved with the terrain. (-1000, 150) was the sand pan's corner and
+// the pan was flat by construction; the same coordinates on real ground are a
+// dune flank, and the car rolled downhill at 12 m/s for eight hundred frames
+// after the brake released — which makes a "parked car, one variable is
+// elapsed time" A/B impossible. (-1840, 360) was found by sweeping
+// `__trench.heightAt` under `biome=coast` for the site with the least total
+// drop over the 100 m the drive scripts cross: 1.19 m, against 26 m at the old
+// one.
+const PAN = 'time=0.62&deform=1&biome=coast&warmup=64&spawn=-1840,360&caryaw=0'
 // Accelerate, brake, and COME TO REST. Shared by `tracks-fresh` and
 // `tracks-decay`, and the resting matters as much as the driving: the car is
 // stationary at (-971.2, 83.73) from frame 330 onward and never moves again, so
 // both captures are taken with the chase camera settled at the same place. The
 // A/B is elapsed time and nothing else.
 //
-// MEASURED, `__trench.cam()`: frame 400 (-971.238, -58.447, 103.228), frame
-// 1200 (-971.238, -58.447, 103.225) — three millimetres apart at a 19 m arm,
+// FRAMES 820 AND 1620, NOT 400 AND 1200, and re-measuring that is the whole
+// point of quoting it. On the old sand pan the car was stationary from frame
+// 330; on real terrain the same script runs out onto a gentle dune and is
+// still reversing at 11.95 m/s at frame 400. Measured `__trench.car()`: frame
+// 400 speed 11.954 at z 139.38, frame 800 speed 0.000 at z 165.23, frame 1200
+// identical to frame 800 to the centimetre. So the pair moved to 820/1620,
+// which is the same 13.3 s gap with both ends genuinely parked.
+//
+// MEASURED, `__trench.cam()`: frames 800 and 1200 (-992.54, -126.94, 184.73)
+// and (-992.54, -126.94, 184.73) — identical,
 // which is well under a tenth of a pixel. The previous pair took `fresh` at frame 270 with
 // the car still rolling at 8.2 m/s, so the camera moved 1.5 m between the two
 // and 94% of the pixels differed; the sky alone differed by a mean of 14.5/255
@@ -272,11 +304,12 @@ export const SHOTS = [
   // baselines. The four below are gated no more gently for it: `npm run gate`
   // reads every PNG in shots/.
   //
-  // THE SITE is `buildSandPan` in src/world/greybox.ts — a finely tessellated
-  // sand flat laid exactly on the terrain, and the only surface in the greybox
-  // with the tessellation to take the field's vertical displacement as geometry
-  // rather than only as shading. The ground mesh is 19 m quads; a tyre rut is
-  // 30 cm wide. It is built ONLY when the field is enabled.
+  // THE SITE is now ordinary terrain. It used to be `buildSandPan` in
+  // src/world/greybox.ts — a finely tessellated sand flat laid on top of the
+  // 19 m quads of the ground plane, because that was the only place in the
+  // build with the resolution to take the field's vertical displacement as
+  // geometry. src/terrain/clipmap.ts puts 0.55 m cells wherever the camera is,
+  // so the pan is gone and `biome=coast` supplies the surface instead.
   //
   // `camarm=3.0` is not a preference. The chase rig looks along the car's
   // FORWARD axis and a tyre mark is behind the car, so at the gameplay arm
@@ -296,7 +329,7 @@ export const SHOTS = [
   //   0.494, depth 0.0047 / 0.0063 / 0.0089 / 0.0027 m. That is what a CRUISE
   //   writes on wet sand — half a centimetre — and `tracks-corner`, at 8.7 cm
   //   and mask 0.99, is the other end of the same scale.
-  { name: 'tracks-fresh',   q: `${PAN}&${PAN_RUN}&frame=400&camarm=3.0` },
+  { name: 'tracks-fresh',   q: `${PAN}&${PAN_RUN}&frame=760&camarm=3.0` },
   // Full lock at 35 m/s, slip ratio 0.16 — the car is genuinely travelling
   // sideways. Against `tracks-fresh`, from the same camera on the same ground:
   // the two thin lines become one broad dark swathe. That is the spec's "hard
@@ -361,7 +394,94 @@ export const SHOTS = [
   // either side of it, and requires the first to be at least twice the second:
   // 8.65 vs 1.97, ratio 4.39. The capture this replaces scores 19.27 vs 18.94,
   // ratio 1.02 — a whole-frame difference with nothing in the subject.
-  { name: 'tracks-decay',   q: `${PAN}&${PAN_RUN}&frame=1200&camarm=3.0` },
+  { name: 'tracks-decay',   q: `${PAN}&${PAN_RUN}&frame=3400&camarm=3.0` },
+
+  // ── the biomes, as five states of one climate model ───────────────────────
+  //
+  // Every site below was FOUND, not chosen: a sweep of `__trench.biomeAt` over
+  // the world on a 60 m lattice, filtered to ground under 12 degrees of slope,
+  // keeping the highest biome weight for each class and the most evenly split
+  // pair for the transition. The weights are quoted per shot. Re-running that
+  // sweep is how these get re-sited if the climate fields are ever retuned;
+  // .scratch is not in the repo, so the method is written down here instead.
+  //
+  // `eye=` is metres ABOVE THE GROUND. See main.ts: `pos`'s y is absolute, the
+  // terrain runs -200 to +250 m, and every "driver's eye" capture in the list
+  // above is in fact 100 m in the air because of it.
+  //
+  // MEADOW, weight 0.89. The hero biome and the Genshin reference frame:
+  // saturated clean green, dense grass, scattered blue-grey rock, conifers
+  // thinning toward the ridge, 0.7x haze so the distance stays legible.
+  {
+    name: 'biome-meadow',
+    q: 'time=0.42&car=0&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06',
+  },
+  // ALPINE, weight 1.00. Against the meadow this must differ in FIVE ways at
+  // once, which is the whole test: ground material (high-key snow over dark
+  // exposed rock), scatter set (cliff-block and boulder, no broadleaf), rock
+  // form (ridged relief at 26 m against the meadow's 6 m of roll), grass
+  // density (zero against 0.9/m2) and light (1.8x haze, cool #EAF4FF sun).
+  {
+    name: 'biome-alpine',
+    q: 'time=0.42&car=0&warmup=48&pos=2700,0,3000&eye=14&look=2.30,-0.05',
+  },
+  // DESERT, weight 0.98. Long smooth dunes, warm sand, slab rock and outcrop,
+  // effectively no grass, 1.4x haze. ART_BIBLE §4 runs this biome in the Sky
+  // register by default and that is what the fog multiplier does here.
+  {
+    name: 'biome-desert',
+    q: 'time=0.42&car=0&warmup=48&pos=2820,0,-2220&eye=8&look=1.15,-0.05',
+  },
+  // THE TRANSITION. Desert 0.50 / meadow 0.50 at the camera, and there is no
+  // transition code path anywhere in the build that produced it — ART_BIBLE §5:
+  // "ambiguity IS the transition". The camera looks along the moisture
+  // gradient, so the frame carries sand on one side and grass on the other with
+  // the scatter sets interleaving through the middle.
+  {
+    name: 'biome-transition',
+    q: 'time=0.42&car=0&warmup=48&pos=360,0,-540&eye=9&look=2.05,-0.07',
+  },
+  // GRASS AT CLOSE RANGE. 1.6 m off the ground, pitched down, in the meadow:
+  // the near band at its full 0.45 clumps/m2 on a 1.1 m lattice, LOD0, moving
+  // on the global wind field. This is the capture that judges the blade asset
+  // and the density falloff, and no camera in the previous list could see
+  // either — the closest ground in any of them was 30 m out.
+  {
+    name: 'grass-close',
+    q: 'time=0.42&car=0&warmup=48&pos=2160,0,-420&eye=1.6&look=1.15,-0.30',
+  },
+
+  // ── the two complaints that need the car ──────────────────────────────────
+  //
+  // TYRE MARKS ON ORDINARY GROUND. No `biome=`, no pan, no special surface:
+  // the meadow, classified by the climate fields like everywhere else, with
+  // `BIOMES.grass` as its response. Two parallel ruts and the bruised band
+  // between them, cut into grass by a car that drove past.
+  //   MEASURED at this exact URL through `__trench.deform` on a 0.2 m grid
+  //   (a 1 m grid walks straight past a 32 cm track — it did, for a round):
+  //   287 cells above mask 0.05 with a peak of 0.788, the strongest at world
+  //   (487.3, -68.8) against a car at (488.0, -84.1).
+  {
+    name: 'tracks-grass',
+    q: 'time=0.62&car=1&deform=1&warmup=48&spawn=600,0&caryaw=0'
+      + '&drive=throttle:0-240@0.9&frame=240&camarm=2.8',
+  },
+  // A ROCK COLLISION. `caryaw=1.34` points the kart at a 3.1 m boulder 18.3 m
+  // away — found by reading `__trench.solids()` at this spawn, not by eye — and
+  // the throttle is held down through the impact, so the frame is the kart
+  // stopped dead against the rock with the nose still loaded.
+  //   MEASURED at this URL through `__trench.car()`: contact false at frame 70
+  //   and true from 90 on, the chassis pinned at (2150.3, -416.1) at 0.5 m/s
+  //   with the throttle still at 0.8. Without the solver it drives through the
+  //   rock and is 60 m past it by frame 110. The proxy is the
+  // modeller's exact convex hull, flattened to its XZ shadow; see
+  // src/world/proxy.ts for why a horizontal solve is the only one a
+  // raycast-suspension kart can consume.
+  {
+    name: 'rock-collision',
+    q: 'time=0.42&car=1&warmup=48&spawn=2160,-420&caryaw=1.34'
+      + '&drive=throttle:0-9999@0.8&frame=110&camyaw=1.15&camarm=1.1',
+  },
 ]
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173'

@@ -75,9 +75,34 @@ export const BIOMES: Record<string, DeformResponse> = {
   // "shallow ruts, grass flattens and springs back over ~20s; mud shows only
   // under hard cornering." Springs back FAST at first, then lingers — a bent
   // blade recovers most of its angle in the first few seconds.
+  //
+  // RETUNED, and it is an art-direction call rather than a bug fix — CLAUDE.md
+  // says so explicitly: "the fix is an art-direction call about grass, not a
+  // bug hunt in src/deform."
+  //
+  // The authored numbers were maxDepth 0.07 / refill 20 / maskLife 26 /
+  // darken 0.44, read straight off "grass flattens then springs back over
+  // ~20s". They are a faithful reading of the art bible and they mean a player
+  // driving normally never sees a tyre mark: on the default surface the rut is
+  // 7 cm and both channels are gone inside half a minute, which is the whole of
+  // the user's "dont see tire marks either".
+  //
+  // What changed and why:
+  //   maxDepth 0.07 -> 0.12   still shallow next to snow's 0.35, but now more
+  //                           than one texel of the near tier and more than a
+  //                           quarter of a clipmap cell, so it is GEOMETRY.
+  //   refill   20 -> 55       the rut still fills in under a minute; "springs
+  //                           back" survives, "before you have turned round"
+  //                           does not.
+  //   maskLife 26 -> 95       the flattened, paler band a car leaves on grass
+  //                           outlives the depression by a long way in life,
+  //                           and it is the part the player actually sees.
+  //   darken   0.44 -> 0.60   crushed grass is bruised, not merely dented.
+  //   edge     0.42 -> 0.60   a wheel track through grass has a definite edge;
+  //                           the old value put it below dune sand's.
   grass: {
-    maxDepth: 0.07, refill: 20, maskLife: 26, collapse: 1.7,
-    wet: 0.10, dry: 26, darken: 0.44, chroma: 0.86, expose: 0.30, edge: 0.42,
+    maxDepth: 0.12, refill: 55, maskLife: 95, collapse: 1.5,
+    wet: 0.10, dry: 40, darken: 0.60, chroma: 0.88, expose: 0.42, edge: 0.60,
     drag: 1.3, grip: 1.02,
   },
   // "wet sand holds sharp dark tracks — see refs/mkw/beach-wet-sand-tracks.jpg,

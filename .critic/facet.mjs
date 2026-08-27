@@ -1,0 +1,15 @@
+import {load,patch} from '/Users/chloeongsiyi/Trenchcoons/.critic/probe.mjs';
+const s=(im,n,x,y,w=20,h=20)=>console.log(n.padEnd(34), JSON.stringify(patch(im,x,y,w,h)));
+const rock=load('/Users/chloeongsiyi/Trenchcoons/shots/forge/forge-rock.png');
+console.log('--- rock-medium (forge-rock.png), 20x20 windows INSIDE one facet');
+s(rock,'ASSET lit top A',1020,480); s(rock,'ASSET lit top B',1100,470); s(rock,'ASSET lit top C',1160,480);
+s(rock,'ASSET dark face A',1090,560); s(rock,'ASSET dark face B',1140,555); s(rock,'ASSET dark face C',1180,565);
+const cl=load('/Users/chloeongsiyi/Trenchcoons/shots/forge/forge-cliff.png');
+console.log('--- cliff-block (forge-cliff.png)');
+s(cl,'ASSET cliff lit A',950,300); s(cl,'ASSET cliff lit B',960,540); s(cl,'ASSET cliff lit C',1050,340);
+s(cl,'ASSET cliff dark A',1200,430); s(cl,'ASSET cliff dark B',1240,520);
+const ref=load('/Users/chloeongsiyi/Trenchcoons/.critic/ref.png');
+console.log('--- reference rock facets');
+s(ref,'REF lit top A',890,405); s(ref,'REF lit top B',1000,345); s(ref,'REF lit top C',830,470);
+s(ref,'REF vert face A',900,445); s(ref,'REF vert face B',1000,380); s(ref,'REF vert face C',700,410);
+s(ref,'REF fg slab lit',560,650); s(ref,'REF fg slab shade',620,660);

@@ -33,7 +33,7 @@
 
 import * as THREE from 'three/webgpu'
 import {
-  abs, attribute, float, floor, fract, length, max, mix, mod, positionGeometry,
+  abs, attribute, exp, float, floor, fract, length, max, mix, mod, positionGeometry,
   saturate, smoothstep, texture, uniform, uv, vec2, vec4,
 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
@@ -150,9 +150,39 @@ class Tier {
   dispose(): void { this.rt.dispose(); this.scratch.dispose() }
 }
 
+/**
+ * The per-biome response, baked into two small textures.
+ *
+ * This is what replaces the single rectangular `DeformPatch` the field used to
+ * carry, and it is the fix for "dont see tire marks". The old model was ONE
+ * surface with a response of its own — the sand pan — and one default for the
+ * whole rest of the world, so a player driving anywhere else got `BIOMES.grass`
+ * at maxDepth 0.07 and refill 20 s and saw essentially nothing. Sampling a map
+ * instead means grass, dirt, sand, snow, mud and wet sand each answer for
+ * themselves, everywhere, and the answer is the same one the CPU classifier
+ * gives — the maps are baked FROM it.
+ *
+ * Encoded to unorm8 because these vary over hundreds of metres and RGBA32F is
+ * not filterable in WebGPU: durations are log-encoded over 0..`logMax`,
+ * `collapse` over 0..3, `chroma` over 0..1.5, the rest are already 0..1.
+ */
+export interface ResponseMaps {
+  /** (refill, maskLife, collapse, dry). */
+  time: THREE.Texture
+  /** (darken, chroma, expose, edge). */
+  tone: THREE.Texture
+  /** World metres covered by the maps, centred on the origin. */
+  span: number
+  /** `log(1 + t)` normaliser used at bake time. */
+  logMax: number
+}
+
 export interface FieldOptions {
   /** Global decay multiplier from the weather. See `weatherDecay`. */
   weather: number
+  /** Per-biome response. Omit and the field falls back to the two uniforms
+   *  plus a rectangular patch mask, which is what M4 shipped. */
+  maps?: ResponseMaps | null
 }
 
 /**
@@ -221,8 +251,11 @@ export class DeformField implements DeformHook {
   private readonly decayDt = uniform(0)
   private readonly clearMaterial = new THREE.NodeMaterial()
 
+  private readonly maps: ResponseMaps | null
+
   constructor(options: FieldOptions) {
     this.weatherNode.value = options.weather
+    this.maps = options.maps ?? null
 
     // ── the stamp: an oriented capsule per wheel contact, MAX-blended ────────
     //
@@ -522,6 +555,19 @@ export class DeformField implements DeformHook {
     dry: Node<'float'>; darken: Node<'float'>; chroma: Node<'float'>
     expose: Node<'float'>; edge: Node<'float'>
   } {
+    const maps = this.maps
+    if (maps) {
+      const mapUv = vec2(worldXZ.div(float(maps.span)).add(0.5))
+      const t0 = vec4(texture(maps.time, mapUv))
+      const t1 = vec4(texture(maps.tone, mapUv))
+      const decode = (v: Node<'float'>): Node<'float'> =>
+        exp(v.mul(float(maps.logMax))).sub(1).max(0.01)
+      return {
+        refill: decode(t0.x), maskLife: decode(t0.y),
+        collapse: t0.z.mul(3).max(0.05), dry: decode(t0.w),
+        darken: t1.x, chroma: t1.y.mul(1.5), expose: t1.z, edge: t1.w,
+      }
+    }
     const t = this.patchMask(worldXZ)
     const p0 = vec4(mix(this.rB0, this.rA0, t))
     const p1 = vec4(mix(this.rB1, this.rA1, t))

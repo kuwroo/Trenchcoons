@@ -14,7 +14,7 @@
 import * as THREE from 'three/webgpu'
 import type { DeformHook } from '../material/painterly'
 import type { HeightField, Vehicle } from '../vehicle/vehicle'
-import { DeformField, DEPTH_SCALE, type WheelStamp } from './field'
+import { DeformField, DEPTH_SCALE, type ResponseMaps, type WheelStamp } from './field'
 import { DeformMirror, wheelDrag } from './mirror'
 import { BIOMES, biome, weatherDecay, type DeformResponse } from './biome'
 
@@ -27,6 +27,26 @@ export interface DeformPatch {
   z: number
   halfX: number
   halfZ: number
+}
+
+/**
+ * Where the per-square-metre response comes from.
+ *
+ * `src/terrain/world.ts` implements this. Declared structurally rather than
+ * imported so the deformation system still depends only on the SHAPE of a
+ * classifier, exactly as `material/painterly.ts` depends only on the shape of
+ * this field — the two are meant to be swappable, and M4 shipped with a
+ * rectangle standing in for a classifier.
+ */
+export interface BiomeSource {
+  /** Blended response at a world position. */
+  responseAt(x: number, z: number): DeformResponse
+  /** The same classification, baked for the shader. */
+  responseTimeMap: THREE.Texture
+  responseToneMap: THREE.Texture
+  span: number
+  /** `log(1 + t)` normaliser the maps were encoded with. */
+  responseLogMax: number
 }
 
 export interface DeformOptions {
@@ -87,15 +107,33 @@ export class Deformation {
   private centreX = 0
   private centreZ = 0
 
-  constructor(private readonly options: DeformOptions) {
-    this.field = new DeformField({ weather: weatherDecay(options.weather) })
+  /**
+   * @param source The climate classifier. When present the field's response is
+   *   a per-square-metre lookup and the `DeformPatch` mechanism is not used at
+   *   all — see `ResponseMaps` in field.ts for why that is the fix for "dont
+   *   see tire marks" rather than a refactor.
+   */
+  constructor(
+    private readonly options: DeformOptions,
+    private readonly source: BiomeSource | null = null,
+  ) {
+    const maps: ResponseMaps | null = source
+      ? {
+        time: source.responseTimeMap,
+        tone: source.responseToneMap,
+        span: source.span,
+        logMax: source.responseLogMax,
+      }
+      : null
+    this.field = new DeformField({ weather: weatherDecay(options.weather), maps })
     this.mirror = new DeformMirror(this.field.near.rt)
-    // `?biome=` names the surface UNDER THE PLAYER. Without a patch to stand on
-    // it is the whole world's response; with one it is the patch's.
+    // `?biome=` names the surface UNDER THE PLAYER. With a classifier it is
+    // handled upstream (the whole world is forced to that biome and the maps
+    // are baked from it); without one it is still the legacy patch response.
     this.patchResponse = options.biome
       ? biome(options.biome)
       : BIOMES['wetSand'] as DeformResponse
-    this.field.setResponse(this.patchResponse, this.worldResponse, null)
+    if (!source) this.field.setResponse(this.patchResponse, this.worldResponse, null)
     this.installDebug()
   }
 
@@ -128,6 +166,9 @@ export class Deformation {
    * capture can see.
    */
   private responseAt(x: number, z: number): DeformResponse {
+    // The classifier when there is one: physics and shading then read the same
+    // blend, because the shader's maps were baked from this exact function.
+    if (this.source) return this.source.responseAt(x, z)
     const p = this.patch
     if (!p) return this.patchResponse
     const inside = Math.abs(x - p.x) <= p.halfX && Math.abs(z - p.z) <= p.halfZ
@@ -256,12 +297,14 @@ export class Deformation {
       __trenchDeform?: {
         scan: (which?: 'near' | 'committed') => Promise<unknown>
         stamps: () => readonly WheelStamp[]
+        mirror: () => unknown
       }
     }
     w.__trenchDeform = {
       scan: async (which: 'near' | 'committed' = 'near') =>
         this.lastRenderer ? this.field.debugScan(this.lastRenderer, which) : null,
       stamps: () => this.stamps,
+      mirror: () => this.mirror.debugState(),
     }
   }
 

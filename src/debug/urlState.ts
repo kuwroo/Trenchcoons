@@ -43,8 +43,19 @@ export function readUrlState(search = location.search): WorldState {
   const q = new URLSearchParams(search)
   const pos = nums(q.get('pos'), 3)
   const look = nums(q.get('look'), 2)
-  const time = Number(q.get('time'))
-  const warmup = Number(q.get('warmup'))
+  // `Number(null)` is 0, and 0 IS FINITE. Reading these as
+  // `Number(q.get('time'))` and testing `Number.isFinite` therefore accepted
+  // the absence of the parameter as the value zero, so every URL without an
+  // explicit `time=` ran at tod 0.000 — midnight, sun 56.7 degrees BELOW the
+  // horizon — instead of the mid-morning hero hour ART_BIBLE §8 specifies as
+  // the default. `npm run dev`, `npm run perf`'s driving scene and the
+  // acceptance test's HUD read were all doing this. Same bug, same line, for
+  // `warmup`, which silently became 0 and let captures race the streaming
+  // system the warmup exists to settle.
+  const timeRaw = q.get('time')
+  const warmupRaw = q.get('warmup')
+  const time = timeRaw === null ? Number.NaN : Number(timeRaw)
+  const warmup = warmupRaw === null ? Number.NaN : Number(warmupRaw)
   return {
     seed: q.get('seed') ?? DEFAULTS.seed,
     pos: (pos as [number, number, number]) ?? DEFAULTS.pos,

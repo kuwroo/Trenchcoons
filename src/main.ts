@@ -6,7 +6,11 @@ import { readUrlState } from './debug/urlState'
 import { PerfHud } from './debug/perfHud'
 import { Atmosphere } from './atmosphere/sky'
 import { buildPostChain } from './post/postChain'
-import { buildGreybox } from './world/greybox'
+import { buildWorld } from './world/world'
+import { TerrainWorld } from './terrain/world'
+import { BIOME_IDS, biomeId } from './terrain/biomes'
+import { WindField } from './atmosphere/wind'
+import { ObjectCollision } from './world/collision'
 import { FEEL, Vehicle, type VehicleTelemetry } from './vehicle/vehicle'
 import { Kart } from './vehicle/kart'
 import { ChaseCamera } from './vehicle/camera'
@@ -37,6 +41,7 @@ declare global {
       /** Vehicle telemetry. The shot harness reads this to find crests and
        *  landings instead of guessing frame numbers. */
       car?: () => (VehicleTelemetry & {
+        contact: boolean; impact: number
         x: number; y: number; z: number; yaw: number
         wheels: { compression: number; contact: boolean; slip: number }[]
       }) | null
@@ -48,6 +53,21 @@ declare global {
       deform?: (x: number, z: number) => {
         depth: number; mask: number; wet: number; displacement: number
       } | null
+      /** The climate classification at a world XZ. The acceptance test for "i
+       *  dont see different environments" reads this so it can assert on the
+       *  CLASSIFICATION as well as on the pixels. */
+      biomeAt?: (x: number, z: number) => {
+        biome: string; temperature: number; moisture: number
+        elevation: number; coastality: number; grass: number
+        /** Normalised biome weights, ordered by `BIOME_IDS`. The transition
+         *  captures are chosen by looking for two of these near 0.4 each. */
+        weights: Record<string, number>
+      }
+      /** Live vegetation counts, for the HUD and the acceptance test. */
+      veg?: () => { grass: number; scatter: number }
+      /** Near solid forms with their proxy extents, so the shot harness can
+       *  AIM a collision capture at a real rock instead of guessing. */
+      solids?: () => { x: number; z: number; top: number; radius: number }[]
     }
   }
 }
@@ -99,23 +119,50 @@ async function boot() {
   const atmosphere = new Atmosphere(state.time)
   scene.add(atmosphere.dome)
 
+  // ── the climate model ─────────────────────────────────────────────────────
+  // FIRST, before anything that has to agree with it. The heightfield, the
+  // biome classification, the ground palette maps and the deformation response
+  // maps all come out of this one object, so there is exactly one answer to
+  // "what is the ground here" and every consumer reads it rather than deriving
+  // its own. `?biome=` forces the classification, which is ARCHITECTURE's URL
+  // codec entry ("force a biome under the player, bypassing climate
+  // classification") — with a continuous field the honest reading of that is to
+  // force it everywhere, so the whole world becomes the named biome.
+  const forced = state.biome ? biomeId(state.biome) : null
+  if (state.biome && !forced) {
+    console.warn(`[trench] unknown ?biome=${state.biome}; using the climate fields`)
+  }
+  const terrain = new TerrainWorld(rng, { forced })
+
+  // ── the global wind field (render-graph pass 2) ───────────────────────────
+  const wind = new WindField()
+
   // ── M4: the deformation field ─────────────────────────────────────────────
   // Built before the world, because the terrain material has to be compiled
-  // with its read hook. Opt-in under `?shot=1`, opt-out elsewhere — see
-  // `readDeformOptions`.
+  // with its read hook — and AFTER the climate model, because its per-biome
+  // response is now a lookup into that model's baked maps rather than one
+  // rectangular patch. Opt-in under `?shot=1`, opt-out elsewhere.
   const deformOpts = readDeformOptions()
-  const deform = deformOpts.enabled ? new Deformation(deformOpts) : null
+  const deform = deformOpts.enabled ? new Deformation(deformOpts, terrain) : null
 
-  const world = buildGreybox(atmosphere, rng, deform?.hook ?? null)
+  const world = buildWorld(atmosphere, wind, deform?.hook ?? null, terrain)
   scene.add(world.group)
-  deform?.setPatch(world.pan)
 
-  // `pos` from the URL is a floor, not an absolute: the greybox heightfield is
-  // procedural, so a fixed y in a shot URL would sometimes land inside a hill
-  // and the capture would be a screenful of backface.
-  camera.position.y = Math.max(
-    state.pos[1], world.heightAt(camera.position.x, camera.position.z) + 9,
-  )
+  // `pos`'s y is a floor, not an absolute: the heightfield is procedural, so a
+  // fixed y in a shot URL would sometimes land inside a hill and the capture
+  // would be a screenful of backface.
+  //
+  // `?eye=` overrides it with metres ABOVE THE GROUND, which is the only usable
+  // way to author a ground-level camera. The floor above is absolute, and the
+  // terrain runs from -200 m to +250 m, so the shot list's `pos=280,3.5,760`
+  // — written as "the driver's eye height" — actually put the camera 104 m in
+  // the air over ground at -100 m, and every capture that was supposed to judge
+  // the near field was a vista. `eye=2.2` cannot make that mistake.
+  const eyeParam = new URLSearchParams(location.search).get('eye')
+  const eye = eyeParam === null ? null : Number(eyeParam)
+  camera.position.y = eye !== null && Number.isFinite(eye)
+    ? world.heightAt(camera.position.x, camera.position.z) + eye
+    : Math.max(state.pos[1], world.heightAt(camera.position.x, camera.position.z) + 9)
 
   // ── M3: the couch co-op vehicle ───────────────────────────────────────────
   // Opt-in under `?shot=1` (the fifteen M1 gate shots are ratcheted against a
@@ -128,6 +175,7 @@ async function boot() {
     input: InputSource
     shadow: ContactShadow
     audio: EngineAudio | null
+    collision: ObjectCollision
   } | null = null
 
   if (carOpts.enabled) {
@@ -178,7 +226,10 @@ async function boot() {
       audio = new EngineAudio()
       audio.arm()
     }
-    car = { vehicle, kart, chase, input, shadow, audio }
+    // Object collision. Deliberately outside src/vehicle — see
+    // src/world/collision.ts for why that is the right seam and not a dodge.
+    const collision = new ObjectCollision(world.scatter.solids)
+    car = { vehicle, kart, chase, input, shadow, audio, collision }
   }
 
   const pipeline = buildPostChain(renderer, scene, camera, atmosphere)
@@ -187,6 +238,9 @@ async function boot() {
   // 1  atmosphere LUTs: transmittance folded into the analytic model, sky-view
   //    and irradiance rebuilt only when TOD changes.
   graph.register('atmosphereLUT', () => { atmosphere.updateLuts(renderer) })
+
+  // 2  wind field. One global field; all vegetation samples it (CLAUDE.md).
+  graph.register('windField', (ctx) => { wind.update(ctx.dt) })
 
   // 3  deformation stamp: re-centre both toroidal tiers, refill whatever the
   //    scroll exposed, then MAX-blend one oriented capsule per wheel contact.
@@ -202,9 +256,20 @@ async function boot() {
   //    post chain's scene pass, and it has to, because it needs its own cameras
   //    and an override material.
   graph.register('shadow', async () => {
-    await atmosphere.shadow.render(
-      renderer, scene, camera, atmosphere.state.sunDir, atmosphere.dome,
-    )
+    // Grass and distant scatter are hidden for the duration of the cascade
+    // render. `SunShadow` excludes by visibility (it does the same for the sky
+    // dome) and it renders the whole scene four times, so this is four draws of
+    // every blade in the frame bought back for a shadow that is smaller than a
+    // cascade texel. Near scatter still casts; that is the shadow that reads.
+    const hidden = world.shadowExcluded
+    for (const o of hidden) o.visible = false
+    try {
+      await atmosphere.shadow.render(
+        renderer, scene, camera, atmosphere.state.sunDir, atmosphere.dome,
+      )
+    } finally {
+      for (const o of hidden) o.visible = true
+    }
   })
 
   // 9  sky: the dome is part of the scene, so the draw itself happens inside
@@ -231,6 +296,24 @@ async function boot() {
     }),
     heightAt: world.groundAt,
     obstacles: () => world.obstacles,
+    biomeAt: (x: number, z: number) => {
+      const c = terrain.climateAt(x, z)
+      const weights: Record<string, number> = {}
+      BIOME_IDS.forEach((id, i) => { weights[id] = c.weights[i] ?? 0 })
+      return {
+        biome: c.dominant,
+        weights,
+        temperature: c.temperature,
+        moisture: c.moisture,
+        elevation: c.elevation,
+        coastality: c.coastality,
+        grass: terrain.grassAt(x, z).density,
+      }
+    },
+    veg: () => ({ grass: world.grass.instances, scatter: world.scatter.instances }),
+    solids: () => world.scatter.solids.map((s) => ({
+      x: s.x, z: s.z, top: s.topY, radius: s.radius,
+    })),
     deform: (x: number, z: number) => {
       if (!deform) return null
       const m = deform.mirror.sample(x, z)
@@ -241,6 +324,11 @@ async function boot() {
       const p = car.vehicle.object.position
       return {
         ...car.vehicle.telemetry,
+        // Object collision is resolved OUTSIDE the vehicle — src/vehicle is
+        // signed off and not ours to edit — so its state is published here
+        // rather than in the telemetry record.
+        contact: car.collision.state.contact,
+        impact: car.collision.state.impact,
         x: p.x, y: p.y, z: p.z, yaw: car.vehicle.yaw,
         wheels: car.vehicle.wheels.map((w) => ({
           compression: w.compression, contact: w.contact, slip: w.slip,
@@ -248,6 +336,19 @@ async function boot() {
       }
     },
   }
+
+  // Grade accumulators. Seeded from the spawn so the first frame is already in
+  // the right biome — a damped value starting at white would make every capture
+  // a picture of the grade settling.
+  const seed0 = terrain.gradeAt(
+    car ? car.vehicle.object.position.x : camera.position.x,
+    car ? car.vehicle.object.position.z : camera.position.z,
+  )
+  const gradeFog = seed0.fog.clone()
+  const gradeSun = seed0.sunTint.clone()
+  let gradeDensity = seed0.fogDensity
+  let gradeAmbient = seed0.ambient
+  atmosphere.setBiomeGrade(gradeFog, gradeDensity, gradeSun, gradeAmbient)
 
   // ── Frame loop ────────────────────────────────────────────────────────────
   // `?frame=N` counts from the first frame of the drive script, i.e. from the
@@ -286,6 +387,12 @@ async function boot() {
       // second pass the spec asks for: your own ruts change how the car drives.
       deform?.applyToVehicle(car.vehicle, dt)
       car.vehicle.update(dt, drive)
+      // Object collision, between the model and everything that reads the pose.
+      // `Vehicle.update` reads its velocity at the top of the step and
+      // recomposes it at the bottom, so a correction applied here is
+      // indistinguishable from one the model made itself — the same seam
+      // `applyToVehicle` above uses.
+      car.collision.resolve(car.vehicle)
       // …and this frame's contacts become next frame's marks.
       deform?.sampleVehicle(car.vehicle, dt)
       car.kart.update(dt, clock.elapsed, car.vehicle)
@@ -300,6 +407,29 @@ async function boot() {
     // With no car the field follows the camera, so `?deform=1` on a free-cam
     // URL still has a populated near tier under the view.
     if (deform && !car) deform.setCentre(camera.position.x, camera.position.z)
+
+    // ── streaming: terrain, scatter and grass follow the player ─────────────
+    // Centred on the CAR when there is one. The chase camera trails the kart by
+    // up to 8 m and swings wide in a corner, and centring the clipmap on it
+    // would put the finest cells behind the wheels rather than under them —
+    // which is where a tyre mark has to resolve.
+    const fx = car ? car.vehicle.object.position.x : camera.position.x
+    const fz = car ? car.vehicle.object.position.z : camera.position.z
+    world.recentre(fx, fz)
+
+    // ── the per-biome grade (ART_BIBLE §5) ──────────────────────────────────
+    // "Fog colour, fog density, and the grade LUT all lerp on the same weights
+    // as the splat." Damped rather than snapped: the weights themselves are
+    // continuous, but a car at 35 m/s crosses a transition in a couple of
+    // seconds and an undamped haze density visibly steps whenever the sampling
+    // point crosses a texel of the classifier's own lattice.
+    const g = terrain.gradeAt(fx, fz)
+    const k = dt > 0 ? 1 - Math.exp(-dt / 0.6) : 1
+    gradeFog.lerp(g.fog, k)
+    gradeSun.lerp(g.sunTint, k)
+    gradeDensity += (g.fogDensity - gradeDensity) * k
+    gradeAmbient += (g.ambient - gradeAmbient) * k
+    atmosphere.setBiomeGrade(gradeFog, gradeDensity, gradeSun, gradeAmbient)
 
     // The camera is not in the scene graph, so nothing else will do this — and
     // the sky dome needs its world position.
@@ -323,6 +453,8 @@ async function boot() {
     const s = atmosphere.state
     hud.lines['tod'] = `${s.tod.toFixed(3)}  sun ${(Math.asin(s.sunDir.y) * 57.2958).toFixed(1)}deg`
     hud.lines['haze'] = `${(s.hazeDensity * 1000).toFixed(2)}/km  exp ${s.exposure.toFixed(2)}`
+    hud.lines['biome'] = `${terrain.dominantAt(fx, fz)}` +
+      `  grass ${world.grass.instances}  scatter ${world.scatter.instances}`
     if (car) {
       const t = car.vehicle.telemetry
       hud.lines['car'] = `${t.speed.toFixed(1)}m/s  slip ${t.slipRatio.toFixed(2)}` +

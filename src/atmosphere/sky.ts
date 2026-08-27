@@ -18,13 +18,13 @@
 import * as THREE from 'three/webgpu'
 import {
   cameraPosition, dot, equirectDirection, equirectUV, float, luminance, mix, positionLocal,
-  mx_noise_float, smoothstep, texture, uniform, uv, vec3, vec4,
+  smoothstep, texture, uniform, uv, vec3, vec4,
 } from 'three/tsl'
 import type { Node } from 'three/webgpu'
 import { cloudLayer } from './clouds'
 import { SunShadow } from './sunShadow'
 import {
-  boostSaturation, clampChroma, flatMark, setSaturation, skyRadiance, sunDisc,
+  boostSaturation, clampChroma, setSaturation, skyRadiance, sunDisc,
   type SkyNodes,
 } from './scattering'
 import {
@@ -52,17 +52,19 @@ const IRR_SAMPLES = 32
  */
 const HAZE_BRUSH = 0.70
 /**
- * Amplitude of the direction-locked brush on the sky dome.
+ * WITHDRAWN. The direction-locked brush on the sky dome is now zero.
  *
- * Down from 0.44 because the field it multiplies is now STEPPED (see `flatMark`):
- * a bimodal +/-1 field at 0.44 is a 44% value swing, where the smooth version it
- * replaced was spread over the noise's own 0.17 sigma and delivered about 8%.
- * 0.16 holds the visible amplitude roughly where it was and spends it on
- * boundaries instead of on gradients, which is the whole point — a gouache sky is
- * laid in with a flat brush and the analytic gradient underneath it is the one
- * part of these frames with no mark-making in it at all.
+ * It was a painterly-direction term — a hard-thresholded two-octave mottle
+ * multiplying the dome's value by +/-21% — and CLAUDE.md's replacement brief is
+ * explicit: "Sky: clean gradient, thin wispy cloud. NOT heavy blobs." The user
+ * reported the sky as "weirdly blobby" and this is half of why. It is also
+ * MEASURABLE: tools/complaints.mjs scores the coarse-to-fine spatial ratio of
+ * the upper frame at 1.8-2.6 across refs/ and 0.9 here, i.e. our sky carried
+ * fine-scale texture no reference has, and this term is where it came from.
+ *
+ * The note is left here rather than deleted so the next person to reach for a
+ * sky overlay finds the reason it is not there.
  */
-const SKY_BRUSH = 0.21
 
 /** Deterministic Fibonacci sphere — no Math.random anywhere in generation. */
 function fibonacciSphere(n: number): THREE.Vector3[] {
@@ -139,6 +141,19 @@ export class Atmosphere {
   private readonly hazeSatNode = uniform(1.75)
   /** Scale height of the haze, metres. Hilltops punch through. */
   readonly hazeHeightNode = uniform(1100)
+  /**
+   * Per-BIOME grade, on top of the time of day. ART_BIBLE §4 authors a fog
+   * colour and a fog density per biome — 0.7x in the meadow, 1.8x in the
+   * alpine, 1.4x in the desert — and §5 says "fog colour, fog density, and the
+   * grade LUT all lerp on the same weights as the splat". This is the one place
+   * that lerp lands, so a driver crossing a boundary sees the AIR change, not
+   * only the ground.
+   *
+   * Chromaticity only: the tint is normalised to unit luminance before it is
+   * applied, so a biome may recolour the haze but may not brighten or darken
+   * it. Level is the time of day's business.
+   */
+  readonly hazeTintNode = uniform(new THREE.Vector3(1, 1, 1))
   readonly exposureNode = uniform(1)
   readonly gradeTintNode = uniform(new THREE.Vector3(1, 1, 1))
   /** See `gradeSat` in tod.ts. */
@@ -254,18 +269,11 @@ export class Atmosphere {
     //
     // Kept to a few percent of value, and squashed horizontally so it reads as
     // the long flat strokes both painterly references lay their skies in with.
-    const sb = vec3(dir.mul(9.5))
-    // Both octaves go through the same real threshold the surface brush does.
-    // Without it this was a soft gradient wash: atmos-clouds-noon is 40-55% sky
-    // and measured per-tile detail 0.022 with 12.4% of its gated tiles dead
-    // flat, i.e. half of every frame was smooth plastic no gate could see.
-    const skyBrush = flatMark(mx_noise_float(vec3(sb.x, sb.y.mul(2.3), sb.z)))
-      .mul(0.62)
-      .add(flatMark(
-        mx_noise_float(vec3(sb.x.mul(2.1).add(9.1), sb.y.mul(4.8), sb.z.mul(2.1))),
-      ).mul(0.38))
-    const painted = vec3(mix(sky, clouds.color, clouds.alpha)
-      .mul(skyBrush.mul(SKY_BRUSH).add(1).max(0.2)))
+    // The dome is now a CLEAN GRADIENT plus the cloud layer, and nothing else.
+    // Two octaves of thresholded noise used to multiply this
+    // by +/-21%; the reference skies have no such texture and the user called
+    // the result blobby.
+    const painted = vec3(mix(sky, clouds.color, clouds.alpha))
     mat.colorNode = vec3(painted.add(disc))
     mat.side = THREE.BackSide
     mat.depthWrite = false
@@ -393,7 +401,7 @@ export class Atmosphere {
     // horizon (0.31 -> 0.16 and 0.34 -> 0.18 near to far), and a depth ladder
     // that inverts is the single loudest "this is not a painting" tell.
     const hazeColor = boostSaturation(
-      vec3(this.skyLookup(dir).mul(this.hazeGainNode)),
+      vec3(this.skyLookup(dir).mul(this.hazeGainNode).mul(this.hazeTintNode)),
       this.hazeSatNode.mul(f.mul(0.38).oneMinus()),
     )
     // The HAZE IS BRUSHED TOO, with the surface's own stroke field.
@@ -454,7 +462,49 @@ export class Atmosphere {
     this.rampScaleNode.value = s.rampScale
     this.rampShadowGainNode.value = s.rampShadowGain
     this.shadowStrengthNode.value = s.shadowStrength
+    this.applyBiomeGrade()
     this.lutsDirty = true
+  }
+
+  /**
+   * The biome grade. Multiplicative on top of whatever the clock just wrote,
+   * and re-applied by `setTimeOfDay` so the two can be set in either order.
+   *
+   * @param fog Haze chromaticity. Normalised here, not by the caller.
+   * @param density Haze density multiplier, ART_BIBLE's per-biome "density Nx".
+   * @param sunTint Direct-sun chromaticity. Also normalised.
+   * @param ambient Scale on the sky ambient. High-key biomes lift.
+   */
+  setBiomeGrade(
+    fog: THREE.Color, density: number, sunTint: THREE.Color, ambient: number,
+  ): void {
+    this.grade.fog.copy(fog)
+    this.grade.density = density
+    this.grade.sun.copy(sunTint)
+    this.grade.ambient = ambient
+    this.applyBiomeGrade()
+  }
+
+  private readonly grade = {
+    fog: new THREE.Color(1, 1, 1),
+    density: 1,
+    sun: new THREE.Color(1, 1, 1),
+    ambient: 1,
+  }
+
+  private applyBiomeGrade(): void {
+    const g = this.grade
+    const s = this.state
+    // Unit-luminance chromaticity. A biome may recolour the air; it may not
+    // change how bright the sun is, which is the clock's job and is gated.
+    const fl = Math.max(1e-4, 0.2126 * g.fog.r + 0.7152 * g.fog.g + 0.0722 * g.fog.b)
+    this.hazeTintNode.value.set(g.fog.r / fl, g.fog.g / fl, g.fog.b / fl)
+    const sl = Math.max(1e-4, 0.2126 * g.sun.r + 0.7152 * g.sun.g + 0.0722 * g.sun.b)
+    this.sunColorNode.value.set(
+      s.sunColor.x * g.sun.r / sl, s.sunColor.y * g.sun.g / sl, s.sunColor.z * g.sun.b / sl,
+    )
+    this.hazeDensityNode.value = s.hazeDensity * g.density
+    this.ambientGainNode.value = s.ambientGain * g.ambient
   }
 
   /**

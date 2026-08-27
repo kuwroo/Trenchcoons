@@ -145,7 +145,11 @@ export class DeformMirror {
       this.originX = ox
       this.originY = oy
       this.valid = true
-    } catch {
+    } catch (e) {
+      // WARNED, not silent. The fallback below is a correct failure mode, but
+      // it is indistinguishable from "the stamp never ran" at the debug
+      // surface, and a whole round was spent on that ambiguity once already.
+      console.warn('[deform] mirror readback failed; physics sees pristine ground', e)
       // A readback can fail while the device is being lost or resized. The
       // physics falling back to "pristine ground" is the right failure: the car
       // drives as though the marks were not there, which is exactly how it
@@ -153,6 +157,26 @@ export class DeformMirror {
     } finally {
       this.inFlight = null
     }
+  }
+
+  /**
+   * What the physics can actually see, for `window.__trenchDeform.mirror()`.
+   *
+   * Exists because "no marks" has three distinct causes — nothing stamped, the
+   * stamp landed somewhere else, or the readback failed — and the sampling API
+   * cannot tell them apart. It reports the window's origin and its own argmax
+   * in WORLD coordinates, which is the number that settles it: a probe on a
+   * 1 m grid walks straight past a 32 cm tyre track, and did.
+   */
+  debugState(): unknown {
+    let nz = 0, mx = 0
+    for (let i = 1; i < this.data.length; i += 4) { const v = this.data[i] ?? 0; if (v) { nz++; if (v > mx) mx = v } }
+    let ax = -1, ay = -1
+    for (let j = 0; j < WINDOW; j++) for (let i = 0; i < WINDOW; i++) {
+      if ((this.data[(j * WINDOW + i) * 4 + 1] ?? 0) === mx) { ax = i; ay = j; j = WINDOW; break }
+    }
+    return { valid: this.valid, originX: this.originX, originY: this.originY, frame: this.frame, nz, mx,
+      ax, ay, worldX: (this.originX + ax + 0.5) / TEXELS_PER_M, worldZ: (this.originY + ay + 0.5) / TEXELS_PER_M }
   }
 
   /** Bilinear sample of the mirrored window. Pristine outside it. */

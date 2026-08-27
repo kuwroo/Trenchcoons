@@ -526,8 +526,20 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // picture. Coverage is the wrong knob for sky structure; the crisp `cover`
   // threshold and the internal `lobe` term in clouds.ts are the right ones, and
   // they are already there.
-  s.cloudCoverage = 0.47 + 0.05 * twilight
-  s.cloudOpacity = 0.97
+  // 0.26, down from 0.47, and 0.58 opacity down from 0.97.
+  //
+  // The user's report was "the sky is weirdly blobby". Half of that was the
+  // dome brush (see sky.ts) and half was here: at coverage 0.47 with opacity
+  // 0.97 the layer covers roughly half the sky in fully opaque masses, which is
+  // cumulus weather, not the clean gradient with thin wispy cirrus ART_BIBLE §1
+  // asks for. refs/genshin/grasslands.jpg gives about a fifth of its sky to
+  // cloud and the gradient reads straight through all of it.
+  //
+  // Twilight still gets a little more, because both painterly references put
+  // their densest cloud at the golden end of the day — but a fifth of what it
+  // used to add.
+  s.cloudCoverage = 0.26 + 0.03 * twilight
+  s.cloudOpacity = 0.58
 
   // Heavy-atmosphere register at golden hour / dusk (ART_BIBLE §8) — but
   // expressed through the haze COLOUR, not through extinction. Round 1 ran
