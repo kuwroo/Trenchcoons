@@ -24,3 +24,4 @@ shots/.best.json
 .crit*
 .probe*
 .scratch*
+.world/

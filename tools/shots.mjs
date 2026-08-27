@@ -36,7 +36,23 @@ const GROUND = 'pos=280,0,760&eye=14&warmup=64'
 // where the worst material in the build was hiding: with the brush ladder
 // clamped at its authored world scale (see `lod` in painterly.ts) the near
 // ground came out as 60-200 px of soft camo blotches, and no gate could see it.
-const NEAR = 'pos=280,0,760&eye=3.5&warmup=64'
+//
+// MOVED 12 m EAST, and the reason is worth recording because it is a class of
+// bug rather than a framing preference: at (280, 760) with the meadow's scatter
+// density raised, a scatter instance sits exactly on the camera, and both
+// near-noon and near-dusk came back as a FLAT BLUE FRAME — the inside of a rock.
+// Measured, mean rgb(57,102,161) with a whole-frame luma range of 102-108
+// against 46-215 at every neighbouring position; six candidates were probed and
+// (280, 760) at eye 3.5 is the only occluded one. GROUND shares the XZ and is
+// unaffected because its eye is at 14 m, above the instance.
+//
+// The general fault — a free camera can end up inside a scatter instance —
+// is NOT fixed here. The chase camera has obstacle avoidance and the kart has a
+// collision solver, so it only reaches the debug/capture camera, and the obvious
+// fix (reject instances within a few metres of the streaming centre) would trade
+// it for scatter popping in behind the player, which is the one thing the hashed
+// placement in src/world/scatter.ts exists to prevent.
+const NEAR = 'pos=292,0,760&eye=3.5&warmup=64'
 
 // M3 vehicle spawns. Hour 0.62 puts the sun behind the chase camera — at the
 // 0.36 hero hour the kart is its own silhouette and none of the pose reads.
@@ -508,23 +524,31 @@ export const SHOTS = [
   //   4. run the script and REQUIRE `contact === true`.
   //
   // MEASURED at this exact URL through `__trench.car()`: the kart spawns at
-  // (272.5, 755.1), the target is a 4.43 m-radius boulder at (258.2, 790.0)
-  // standing 4.03 m above the ground 37.7 m away, and at frame 150 the chassis
-  // is at (259.5, 786.5) doing 0.62 m/s with `contact` TRUE and the throttle
-  // still at 0.9 — 3.7 m from the rock's centre, i.e. against its face. Aimed at
-  // the same rock with any of the three wrong yaw conventions it ends up 54-96 m
-  // away at the full 35 m/s.
+  // (272.5, 755.1) and the target is a 2.37 m-radius rock at (234.4, 720.3)
+  // standing 3.17 m above the ground, 51.6 m away — far enough to be at the
+  // 35 m/s limiter when it arrives. Frame by frame: 90 -> (242.4, 727.6) at
+  // 35.00 m/s, contact false, 10.8 m short; 110 -> (236.5, 721.9) at 0.44 m/s;
+  // 130 through 240 -> pinned at (236.6, 721.5) around 0.9 m/s with `contact`
+  // TRUE and the throttle still at 0.9, i.e. 2.5 m from the rock's centre and
+  // inside its proxy. 150 is taken because contact has been continuously true for
+  // twenty frames by then. Aimed at the same rock with any of the three wrong yaw
+  // conventions the kart ends up 59 m away.
   //
-  // `camarm=5` asks for five times the solved arm and gets 13.2 m, which is
-  // where the rig's own clamp lands; that is far enough back that the boulder,
-  // the kart and the flattened grass between them are all in frame. The proxy is
+  // `camarm=5` asks for five times the solved arm and gets 13.2 m, which is where
+  // the rig's own clamp lands. `camyaw=-2.0` swings that arm round to look at the
+  // ROCK rather than past it, and the angle was found by sweeping nine values and
+  // reading the frame back rather than by guessing: at the obvious +1.15 the
+  // camera lands inside a conifer (mean luma 64, range 42-155 — a green wall) and
+  // at +2.4 it is inside another one. At -2.0 the rock is side-on in the middle
+  // of the frame with three legible facets and the kart pressed against its right
+  // face. The proxy is
   // the modeller's exact convex hull flattened to its XZ shadow — see
   // src/world/proxy.ts for why a horizontal solve is the only one a
   // raycast-suspension kart can consume.
   {
     name: 'rock-collision',
-    q: 'time=0.42&car=1&warmup=48&spawn=280,760&caryaw=2.7537'
-      + '&drive=throttle:0-9999@0.9&frame=150&camyaw=1.15&camarm=5',
+    q: 'time=0.42&car=1&warmup=48&spawn=280,760&caryaw=0.8309'
+      + '&drive=throttle:0-9999@0.9&frame=150&camyaw=-2.0&camarm=5',
   },
 ]
 
