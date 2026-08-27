@@ -13,6 +13,7 @@
 import * as THREE from 'three/webgpu'
 import type { Atmosphere } from '../atmosphere/sky'
 import { PainterlyMaterial, type PainterlyParams } from '../material/painterly'
+import { graded } from '../world/surfaceGrade'
 import { allScatterAssets, scatterAsset, scatterIds, scatterVariants } from './registry'
 import type { AssetLod, AssetPart, Collider, GeneratedAsset } from './types'
 
@@ -46,11 +47,21 @@ export class ScatterLibrary {
    * different gradient sweep — see `resolveMaterial` in registry.ts. Assets
    * that resolve to identical params share one material and one pipeline.
    */
-  material(params: PainterlyParams): THREE.Material {
-    const key = JSON.stringify(params)
+  material(surfaceId: string, params: PainterlyParams): THREE.Material {
+    // GRADED HERE, not at the call site, because the Forge and the game used to
+    // grade differently and the Forge is the surface that asset work is judged
+    // on. `src/world/scatter.ts` called `graded()` and this did not, so every
+    // asset in the Forge rendered under the RAW def while the same asset in the
+    // world rendered under the GRADE override — for `stone` that is ambient
+    // 4.9 against 1.75 and a ramp of [-0.05, 0.88] against [0.26, 0.74], i.e.
+    // the Forge showed one flat band lit almost entirely by the blue sky LUT.
+    // A modeller tuning rock FORM against that preview is reading a material
+    // bug as a geometry bug. One grade, one point of use, both paths agree.
+    const clean = graded(surfaceId, params)
+    const key = `${surfaceId}|${JSON.stringify(clean)}`
     const hit = this.bySurface.get(key)
     if (hit) return hit.material
-    const m = new PainterlyMaterial(this.atmosphere, params)
+    const m = new PainterlyMaterial(this.atmosphere, clean)
     this.bySurface.set(key, m)
     this.materials.push(m)
     return m.material
@@ -107,7 +118,7 @@ export class ScatterLibrary {
       surface: part.surface,
       lod,
       geometry: entry.geometry,
-      material: this.material(part.material),
+      material: this.material(part.surface, part.material),
       triangles: entry.triangles,
       until: entry.until,
     }

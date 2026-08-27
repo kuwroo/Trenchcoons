@@ -24,6 +24,7 @@ import * as THREE from 'three/webgpu'
 import { Atmosphere } from '../../atmosphere/sky'
 import { PainterlyMaterial } from '../../material/painterly'
 import { surface } from '../../material/defs'
+import { graded } from '../../world/surfaceGrade'
 import { buildPostChain } from '../../post/postChain'
 import { Clock } from '../../core/clock'
 import { ScatterLibrary } from '../library'
@@ -34,7 +35,7 @@ import { scatterAsset, scatterIds, scatterVariants } from '../registry'
 declare global {
   interface Window {
     __ready?: Promise<void>
-    __forge?: { budget: ReturnType<typeof scatterBudget>; ids: string[] }
+    __forge?: { budget: ReturnType<typeof scatterBudget>; ids: string[]; scene: THREE.Scene }
   }
 }
 
@@ -101,7 +102,7 @@ async function boot(): Promise<void> {
 
   // Ground, on the game's own meadow surface, so an asset is judged against the
   // value it will actually sit on rather than against a void.
-  const groundMat = new PainterlyMaterial(atmosphere, surface('meadow'))
+  const groundMat = new PainterlyMaterial(atmosphere, graded('meadow', surface('meadow')))
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000, 1, 1), groundMat.material)
   ground.rotation.x = -Math.PI * 0.5
   ground.name = 'forge-ground'
@@ -189,7 +190,7 @@ async function boot(): Promise<void> {
       const entry = cellLod === 'imp'
         ? part.impostor
         : part.lods[Math.min(part.lods.length - 1, Math.max(0, Math.round(Number(cellLod) || 0)))]!
-      const mesh = new THREE.Mesh(entry.geometry, lib.material(part.material))
+      const mesh = new THREE.Mesh(entry.geometry, lib.material(part.surface, part.material))
       mesh.position.set(x, 0, z)
       mesh.name = `${asset.id}#${asset.variant}/${part.slot}`
       mesh.frustumCulled = false
@@ -220,7 +221,10 @@ async function boot(): Promise<void> {
 
   const hud = document.getElementById('hud') as HTMLDivElement
   const budget = scatterBudget()
-  window.__forge = { budget, ids: shown.map((s) => s.id) }
+  // `scene` exposed so a probe can measure the REAL geometry — per-face normals
+  // and areas — instead of inferring form from a screenshot. A flat-looking rock
+  // is either a material bug or a form bug and pixels alone cannot tell you which.
+  window.__forge = { budget, ids: shown.map((s) => s.id), scene }
   hud.textContent =
     `${budget.defs} defs / ${budget.assets} variants / ${budget.batches} batches` +
     `  worst-case draws ${budget.worstCaseDraws}\n` +
