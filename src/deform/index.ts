@@ -96,6 +96,7 @@ export class Deformation {
       ? biome(options.biome)
       : BIOMES['wetSand'] as DeformResponse
     this.field.setResponse(this.patchResponse, this.worldResponse, null)
+    this.installDebug()
   }
 
   /** The terrain material's read hook. */
@@ -235,7 +236,33 @@ export class Deformation {
 
   /** Render-graph pass 3. */
   async stampPass(renderer: THREE.Renderer): Promise<void> {
+    this.lastRenderer = renderer
     await this.field.update(renderer, this.centreX, this.centreZ, this.stamps)
+  }
+
+  /**
+   * Diagnostic surface, on `window.__trenchDeform`.
+   *
+   * Lives here rather than in `main.ts` so the deform module owns its own
+   * debugging, and it is the tool that separates "nothing was stamped" from
+   * "something was stamped somewhere the reader is not looking" — which is
+   * exactly the distinction the CPU mirror cannot make. `main.ts` exposes the
+   * mirror; this exposes the texture.
+   */
+  private lastRenderer: THREE.Renderer | null = null
+
+  private installDebug(): void {
+    const w = window as unknown as {
+      __trenchDeform?: {
+        scan: (which?: 'near' | 'committed') => Promise<unknown>
+        stamps: () => readonly WheelStamp[]
+      }
+    }
+    w.__trenchDeform = {
+      scan: async (which: 'near' | 'committed' = 'near') =>
+        this.lastRenderer ? this.field.debugScan(this.lastRenderer, which) : null,
+      stamps: () => this.stamps,
+    }
   }
 
   /** Render-graph pass 4, plus the readback that feeds the CPU mirror. */

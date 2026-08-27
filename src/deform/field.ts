@@ -201,6 +201,9 @@ export class DeformField implements DeformHook {
   private readonly stampPar = dynAttr(STAMP_INSTANCES, 4)
   private readonly stampGeo = quadGeometry(true)
   private readonly stampSpan = uniform(NEAR_SPAN)
+  /** Narrowest half-width the tier being written can actually hold. See the
+   *  stamp material — a 0.16 m capsule is 0.26 texels of the committed tier. */
+  private readonly stampMinHalf = uniform(0)
 
   private readonly bandScene = new THREE.Scene()
   /** Same bands, but written as zero without binding any texture. See below. */
@@ -234,7 +237,23 @@ export class DeformField implements DeformHook {
     const par = attribute<'vec4'>('iParams', 'vec4')
     const a = seg.xy
     const b = seg.zw
-    const halfWidth = par.x
+    // THE STAMP MUST NEVER BE NARROWER THAN THE TIER IT IS WRITTEN INTO.
+    //
+    // A tyre's contact patch is 0.16 m half-width. In the near tier that is
+    // 2.6 texels of a 0.125 m grid and rasterises fine. In the COMMITTED tier,
+    // at 2 m per texel, the whole capsule is 0.26 texels across — a subpixel
+    // triangle that misses every pixel centre, and on the rare frame it does
+    // cover one, `profile` at that centre is past `halfWidth * 1.5` and
+    // evaluates to zero anyway. So the committed tier received NOTHING: a whole
+    // -tier scan reads 0 nonzero texels after a 400-frame drive, which is the
+    // arithmetic reason persistence never worked, independently of the flip
+    // below.
+    //
+    // The floor is a property of the STORAGE, not of the tyre — 2 m per texel
+    // cannot represent anything narrower, so the honest coarse-tier record of a
+    // tyre mark is one texel wide. That is also what the committed tier is for:
+    // the memory that you drove here, not the tread pattern.
+    const halfWidth = max(par.x, this.stampMinHalf)
     const pad = halfWidth.mul(1.9).add(0.22)
     const d = b.sub(a)
     const len = length(d).max(1e-4)
@@ -259,7 +278,27 @@ export class DeformField implements DeformHook {
     const cell = floor(a.div(this.stampSpan)).mul(this.stampSpan)
     const ndc = world.sub(cell).div(this.stampSpan).mul(2).sub(1)
       .add(vec2(wrapX, wrapZ).mul(2))
-    stampMat.vertexNode = vec4(ndc, vec2(0, 1))
+    // Y IS NEGATED, AND THIS IS THE BUG THAT MADE THE FIELD READ EMPTY.
+    //
+    // Every reader of these tiers treats the texture v axis as "world z within
+    // the span": the terrain material samples `fract(worldXZ / SPAN)`, the CPU
+    // mirror indexes rows by `round(z * TEXELS_PER_M)`, and both of those are
+    // ROW indices — v = 0 is row 0. Under WebGPU, row 0 is at NDC y = +1, not
+    // -1 (three's own QuadMesh encodes exactly this: its uv attribute pairs
+    // NDC y +1 with v 0). Writing `ndc.y = 2v - 1` therefore rasterised the
+    // mark to row (1 - v) * res and every reader looked for it at row v * res.
+    //
+    // The mark existed the whole time — a whole-tier scan after the 400-frame
+    // pan run found 3812 nonzero texels at G up to 228/255 — mirrored about the
+    // z centre of the tier, which for this drive put it 700 texels (87 m) from
+    // where the mirror's 32 m window was reading. Hence `__trench.deform`
+    // returning a flat zero over an 80 x 80 m grid while the stamp pass was in
+    // fact running perfectly.
+    //
+    // WebGL would have hidden this: there NDC y -1 IS row 0, so writer and
+    // reader agreed by accident. This is the same class of silent-in-WebGL,
+    // fatal-in-WebGP as the band-refill self-read above it.
+    stampMat.vertexNode = vec4(ndc.x, ndc.y.negate(), 0, 1)
 
     const rel = world.sub(a)
     const t = saturate(rel.dot(dir).div(len))
@@ -290,6 +329,16 @@ export class DeformField implements DeformHook {
     stampMat.depthTest = false
     stampMat.depthWrite = false
     stampMat.transparent = true
+    // DOUBLE SIDED BECAUSE THE Y NEGATION ABOVE REVERSES THE WINDING.
+    //
+    // The quad's corner order is fixed in `quadGeometry`, so flipping the sign
+    // of clip-space y turns every triangle from front- to back-facing and the
+    // default FrontSide culls the entire pass — measured, the whole-tier scan
+    // went from 3812 nonzero texels in the wrong place to 0 nonzero texels
+    // anywhere. Two sides costs nothing on a pass with no depth and no shading
+    // that depends on facing, and it is more robust than hand-reversing an
+    // index buffer that three is also free to reorder.
+    stampMat.side = THREE.DoubleSide
     stampMat.name = 'deform-stamp'
 
     this.stampGeo.setAttribute('iSeg', this.stampSeg)
@@ -310,7 +359,16 @@ export class DeformField implements DeformHook {
     const rect = attribute<'vec4'>('iRect', 'vec4')
     const bandMat = new THREE.NodeMaterial()
     const bandUv = vec2(rect.xy.add(rect.zw.sub(rect.xy).mul(positionGeometry.xy)))
-    bandMat.vertexNode = vec4(vec2(bandUv.mul(2).sub(1)), vec2(0, 1))
+    // Same v-is-a-row convention as the stamp, and the same negation. `iRect`
+    // is authored in TEXTURE uv space by `recentre`, so the fragment that lands
+    // on row R has to be the one whose `bandUv.y` is R / res — which under
+    // WebGPU means NDC y = 1 - 2v. Without this the demoted strip was written
+    // to the mirror image of the strip that had just been exposed: the band
+    // that scrolled off the -z edge was refilled at the +z edge, so the near
+    // tier was simultaneously missing the marks it should have got back AND
+    // corrupted where it had valid ones.
+    const bandNdc = vec2(bandUv.x.mul(2).sub(1), bandUv.y.mul(-2).add(1))
+    bandMat.vertexNode = vec4(bandNdc, vec2(0, 1))
     const bandWorld = this.windowWorld(bandUv, this.bandCentre, this.bandSpan)
     const fromCommit = texture(this.committed.rt.texture, fract(bandWorld.div(COMMIT_SPAN)))
     // The committed tier has nothing coarser to fall back to — 2 km IS the
@@ -319,6 +377,7 @@ export class DeformField implements DeformHook {
     bandMat.blending = THREE.NoBlending
     bandMat.depthTest = false
     bandMat.depthWrite = false
+    bandMat.side = THREE.DoubleSide
     bandMat.name = 'deform-band'
     this.bandGeo.setAttribute('iRect', this.bandRects)
     this.bandGeo.instanceCount = 0
@@ -342,11 +401,12 @@ export class DeformField implements DeformHook {
     // which is a large part of why marks did not survive a round trip. WebGL
     // tolerated the same aliasing silently.
     const bandClearMat = new THREE.NodeMaterial()
-    bandClearMat.vertexNode = vec4(vec2(bandUv.mul(2).sub(1)), vec2(0, 1))
+    bandClearMat.vertexNode = vec4(bandNdc, vec2(0, 1))
     bandClearMat.fragmentNode = vec4(0, 0, 0, 0)
     bandClearMat.blending = THREE.NoBlending
     bandClearMat.depthTest = false
     bandClearMat.depthWrite = false
+    bandClearMat.side = THREE.DoubleSide
     bandClearMat.name = 'deform-band-clear'
     const bandClearMesh = new THREE.Mesh(this.bandGeo, bandClearMat)
     bandClearMesh.frustumCulled = false
@@ -519,21 +579,33 @@ export class DeformField implements DeformHook {
     // `edge` drives k CUBED, so a surface that does not hold an edge gets
     // essentially none of it: dune sand (0.30) gets k 1.2, wet sand (0.96) 7.6.
     //
-    // KNOWN COST, measured: this is steep about 0.5 and crushes everything
-    // under it, so a demoted band (stored 0.28 -> ramp 0.452) renders at 0.185,
-    // a 2.44x suppression. It is a large part of why tracks-persist shows no
-    // committed band. Kept anyway, because without it the marks are invisible
-    // FULL STOP — the sand pan's own mottle out-contrasts them and the corridor
-    // gate reads exactly 1.00, marks indistinguishable from bare ground. A
-    // visible mark with broken persistence beats no mark at all.
+    // KNOWN COST, and it is now a MEASURED, DELIBERATE trade rather than a
+    // known bug: this curve is steep about 0.5 and crushes everything under it,
+    // so a demoted band at stored 0.28 renders around 0.185. Kept anyway,
+    // because without it the marks lose to the sand pan's own mottle.
     //
-    // The fix is to apply this RELATIVE TO A LOCAL PLATEAU sampled ALONG the
-    // mark. A perpendicular ring cannot work: TYRE_HALF 0.16 m against a
-    // 0.125 m texel makes a mark 2.56 texels wide, so cross taps land on bare
-    // ground, the plateau collapses to the fragment's own value, x = 1, and the
-    // S vanishes everywhere (measured: corridor 1.51 -> 1.18). `slope` above is
-    // the displacement gradient, and the track runs perpendicular to it, so the
-    // two taps needed are nearly free.
+    // THE PLATEAU FIX RECORDED HERE WAS TRIED AND IS WRONG. The prescription
+    // was: normalise by the largest ramp within a few texels ALONG the mark
+    // (direction perpendicular to the mask gradient, since a persisted band has
+    // depth 0.000 and the displacement slope there is noise), shape the
+    // resulting cross-section, then multiply the plateau back in — sharpening
+    // the profile without crushing the amplitude. Implemented exactly that way
+    // and captured, all three deform metrics moved the WRONG WAY at once:
+    //
+    //     corridor      1.36 -> 1.09   (floor 1.25)
+    //     persistence   1.33 -> 1.05   (floor 1.25)
+    //     decay ratio   6.84 -> 3.60   (floor 2.00, subject 7.59 -> 4.00)
+    //
+    // The reason is the same arithmetic that kills the perpendicular ring, and
+    // it kills the along-mark version too: at TYRE_HALF 0.16 m against a
+    // 0.125 m texel the mark is 2.56 texels wide, so a one-texel forward
+    // difference has no reliable direction to give. The estimated `along` lands
+    // across the mark as often as not, the plateau collapses onto the
+    // fragment's own value, x = 1, and the S is switched off everywhere — which
+    // is precisely the 1.51 -> 1.18 that the cross-tap version measured. The
+    // plateau cannot be sampled at all until the mark is several texels wide;
+    // that is a STORAGE-RESOLUTION problem, not a shading one, and the fix is a
+    // denser near tier or a wider stamp, not a cleverer curve.
     const k = mix(float(1), float(8.5), r.edge.mul(r.edge).mul(r.edge))
     const rk = ramp.pow(k)
     const mask = rk.div(rk.add(ramp.oneMinus().pow(k)).max(1e-4))
@@ -581,10 +653,16 @@ export class DeformField implements DeformHook {
     if (stamps.length > 0) {
       this.writeStamps(stamps)
       this.stampSpan.value = NEAR_SPAN
+      // 0.75 of a texel, so the narrowest possible mark still covers a pixel
+      // centre whatever sub-texel phase it lands on. At 0.125 m that is 0.094 m
+      // against a 0.16 m tyre, i.e. inert for the near tier — it only bites on
+      // a stamp that is already unrepresentable.
+      this.stampMinHalf.value = this.near.texelSize * 0.75
       renderer.setRenderTarget(this.near.rt)
       await renderer.renderAsync(this.stampScene, this.flatCam)
       if (this.frame % COMMIT_EVERY === 0) {
         this.stampSpan.value = COMMIT_SPAN
+        this.stampMinHalf.value = this.committed.texelSize * 0.75
         renderer.setRenderTarget(this.committed.rt)
         await renderer.renderAsync(this.stampScene, this.flatCam)
       }
@@ -699,6 +777,75 @@ export class DeformField implements DeformHook {
     }
     this.stampSeg.needsUpdate = true
     this.stampPar.needsUpdate = true
+  }
+
+  /**
+   * Diagnostic: pull a whole tier back and report WHERE the data is.
+   *
+   * The CPU mirror can only answer "is there a mark under the car"; when the
+   * answer is no, that is equally consistent with "the stamp never ran" and
+   * "the stamp ran somewhere else". Scanning the texture itself tells the two
+   * apart, and the texel coordinates it returns are what caught the render-
+   * target Y flip. Not on any frame path — the harness calls it explicitly.
+   */
+  async debugScan(
+    renderer: THREE.Renderer, which: 'near' | 'committed' = 'near',
+  ): Promise<{
+    res: number; span: number; centre: [number, number]
+    nonzero: number; max: [number, number, number, number]
+    argmaxG: [number, number]; worldOfArgmax: [number, number]
+    map: string[]
+  }> {
+    const tier = which === 'near' ? this.near : this.committed
+    const buf = await renderer.readRenderTargetPixelsAsync(
+      tier.rt, 0, 0, tier.res, tier.res,
+    ) as unknown as Uint8Array
+    // 2048*4 and 1024*4 are both multiples of 256, so rows come back packed.
+    const stride = Math.ceil(tier.res * 4 / 256) * 256
+    const max: [number, number, number, number] = [0, 0, 0, 0]
+    let nonzero = 0
+    let bx = -1
+    let by = -1
+    for (let y = 0; y < tier.res; y++) {
+      const row = y * stride
+      for (let x = 0; x < tier.res; x++) {
+        const o = row + x * 4
+        const g = buf[o + 1] ?? 0
+        if (g > 2) nonzero++
+        if (g > max[1]) { max[1] = g; bx = x; by = y }
+        const r = buf[o] ?? 0
+        const b = buf[o + 2] ?? 0
+        const a = buf[o + 3] ?? 0
+        if (r > max[0]) max[0] = r
+        if (b > max[2]) max[2] = b
+        if (a > max[3]) max[3] = a
+      }
+    }
+    // 64x64 max-pooled map of G, so the shape and the PLACE are both visible.
+    const N = 64
+    const cell = tier.res / N
+    const map: string[] = []
+    for (let j = 0; j < N; j++) {
+      let line = ''
+      for (let i = 0; i < N; i++) {
+        let m = 0
+        for (let y = j * cell; y < (j + 1) * cell; y++) {
+          const row = y * stride
+          for (let x = i * cell; x < (i + 1) * cell; x++) {
+            const g = buf[row + x * 4 + 1] ?? 0
+            if (g > m) m = g
+          }
+        }
+        line += m > 192 ? '#' : m > 128 ? '+' : m > 64 ? ':' : m > 6 ? '.' : ' '
+      }
+      map.push(line)
+    }
+    return {
+      res: tier.res, span: tier.span, centre: [tier.centre.x, tier.centre.y],
+      nonzero, max, argmaxG: [bx, by],
+      worldOfArgmax: [(bx + 0.5) / tier.res * tier.span, (by + 0.5) / tier.res * tier.span],
+      map,
+    }
   }
 
   dispose(): void { this.near.dispose(); this.committed.dispose() }
