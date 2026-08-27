@@ -39,8 +39,26 @@ export class RenderGraph {
     this.passes.set(name, list)
   }
 
-  async run(ctx: FrameCtx): Promise<void> {
+  /**
+   * Passes that ACCUMULATE world state, as opposed to consuming it to make
+   * pixels. Deformation marks are history — a capture at frame 1200 has to
+   * simulate all 1200 frames or the marks are not there — but nothing in the
+   * shadow, opaque, sky, water or post passes feeds back into that history.
+   */
+  private static readonly STATEFUL: readonly PassName[] = [
+    'atmosphereLUT', 'windField', 'deformStamp', 'deformDecay',
+  ]
+
+  /**
+   * @param stateOnly Run only the accumulating passes and skip everything that
+   *   exists to produce pixels. For fast-forwarding a scripted replay to its
+   *   capture frame: the deform stamp is a handful of quads, while the passes
+   *   this skips are the entire cost of a frame. Only valid for frames that
+   *   are NOT going to be screenshotted.
+   */
+  async run(ctx: FrameCtx, stateOnly = false): Promise<void> {
     for (const name of ORDER) {
+      if (stateOnly && !RenderGraph.STATEFUL.includes(name)) continue
       const list = this.passes.get(name)
       if (!list) continue
       for (const p of list) await p(ctx)

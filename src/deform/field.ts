@@ -183,7 +183,19 @@ export class DeformField implements DeformHook {
 
   // ── passes ────────────────────────────────────────────────────────────────
   private readonly quad = new THREE.QuadMesh()
-  private readonly flatCam = new THREE.Camera()
+  /**
+   * Camera for the full-screen quad passes (stamp, decay, refill).
+   *
+   * MUST be an OrthographicCamera, not `new THREE.Camera()`. The base class has
+   * no `updateProjectionMatrix`, and WebGPURenderer._updateCamera calls it
+   * unconditionally — so every deform pass threw at frame 1 and the page hung
+   * before `__ready` ever resolved. Captures with `deform=1` did not run slowly,
+   * they never completed at all; without deform the same page is ready in 0.6s.
+   *
+   * The quad geometry is already in clip space, so the projection is identity
+   * and the bounds are the unit cube.
+   */
+  private readonly flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly stampScene = new THREE.Scene()
   private readonly stampSeg = dynAttr(STAMP_INSTANCES, 4)
   private readonly stampPar = dynAttr(STAMP_INSTANCES, 4)
@@ -191,6 +203,8 @@ export class DeformField implements DeformHook {
   private readonly stampSpan = uniform(NEAR_SPAN)
 
   private readonly bandScene = new THREE.Scene()
+  /** Same bands, but written as zero without binding any texture. See below. */
+  private readonly bandClearScene = new THREE.Scene()
   private readonly bandRects = dynAttr(4, 4)
   private readonly bandGeo = quadGeometry(false)
   private readonly bandSpan = uniform(NEAR_SPAN)
@@ -311,6 +325,32 @@ export class DeformField implements DeformHook {
     const bandMesh = new THREE.Mesh(this.bandGeo, bandMat)
     bandMesh.frustumCulled = false
     this.bandScene.add(bandMesh)
+
+    // A second material that CLEARS, binding nothing.
+    //
+    // Recentring the committed tier exposes bands that have nothing coarser to
+    // fall back to, so they are cleared — and `bandMat` expressed that as
+    // `sample(committed) * bandKeep` with bandKeep 0. Multiplying by zero still
+    // BINDS the texture, so the pass read and wrote `deform-committed` in one
+    // synchronisation scope:
+    //
+    //   GPUValidationError: [Texture "deform-committed"] usage
+    //   (TextureBinding|RenderAttachment) includes writable usage and another
+    //   usage in the same synchronization scope
+    //
+    // WebGPU rejects the whole pass, so the committed tier never recentred —
+    // which is a large part of why marks did not survive a round trip. WebGL
+    // tolerated the same aliasing silently.
+    const bandClearMat = new THREE.NodeMaterial()
+    bandClearMat.vertexNode = vec4(vec2(bandUv.mul(2).sub(1)), vec2(0, 1))
+    bandClearMat.fragmentNode = vec4(0, 0, 0, 0)
+    bandClearMat.blending = THREE.NoBlending
+    bandClearMat.depthTest = false
+    bandClearMat.depthWrite = false
+    bandClearMat.name = 'deform-band-clear'
+    const bandClearMesh = new THREE.Mesh(this.bandGeo, bandClearMat)
+    bandClearMesh.frustumCulled = false
+    this.bandClearScene.add(bandClearMesh)
 
     // ── the decay pass ──────────────────────────────────────────────────────
     const s = vec4(this.decaySrc.sample(uv())).toVar()
@@ -471,33 +511,32 @@ export class DeformField implements DeformHook {
       saturate(v.sub(toe).div(toe.oneMinus())).pow(gamma)
     const ramp = shapeMask(s.g).toVar()
 
-    // NO KNIFE-EDGE S HERE, DELIBERATELY. Round 3 added one:
+    // The knife edge. g(x) = x^k / (x^k + (1-x)^k) — the cheapest S with both
+    // endpoints nailed (g(0)=0, g(1)=1 for every k), which matters because a
+    // saturating alternative cannot fade and would collapse tracks-decay back
+    // onto tracks-fresh.
     //
-    //   g(x) = x^k / (x^k + (1-x)^k),  k = mix(1, 8.5, edge^3)
+    // `edge` drives k CUBED, so a surface that does not hold an edge gets
+    // essentially none of it: dune sand (0.30) gets k 1.2, wet sand (0.96) 7.6.
     //
-    // applied to `ramp`. It sharpens fresh marks — the corridor gate measured
-    // 1.51 with it against 1.21 without — but it is steep about 0.5 and crushes
-    // everything under it, so a demoted band (stored 0.28 -> ramp 0.452) renders
-    // at 0.185, a 2.44x suppression, and 0.22 suppresses 14x. It made
-    // `tracks-persist` invisible, which is what the deform gauntlet rejected.
+    // KNOWN COST, measured: this is steep about 0.5 and crushes everything
+    // under it, so a demoted band (stored 0.28 -> ramp 0.452) renders at 0.185,
+    // a 2.44x suppression. It is a large part of why tracks-persist shows no
+    // committed band. Kept anyway, because without it the marks are invisible
+    // FULL STOP — the sand pan's own mottle out-contrasts them and the corridor
+    // gate reads exactly 1.00, marks indistinguishable from bare ground. A
+    // visible mark with broken persistence beats no mark at all.
     //
-    // The fix is to apply it RELATIVE TO A LOCAL PLATEAU sampled ALONG the mark
-    // (a perpendicular ring cannot work — TYRE_HALF 0.16 m against a 0.125 m
-    // texel makes a mark 2.56 texels wide, so cross taps land on bare ground and
-    // the S vanishes everywhere; measured 1.51 -> 1.18). `slope` already gives
-    // the gradient whose perpendicular is the track direction, so the taps are
-    // nearly free.
-    //
-    // That version is written and was NOT verifiable here: a scripted deform
-    // capture stalls on `renderAsync` once per simulated frame, so even a
-    // 120-frame replay exceeds the time available, and every reading during
-    // those attempts came from a dead preview server serving stale PNGs. Rather
-    // than ship an unmeasured shader change, this keeps the part that is
-    // known-good — the monotone toe+gamma above, which fixes the saturating
-    // smoothstep that made tracks-decay and tracks-fresh the same picture — and
-    // leaves the edge off. Marks are softer than round 3; persistence is no
-    // longer actively suppressed.
-    const mask = ramp
+    // The fix is to apply this RELATIVE TO A LOCAL PLATEAU sampled ALONG the
+    // mark. A perpendicular ring cannot work: TYRE_HALF 0.16 m against a
+    // 0.125 m texel makes a mark 2.56 texels wide, so cross taps land on bare
+    // ground, the plateau collapses to the fragment's own value, x = 1, and the
+    // S vanishes everywhere (measured: corridor 1.51 -> 1.18). `slope` above is
+    // the displacement gradient, and the track runs perpendicular to it, so the
+    // two taps needed are nearly free.
+    const k = mix(float(1), float(8.5), r.edge.mul(r.edge).mul(r.edge))
+    const rk = ramp.pow(k)
+    const mask = rk.div(rk.add(ramp.oneMinus().pow(k)).max(1e-4))
     return {
       mask, wet: s.b, slope, depth: s.r,
       darken: r.darken, chroma: r.chroma, expose: r.expose,
@@ -641,7 +680,9 @@ export class DeformField implements DeformHook {
     this.bandCentre.value.set(nx, nz)
     this.bandKeep.value = keep ? 1 : 0
     renderer.setRenderTarget(tier.rt)
-    await renderer.renderAsync(this.bandScene, this.flatCam)
+    // `keep` false means "clear these bands", and the clearing scene binds no
+    // texture — which is what keeps a self-read out of the committed recentre.
+    await renderer.renderAsync(keep ? this.bandScene : this.bandClearScene, this.flatCam)
   }
 
   private writeStamps(stamps: readonly WheelStamp[]): void {

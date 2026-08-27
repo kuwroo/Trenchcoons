@@ -306,7 +306,17 @@ async function boot() {
     camera.updateMatrixWorld()
 
     renderer.info.reset()
-    await graph.run(ctx)
+    // Fast-forward a scripted capture: while replaying toward the capture
+    // frame, run only the passes that ACCUMULATE state and skip the ones that
+    // only make pixels. A deform capture has to simulate every frame because
+    // marks are history, but at frame 1200 that was ~20 minutes of full frames,
+    // which repeatedly blew the command timeout and throttled every attempt to
+    // measure the deformation work.
+    //
+    // The last few frames before `__ready` render in full, so the pipelines the
+    // screenshot needs are warm and nothing is presented half-built.
+    const fastForward = state.shot && !readied && clock.frame < readyFrame - 4
+    await graph.run(ctx, fastForward)
 
     const dtMs = Math.max(0, nowMs - lastMs)
     lastMs = nowMs
