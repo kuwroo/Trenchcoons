@@ -179,7 +179,31 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     //                   the `cliff.mul(1.45)` / `cliff.mul(0.55)` pair in
     //                   ground.ts.
     //   under  #8b6a45  soil, which is what a rut in a meadow exposes.
-    base: 0x5a9c3e, shadow: 0x2b8a44, lit: 0x85ce4c,
+    //
+    // WARMED AND BRIGHTENED TOGETHER, 2026-08-27, and the "together" is the
+    // whole point. Measured against refs/genshin/grasslands.jpg on the median of
+    // a ground-level near band (the median, not the brightest N -- this build's
+    // instanced blade tips dominate any brightest-N selection and the reference
+    // has no such tips, which is what made an earlier reading claim the build
+    // was over-saturated when it is in fact slightly under):
+    //
+    //   reference   H78  V0.85
+    //   was         H113 V0.55     35 degrees too cool, 0.30 too dark
+    //   now         H90  V0.63
+    //
+    // Three candidates that warmed the hue while leaving the value alone were
+    // rejected on sight: warm plus dark plus desaturated is khaki, and all three
+    // turned the sunlit slope into dry stubble. base carries most of this
+    // because the visible ground sits nearer the mid stop than the lit one.
+    //
+    // THE VALUE GAP IS NOT FIXABLE HERE and nothing further should be attempted
+    // in this row. Raising the authored base value 0.61 -> 0.80 (+0.19) moved the
+    // rendered band only 0.547 -> 0.625 (+0.078) -- a compression of about 0.4 --
+    // so reaching the reference's 0.85 would need an authored value above 1.0.
+    // The remainder is exposure and tonemap, not albedo. CLAUDE.md has said "no
+    // palette value fixes either end" all along; this is the measurement behind
+    // it.
+    base: 0x9dcc56, shadow: 0x2b8a44, lit: 0xcaf26d,
     cliff: 0x7d95a4, under: 0x8b6a45, rock: 0x7d95a4,
     // 0.86 — rock from 31 degrees of tilt. The docstring in ground.ts records
     // that a global 0.86 threshold once produced "broad brown blotches on green",
