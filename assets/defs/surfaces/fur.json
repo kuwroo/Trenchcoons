@@ -2,7 +2,7 @@
   "id": "fur",
   "version": 2,
   "type": "surface",
-  "notes": "Raccoon fur. v2 moves it OFF the cardboard's hue: v1 measured a mean head hue of 22-30deg against the box front face at 23deg, so heads and vehicle were one material to the eye and the pair read as two teddy bears in a brown box. A raccoon is a grizzled grey-brown, so the shadow and base stops are now cool \u2014 violet-grey, sat ~0.15-0.19, well clear of the box's 0.6 at 36deg \u2014 while the LIT and TOP stops stay warm, which is the ART_BIBLE rule ('light warms hue ~50deg toward yellow and raises value') rather than a compromise. rimStrength came down from 0.9 because a 0.9 sky rim on a 0.29 m sphere floods the whole head and washes out the brush; detailStrength is up so the stroke relief survives on a curved surface the way it does on the flat box face. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 0.78 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
+  "notes": "Raccoon fur. v2 moves it OFF the cardboard's hue: v1 measured a mean head hue of 22-30deg against the box front face at 23deg, so heads and vehicle were one material to the eye and the pair read as two teddy bears in a brown box. A raccoon is a grizzled grey-brown, so the shadow and base stops are now cool \u2014 violet-grey, sat ~0.15-0.19, well clear of the box's 0.6 at 36deg \u2014 while the LIT and TOP stops stay warm, which is the ART_BIBLE rule ('light warms hue ~50deg toward yellow and raises value') rather than a compromise. rimStrength came down from 0.9 because a 0.9 sky rim on a 0.29 m sphere floods the whole head and washes out the brush; detailStrength is up so the stroke relief survives on a curved surface the way it does on the flat box face. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 0.78 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. Brush disabled (0.18 -> 0). At brushScale 0.24 m on a head-sized object the pattern repeats once or twice across the whole surface, which reads as speckle rather than texture \u2014 and the painterly direction is abandoned (ART_BIBLE 1).",
   "material": {
     "base": "#7e6b70",
     "shadow": "#4a3c4a",
@@ -13,7 +13,7 @@
     "gradientHeight": 0.62,
     "gradientStrength": 0.5,
     "brushScale": 0.24,
-    "brushStrength": 0.18,
+    "brushStrength": 0.0,
     "brushSaturation": 0.5,
     "detailStrength": 0.34,
     "reliefShade": 0.95,
