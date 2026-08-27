@@ -278,6 +278,57 @@ if (!gf) {
     `lit blue ${gf.litBlue.toFixed(0)} (ref 87)`)
 }
 
+// 7. Do shadows keep the material's own hue?
+//
+// The most visible fault in the current build is bright blue pools under the
+// trees: shadowed ground takes the SKY's hue instead of a tint of the ground
+// beneath it. ART_BIBLE §2 is explicit that shadows are tinted toward sky —
+// biased about 40 degrees off the lit hue — not replaced by it.
+//
+//   reference   lit H99 -> shadow H136    37 degrees, stays green
+//   ours        lit H99 -> shadow H213   114 degrees, albedo erased
+//
+// Measured as the hue gap between lit and shadowed ground in ONE frame, so it
+// cannot be satisfied by changing the whole scene's colour.
+await load('shot=1&car=0&time=0.42&warmup=48&pos=2160,0,-420&eye=6&look=-1.6,-0.08')
+const shPng = await shot(page)
+function litVsShadowHue(png) {
+  const { width: W, height: H, data } = png
+  const px = []
+  for (let y = Math.floor(H * 0.45); y < H; y += 2) {
+    for (let x = 0; x < W; x += 2) {
+      const i = (y * W + x) * 4
+      const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn
+      if (d < 0.05) continue
+      let h
+      if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0))
+      else if (mx === g) h = ((b - r) / d + 2)
+      else h = ((r - g) / d + 4)
+      px.push({ h: ((h * 60) % 360 + 360) % 360, v: mx })
+    }
+  }
+  if (px.length < 200) return null
+  px.sort((a, c) => a.v - c.v)
+  const k = Math.max(1, Math.floor(px.length * 0.15))
+  const circMean = (a) => {
+    const x = a.reduce((t, p) => t + Math.cos(p.h * Math.PI / 180), 0) / a.length
+    const y = a.reduce((t, p) => t + Math.sin(p.h * Math.PI / 180), 0) / a.length
+    return ((Math.atan2(y, x) * 180 / Math.PI) % 360 + 360) % 360
+  }
+  const litH = circMean(px.slice(-k)), shH = circMean(px.slice(0, k))
+  let gap = Math.abs(litH - shH); if (gap > 180) gap = 360 - gap
+  return { litH, shH, gap }
+}
+const sh = litVsShadowHue(shPng)
+if (!sh) {
+  check('shadows keep material hue', false, 'not enough chromatic ground pixels')
+} else {
+  check('shadows keep material hue', sh.gap <= 60,
+    `lit H${sh.litH.toFixed(0)} -> shadow H${sh.shH.toFixed(0)}, ` +
+    `gap ${sh.gap.toFixed(0)}deg (ref 37, must be <=60)`)
+}
+
 console.log(errs.length ? `\npage errors: ${[...new Set(errs)].slice(0,3).join(' | ')}` : '\nno page errors')
 const failed = results.filter((r) => !r.ok).length
 console.log(failed ? `\n${failed}/${results.length} complaints still unfixed` : `\nall ${results.length} complaints addressed`)

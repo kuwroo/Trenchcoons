@@ -24,7 +24,18 @@ const browser = await chromium.launch({ headless: true, args: WEBGPU_ARGS })
 let bad = 0
 
 for (const s of SCENES) {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  // 1920x1080, not 1600x900. CLAUDE.md states the budget as "16.6ms @ 1080p" and
+  // this harness was measuring at 1600x900 — 30% fewer pixels — so every number
+  // it has ever printed was optimistic against its own stated bar. A critic
+  // caught it by re-measuring at 1080p and getting 20.7-34.1 ms where the harness
+  // reported 21.8. Overridable for a quick loop, but the DEFAULT is now the
+  // budget's own resolution.
+  const page = await browser.newPage({
+    viewport: {
+      width: Number(process.env.PERF_W ?? 1920),
+      height: Number(process.env.PERF_H ?? 1080),
+    },
+  })
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e)))
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })

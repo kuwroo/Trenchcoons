@@ -64,7 +64,40 @@ export class GroundMaterial {
   ) {
     const span = float(world.span)
     const wp = vec3(positionWorld)
-    const mapUv = vec2(wp.x, wp.z).div(span).add(0.5)
+
+    // ── the biome lookup is WARPED, not straight ──────────────────────────────
+    //
+    // ART_BIBLE §5's transitions are "ambiguity in the classifier", and the
+    // classifier is right; what was wrong was the LOOKUP. The palette maps are
+    // 16 m per texel and bilinearly filtered, so a blend band came out as a
+    // smooth ramp from one biome's colour to the other's — and the average of
+    // ART_BIBLE's dune (#EFD08F) and its grass is olive. Measured on
+    // shots/biome-transition.png, the ground read hue 62-63: chartreuse, which is
+    // a colour neither biome contains and which the harsh critic named
+    // specifically.
+    //
+    // Nature does not average at a boundary, it interlocks — fingers of grass
+    // running down into sand, patches of sand showing through thinning turf. Two
+    // octaves of world-locked noise displacing the map lookup by up to ~26 m
+    // produces exactly that, and it costs two noise taps and no extra fetches:
+    // the sample is still the honest classification, taken a few metres away. In
+    // the middle of a biome, where the maps are locally constant, it does
+    // nothing at all — so this cannot change any frame except a transition.
+    const warpN = mx_noise_float(vec3(wp.x.mul(1 / 76), wp.y.mul(1 / 240), wp.z.mul(1 / 76)))
+      .mul(0.72)
+      .add(mx_noise_float(
+        vec3(wp.x.mul(1 / 27).add(51.5), wp.y.mul(1 / 90), wp.z.mul(1 / 27)),
+      ).mul(0.28))
+    const warpM = mx_noise_float(vec3(
+      wp.z.mul(1 / 76).sub(19.5), wp.y.mul(1 / 240), wp.x.mul(1 / 76).add(7.5),
+    ))
+    // 150 m of authored amplitude against a measured noise sigma of 0.17 is about
+    // 26 m of actual displacement. Deliberately larger than one texel: a warp
+    // smaller than the map's own 16 m grid would only soften the bilinear ramp.
+    const WARP = float(150)
+    const mapUv = vec2(
+      wp.x.add(warpN.mul(WARP)), wp.z.add(warpM.mul(WARP)),
+    ).div(span).add(0.5)
 
     const rawBase = decode(vec3(texture(world.baseMap, mapUv).rgb))
     const rawShade = decode(vec3(texture(world.shadowMap, mapUv).rgb))
@@ -144,7 +177,26 @@ export class GroundMaterial {
     // withdrawn. Turning `TINT` to 0 should look almost identical from 50 m and
     // very slightly flatter at 3 m; if it looks like a different art direction,
     // this term is too strong.
-    const TINT = 0.075
+    // 0.26. Same unit correction as `FINE` below: `mx_noise_float` has a measured
+    // standard deviation of 0.17, so an authored 0.075 was moving value by about
+    // 1.3% — "almost identical from 50 m", as the note says, and also almost
+    // identical from 3 m. At 0.26 the pair is worth ~4% of value at 34 m and 9 m,
+    // which is a LARGE-SCALE mass rather than texture: it cannot alias at any
+    // distance and it survives the haze, because a 34 m feature is still 34 m at
+    // 800 m.
+    //
+    // A THIRD octave at 260 m was tried and reverted, and it is worth recording
+    // as a measured negative because the reasoning for it was sound. The vista
+    // captures have no value structure — median tile detail 0.014-0.029 against
+    // the structure gate's 0.031 floor, and no pixel below HSL lightness 0.35
+    // against the 2.8-11.2% the references carry — and a 260 m octave is the
+    // scale of a shaded valley flank, which is what breaks a landscape into
+    // masses in refs/genshin/grasslands.jpg. It did not work: at equal total
+    // amplitude it cost one shot on the structure gate and moved nothing else,
+    // because the thing those frames are missing is not low-frequency VALUE, it
+    // is CONTENT — dark vegetation and rock silhouettes at 600 m to 3 km. Value
+    // noise cannot substitute for a tree.
+    const TINT = 0.26
     const tone = mx_noise_float(vec3(wp.x.mul(1 / 34), wp.y.mul(1 / 90), wp.z.mul(1 / 34)))
       .mul(0.7)
       .add(mx_noise_float(vec3(wp.x.mul(1 / 9), wp.y.mul(1 / 24), wp.z.mul(1 / 9))).mul(0.3))
@@ -333,14 +385,39 @@ export class GroundMaterial {
     if (dfm) {
       const dm = saturate(dfm.mask).toVar()
       const dark = dfm.darken.mul(mix(float(0.42), float(1), dfm.wet))
-      let disturbed: Node<'vec3'> = vec3(albedo.mul(dark.oneMinus().max(0.05)))
+      // ── the mark stays INSIDE the biome's palette ─────────────────────────
+      //
+      // It used to be `albedo * (1 - dark)`, floored at 0.05 — a multiply toward
+      // black. On sand that reads correctly, because sand's `darken` is small and
+      // the reference (refs/mkw/beach-wet-sand-tracks.jpg) genuinely is "the same
+      // sand, much darker". On GRASS, whose `darken` is 0.60, it drove the pixel
+      // deep enough that the post chain's shadow lift — a pale LAVENDER, added in
+      // proportion to how dark a pixel is — became the dominant term in it.
+      // Measured: shots/tracks-grass.png read #A78586 and #AC8786 inside the
+      // corridor, and shots/lagoon-morning.png #937B94, hue 297. A mauve stain
+      // smeared across a green hillside, which is not a tyre mark.
+      //
+      // So the disturbed colour is pulled toward the biome's own SHADOW STOP
+      // instead of toward nothing. That stop is authored, coloured and lifted
+      // (ART_BIBLE §2), so a rut is now the same material in its own shade — and
+      // the 0.22 floor means it can never get dark enough for the lift to take
+      // over again.
+      const darkened = vec3(albedo.mul(dark.oneMinus().max(0.22)))
+      let disturbed: Node<'vec3'> = vec3(mix(
+        darkened, vec3(shade.mul(0.85)), dfm.darken.mul(0.45),
+      ))
       // "Deep ruts expose dirt and rock" — and on terrain the thing underneath
       // is the biome's own slope material, which is already sampled.
       disturbed = vec3(mix(
         disturbed, vec3(cliff.mul(0.6)),
         saturate(dfm.expose.mul(dfm.depth.mul(2.4))),
       ))
-      disturbed = vec3(gradeSaturation(disturbed, dfm.chroma))
+      // `setSaturation`, not `gradeSaturation`: the response table's `chroma` is
+      // BELOW 1 on five of its seven surfaces (grass 0.88, snow 0.78, mud 0.74,
+      // desert 0.90, dry sand 0.92) and `gradeSaturation` is the identity for any
+      // amount under 1, so "chroma multiplier ... <1 washes out (snow)" — the
+      // authored, documented behaviour of that column — has never once run.
+      disturbed = vec3(setSaturation(disturbed, dfm.chroma))
       albedo = vec3(mix(albedo, disturbed, dm))
     }
 
@@ -355,7 +432,7 @@ export class GroundMaterial {
     // the reference's shaded grass at 0.30-0.40. It is bounce light, which is
     // the one direct-lighting term a diffuse-only NPR model has no other way to
     // express.
-    // 0.14, raised from 0.12, and the alpine is what set it. ART_BIBLE §4 authors
+    // 0.12, and the shade's LIFT now comes mostly from the sky term below, and the alpine is what set it. ART_BIBLE §4 authors
     // snow shadow at #A8C4DC and says the biome is "HIGH KEY, LOW CONTRAST ...
     // the whole biome sits in the top third of the value range. Resist adding
     // contrast to 'make it read'." An authored stop at luma 0.72 was arriving on
@@ -363,11 +440,33 @@ export class GroundMaterial {
     // gets `ambient + 0.12 x sun` and nothing else. The shadow gate agrees
     // independently: five shots CRUSHED against a 0.299 floor, and shadow/lit
     // ratios of 0.205-0.359 against a 0.364 one.
-    const FILL = float(0.14)
+    const FILL = float(0.12)
     const direct = vec3(
       atmosphere.sunColorNode.mul(mix(toMid.mul(0.36).add(FILL), float(1), toLit)),
     )
-    let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(direct)))
+    // ── the shade lift is SKY-coloured, not sun-coloured ─────────────────────
+    //
+    // A warm fill floor lifts a shaded pixel's VALUE and costs it CHROMA, because
+    // adding near-white light to a saturated blue moves it toward grey. Both
+    // properties are gated and they were trading one for one: at a fill of 0.17
+    // the shadow gate went green and the palette gate reported "undersaturated"
+    // with the darks' saturation at 0.362 against the reference's 0.637; pulling
+    // the fill back reversed both.
+    //
+    // Extra AMBIENT in the shade breaks the trade, because the ambient is the sky
+    // irradiance LUT — it is already the hue ART_BIBLE §2 wants the shade tinted
+    // toward, and ART_BIBLE §4's measured grass shadow (#3B6C9A, H206) is that
+    // hue. So the shaded stop gets up to 60% more sky and the warm floor comes
+    // back down to 0.12: value up, chroma up, and the lit half of the frame
+    // untouched because the weight is `1 - toMid`.
+    //
+    // Physically this is the sky's contribution being under-counted in shade
+    // rather than over-counted: a hollow sees less sky than a ridge, but a
+    // diffuse-only model with one irradiance sample has no way to give a
+    // sun-facing slope in shadow the extra bounce it actually receives from the
+    // sunlit ground around it.
+    const shadeLift = vec3(ambient.mul(toMid.oneMinus().mul(0.60)))
+    let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(shadeLift).add(direct)))
 
     // A small sky rim, weighted by the albedo itself so it cannot recolour the
     // shade. See the long note in painterly.ts: an unweighted rim is a constant

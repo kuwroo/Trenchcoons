@@ -538,7 +538,20 @@ export function evaluateSky(tod: number, s: SkyState): SkyState {
   // Twilight still gets a little more, because both painterly references put
   // their densest cloud at the golden end of the day — but a fifth of what it
   // used to add.
-  s.cloudCoverage = 0.26 + 0.03 * twilight
+  // 0.34, up from 0.26, and it is a correction in the other direction from the
+  // one this number was last moved for. "The sky is weirdly blobby" is closed —
+  // tools/complaints.mjs measures the sky's coarse/fine scale ratio at 9.9
+  // against a 1.5 floor — but it is closed with 4x more margin than the
+  // REFERENCES have (grasslands 1.8, cliffs 2.4, snow 2.6), which means the dome
+  // has gone past clean and into empty. ART_BIBLE §1 asks for "a clean gradient
+  // with thin wispy cloud", not for no cloud: the cirrus is where the master
+  // palette's pink and lavender (#F0A8D0, #B8A8E0 — "worth more than any amount
+  // of shader work") actually appear in a frame. Measured consequence of an empty
+  // dome: atmos-clouds-noon fails the hue gate at entropy 1.53 against a 2.06
+  // floor and the structure gate at 62% dead-flat tiles. `cloudOpacity` is left
+  // alone — the fix for blobby was thinner and higher, and more thin cirrus is
+  // not the same thing as thicker cirrus.
+  s.cloudCoverage = 0.34 + 0.03 * twilight
   s.cloudOpacity = 0.58
 
   // Heavy-atmosphere register at golden hour / dusk (ART_BIBLE §8) — but

@@ -137,6 +137,23 @@ export class TerrainWorld {
     weights: new Float32Array(BIOME_COUNT), dominant: 'meadow',
   }
   private readonly blendWeights = new Float32Array(BIOME_COUNT)
+  /**
+   * One-entry memo on `climateAt`.
+   *
+   * Not a micro-optimisation: the classification is four noise taps plus six
+   * `Math.exp` calls, and the hot callers ask for the SAME point two and three
+   * times in a row. `grassAt(x, z)` classifies, then `heightAt(x, z)` classifies
+   * again to find the biome relief; `responseAt` and `gradeAt` do the same. The
+   * grass rebuild runs that pattern a few thousand times per band and the driving
+   * scene rebuilds a band six times a second.
+   *
+   * Safe because `climateAt` already returns the shared `scratch` — a caller
+   * that held the result across another call was already reading mutated data,
+   * so there is no contract here to break. `heightAt` passes the elevation in,
+   * and the elevation is a pure function of (x, z), so a hit cannot be stale.
+   */
+  private memoX = Number.NaN
+  private memoZ = Number.NaN
 
   constructor(rng: Rng, options: TerrainWorldOptions = {}) {
     const fork = rng.fork('terrain')
@@ -246,6 +263,31 @@ export class TerrainWorld {
    */
   groundAt(x: number, z: number): number { return this.heightAt(x, z) }
 
+  /**
+   * Tilt from the CONTINENTAL field alone, radians. A cheap stand-in for
+   * `slopeAt` on the streaming hot path.
+   *
+   * Two forward differences on `continent` instead of eight full `heightAt`
+   * evaluations, and `continent` is the half of the heightfield that does not
+   * touch the climate classification — so this costs eight noise taps where the
+   * honest version costs eight classifications as well. The approximation is
+   * sound because the term it drops is the biome relief, whose wavelengths are
+   * 95-260 m against amplitudes of 1.5-34 m: it contributes at most a couple of
+   * degrees, while the continental octaves it keeps (380 m over 150 m, 150 m over
+   * 55 m, 88 m over 17 m, 46 m over 5 m) carry essentially all of the slope.
+   *
+   * Used only for "may a tuft or a boulder stand here", which is a threshold test
+   * with a hard visual consequence and no physical one. Anything that has to
+   * AGREE with the drawn surface — spawn validation, the vehicle — still uses
+   * `slopeAt` and `heightAt`.
+   */
+  roughSlopeAt(x: number, z: number, r = 1): number {
+    const h = this.continent(x, z)
+    const dx = this.continent(x + r, z) - h
+    const dz = this.continent(x, z + r) - h
+    return Math.atan(Math.hypot(dx, dz) / r)
+  }
+
   /** Worst tilt over a ring of radius `r`, radians. */
   slopeAt(x: number, z: number, r = 1.35): number {
     let lo = Infinity
@@ -269,6 +311,9 @@ export class TerrainWorld {
    */
   climateAt(x: number, z: number, elevation?: number): Climate {
     const c = this.scratch
+    if (x === this.memoX && z === this.memoZ) return c
+    this.memoX = x
+    this.memoZ = z
     const h = elevation ?? this.continent(x, z)
     const above = h - this.waterLevel
     c.elevation = above
@@ -303,7 +348,21 @@ export class TerrainWorld {
       - smoothstep(40, 340, above) * 0.16,
     )
     // COASTALITY — a function of distance to sea level, not of climate.
-    const coastality = smoothstep(26, 2, above) * 0.92
+    //
+    // The band was `smoothstep(26, 2, above)`, and an 81x81 census over the whole
+    // 8x8 km world found coast occupying 0.1% of it at a MEAN ELEVATION OF -193 m
+    // — i.e. the only places classified as beach were underwater. ART_BIBLE §5
+    // calls coast/lagoon the showcase biome and specifies "grassland -> beach ->
+    // sea" wherever any land biome meets the water; a 24 m-tall elevation window
+    // around a bowl whose walls fall 128 m over 640 m is a few metres of ground.
+    //
+    // 64 m down to 1 m widens it to a band you can drive along, and the upper
+    // edge is a HEIGHT rather than a distance on purpose: it follows the shoreline
+    // for free, it is wider where the shore is shallow and narrower where it is
+    // steep, and it needs no distance-to-water field. The 0.95 cap leaves a
+    // little land weight everywhere so the beach still "inherits a tint from
+    // whichever biome it borders" (§5) instead of switching to pure sand.
+    const coastality = smoothstep(64, 1, above) * 0.95
 
     c.temperature = temperature
     c.moisture = moisture

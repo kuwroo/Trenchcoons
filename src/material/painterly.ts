@@ -727,9 +727,37 @@ export class PainterlyMaterial {
     // both the albedo strokes and the relief, so a stroke's colour and its form
     // agree — which is what a loaded brush actually does to a surface, and what
     // separates this from a noise overlay sitting on top of clean shading.
-    const brush = triplanarBrush(u.brushScale)
-    const stroke = brush.value.mul(u.brushStrength)
-    let n = bumpNormal(geoN, brush.gradient, u.detailStrength.mul(brush.fineScale))
+    //
+    // …AND IT IS NOW A COMPILE-TIME DECISION, not a multiply by zero. That is the
+    // single biggest fragment-cost item in this file: `triplanarBrush` runs an
+    // LOD ladder of four octaves, each of which is three `brushStroke` +
+    // `shapeMark` evaluations for the triplanar blend, plus `reliefField` for the
+    // normal layer — of the order of forty noise taps and two screen-space
+    // derivatives per fragment.
+    //
+    // The abandoned painterly direction means EVERY surface the world builds now
+    // arrives with all five brush knobs at zero (see the `CLEAN` block in
+    // src/world/surfaceGrade.ts), so every one of those taps was being computed
+    // and then multiplied by nothing. Measured in the forest at a 3 m eye, where
+    // overlapping conifer plates make this the most overdrawn material in the
+    // build: 26.5 ms per frame at only 156 draw calls and 692k triangles — not
+    // batch-bound and not remotely triangle-bound, which is what a heavy fragment
+    // shader looks like.
+    //
+    // The same pattern `deformRelief` already uses, and for the same stated
+    // reason: "ZERO IS A COMPILE-TIME DECISION, not a multiply by nothing." The
+    // painterly path is fully intact for anything that still authors a brush —
+    // ART_BIBLE keeps painterly water for the lagoon and `fur` uses
+    // `detailStrength` as its actual fur texture — it simply is not compiled for
+    // surfaces that have switched it off.
+    const p0 = this.params
+    const brushed = p0.brushStrength !== 0 || p0.brushHue !== 0
+      || p0.detailStrength !== 0 || p0.regionStep !== 0 || p0.reliefShade !== 0
+    const brush = brushed ? triplanarBrush(u.brushScale) : null
+    const stroke: Node<'float'> = brush ? brush.value.mul(u.brushStrength) : float(0)
+    let n = brush
+      ? bumpNormal(geoN, brush.gradient, u.detailStrength.mul(brush.fineScale))
+      : (geoN as Node<'vec3'>)
 
     // ── M4: the deformation field ────────────────────────────────────────────
     // Sampled at the UNDISPLACED world position — `positionWorld` is derived
@@ -796,7 +824,9 @@ export class PainterlyMaterial {
     // shade" rather than as two independent boundaries that can land in
     // different places. Scaled by the ramp's own softness so it means the same
     // thing at every authored cel-hardness.
-    const regionShift = brush.region.mul(u.rampSoftness).mul(u.regionStep).toVar()
+    const regionShift = (brush
+      ? brush.region.mul(u.rampSoftness).mul(u.regionStep)
+      : float(0)).toVar()
     const ndotl = dot(n, atmosphere.nodes.sunDir).add(regionShift)
     const vis = atmosphere.sunVisibility(vec3(positionWorld))
     // Thresholds track the sun's height. See `rampScale` in tod.ts: compared
@@ -893,7 +923,9 @@ export class PainterlyMaterial {
     // a razor boundary in the FILL lands on top of every ramp terminator in the
     // frame — on a hard-edged prop that reads as a chewed silhouette, not as a
     // brush stroke.
-    const reliefAO = flatMark(brush.height, 0.55).mul(u.reliefShade.mul(0.26)).add(1).max(0.2)
+    const reliefAO: Node<'float'> = brush
+      ? flatMark(brush.height, 0.55).mul(u.reliefShade.mul(0.26)).add(1).max(0.2)
+      : float(1)
     // Held in a variable. The ambient is read by the shadow stop, the light sum
     // and the rim, and TSL re-emits an expression's whole subtree on every read
     // — see `clampChroma` in scattering.ts for what that cost when it went
@@ -946,10 +978,12 @@ export class PainterlyMaterial {
     // Floored at 0.12 rather than allowed to reach zero: now that the field
     // carries real amplitude a -1.4 tail would multiply the albedo negative and
     // clamp to black, which is a hole in the surface, not a brush mark.
-    albedo = vec3(setSaturation(
-      vec3(albedo.mul(stroke.mul(0.72).add(1).max(0.12))),
-      stroke.mul(u.brushSaturation).mul(0.75).add(1).max(0.15),
-    ))
+    if (brush) {
+      albedo = vec3(setSaturation(
+        vec3(albedo.mul(stroke.mul(0.72).add(1).max(0.12))),
+        stroke.mul(u.brushSaturation).mul(0.75).add(1).max(0.15),
+      ))
+    }
     // ── and a HUE axis, from a source decorrelated from the value one ─────────
     // See `brushHue`. The relief height is already computed four times per
     // fragment for the normal layer, so this costs one hue rotation and nothing
@@ -964,7 +998,7 @@ export class PainterlyMaterial {
     // its docstring says — the hue difference BETWEEN adjacent marks — and it
     // is a per-surface authored angle rather than something the value knob
     // drags around with it.
-    albedo = rotateHue(albedo, flatMark(brush.height, 0.30).mul(u.brushHue))
+    if (brush) albedo = rotateHue(albedo, flatMark(brush.height, 0.30).mul(u.brushHue))
 
     // ── M4 (c): the disturbed material, blended in by the mask ───────────────
     //
@@ -986,7 +1020,10 @@ export class PainterlyMaterial {
         disturbed, vec3(disturbed.mul(0.34)),
         saturate(dfm.expose.mul(u.deformExpose).mul(dfm.depth.mul(2.2))),
       ))
-      disturbed = vec3(gradeSaturation(disturbed, dfm.chroma))
+      // `setSaturation`, not `gradeSaturation`: five of the seven response
+      // surfaces author `chroma` BELOW 1, and `gradeSaturation` is the identity
+      // there — see the same correction in src/terrain/ground.ts.
+      disturbed = vec3(setSaturation(disturbed, dfm.chroma))
       albedo = vec3(mix(albedo, disturbed, dm))
     }
 
@@ -998,7 +1035,7 @@ export class PainterlyMaterial {
 
     // ── light: sky ambient (coloured, lifted) + ramped direct ─────────────────
     //
-    // A FILL FLOOR of 0.12, the same term src/terrain/ground.ts carries at 0.12,
+    // A FILL FLOOR of 0.14, the same term src/terrain/ground.ts carries at 0.12,
     // and it is bounce light: the one direct-lighting contribution a diffuse-only
     // NPR model has no other way to express. Without it a fragment sitting on the
     // shadow stop received `albedo * ambient` and nothing else, so the value of
@@ -1023,7 +1060,7 @@ export class PainterlyMaterial {
     // assets/defs/surfaces/stone.json — a two-sample solve for the ambient and
     // the albedo pair together). This form leaves the mid and lit stops exactly
     // where they were measured and touches only the thing that is crushed.
-    const FILL = 0.12
+    const FILL = 0.14
     const level = mix(float(FILL), u.midLevel, toMid)
     const direct = vec3(atmosphere.sunColorNode.mul(mix(level, float(1), toLit)))
     let color: Node<'vec3'> = vec3(albedo.mul(ambient.add(direct)))

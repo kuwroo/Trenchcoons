@@ -227,8 +227,16 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     // face than a grassland holds its turf, and the exposed material is earth.
     relief: 9, reliefScale: 90, reliefRidge: 0.15, rockSlope: 0.74,
     scatter: [
-      S('conifer-tall', 5000, 0.85, 1.5, 0.55),
-      S('conifer-young', 3000, 0.8, 1.4, 0.6),
+      // 4000 + 2300, down from 5000 + 3000. Still an open woodland by the
+      // measure the note above uses (a managed conifer stand is 40,000-100,000
+      // per square kilometre) and still dense enough that the collision check
+      // cannot thread between the trunks, which is what the 8000 was raised for.
+      // It is the perf scene's dominant cost: the driving measurement is taken in
+      // this biome at a 3 m eye, where overlapping tier plates make the conifer
+      // the most overdrawn thing in the build, and it sat 0.2-3 ms over a 17.5 ms
+      // bar with the meadow at 16.1.
+      S('conifer-tall', 4000, 0.85, 1.5, 0.55),
+      S('conifer-young', 2300, 0.8, 1.4, 0.6),
       S('shrub-broadleaf', 2600, 0.8, 1.4, 0.6),
       S('bush-round', 1100, 0.8, 1.4, 0.6),
       S('log-fallen', 300, 0.8, 1.3, 0.4),

@@ -16,7 +16,13 @@ export class PerfHud {
     const sorted = [...this.samples].sort((a, b) => a - b)
     const p50 = sorted[Math.floor(sorted.length * 0.5)] ?? 0
     const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0
-    const over = p50 > 16.6 ? '  OVER BUDGET' : ''
+    // 17.4, not 16.6. A frame that is PERFECTLY vsync-locked at 60 Hz measures
+    // 16.67 ms, so a strict `> 16.6` printed OVER BUDGET on every healthy frame
+    // the game has ever rendered — and it duly appeared in a perf critique as
+    // "the in-game HUD printing OVER BUDGET continuously". 17.4 is the same
+    // threshold tools/perf.mjs uses (17.5) less a hair, so the HUD and the harness
+    // now agree about what over budget means.
+    const over = p50 > 17.4 ? '  OVER BUDGET' : ''
 
     const extra = Object.entries(this.lines).map(([k, v]) => `${k.padEnd(9)} ${v}`)
     this.el.textContent = [

@@ -36,10 +36,36 @@ import { BIOME_COUNT, BIOME_IDS, BIOME_STYLES } from '../terrain/biomes'
 import { buildProxy, type ProxyPoly } from './proxy'
 import { biomeTint, graded } from './surfaceGrade'
 
-/** Band outer radii, metres. */
-const BANDS = [80, 260, 900] as const
+/**
+ * Band outer radii, metres.
+ *
+ * 55 rather than 80 for the LOD0 ring, and it is the cheapest 5 ms in the build.
+ * The scatter library's conifer LOD0 is 712 triangles (it went up from 402 when
+ * the tiers became real thick plates, which was the right call), band 0 is the
+ * only band that casts into the sun cascades, and the forest authors 8000
+ * conifers per square kilometre — so at an 80 m radius the near ring alone was
+ * carrying ~1100 conifer instances at 712 triangles, drawn once for the frame
+ * and again per cascade. The driving perf scene measured 21.8-23.4 ms p50 with
+ * 0.9-1.4 M triangles at only 235-301 draw calls, i.e. nowhere near batch-bound.
+ * Cutting the LOD0 radius from 80 m to 55 m is a 53% cut in that population and
+ * costs nothing visible: LOD1 switches in at 55 m instead of 80 m, and the
+ * library's own authored switch distances start at 200 m.
+ *
+ * THERE IS A FOURTH BAND NOW, and it draws the library's IMPOSTOR rather than a
+ * mesh rung. Band 2 used to run to 900 m and hand ~2000 conifers their LOD2 at
+ * 208 triangles each — 416k triangles of three-to-six-pixel trees, in a frame
+ * measured at 1150k total. The impostor exists precisely for that job (the
+ * modeller's `tieredCards` traces the real sawtooth profile with up-facing
+ * normals so its value matches LOD0's rather than popping), and using it past
+ * 560 m costs single-digit triangles per instance.
+ *
+ * It also buys 400 m of extra world: scatter now reaches 1300 m instead of 900 m,
+ * which is the cheapest available answer to the vista captures having no content
+ * and therefore no value structure at distance.
+ */
+const BANDS = [55, 230, 560, 1300] as const
 /** Placement lattice per band, metres. */
-const BAND_CELL = [3.4, 13, 32] as const
+const BAND_CELL = [3.4, 13, 26, 58] as const
 /**
  * Instance ceiling per (def, variant, band).
  *
@@ -49,7 +75,12 @@ const BAND_CELL = [3.4, 13, 32] as const
  * under 1.0x haze. The cap plus the 32 m lattice hands the horizon what it can
  * carry and spends the rest on the near field.
  */
-const BAND_CAP = [560, 900, 1000] as const
+// Trimmed ~20% across the board. These bite only in the dense biomes, and the
+// perf scene shows exactly where: driving at 35 m/s through the forest the frame
+// carries 1113k triangles against 659k for the same car PARKED in the same place,
+// because a kart crossing biome boundaries has several scatter sets populated at
+// once while the bands catch up one per call.
+const BAND_CAP = [340, 560, 700, 1100] as const
 /** Fraction of its own height an instance is sunk into the ground. */
 const EMBED = 0.06
 
@@ -239,7 +270,13 @@ export class Scatter {
           const cap = BAND_CAP[band]!
           const meshes: THREE.InstancedMesh[] = []
           for (const part of asset.parts) {
-            const lod = part.lods[Math.min(band, part.lods.length - 1)]!
+            // The last band draws the impostor. `impostorShared` means the
+            // library has declared its coarsest mesh rung to BE the impostor —
+            // legitimate for a compact convex solid like a rock — in which case
+            // there is nothing separate to reach for.
+            const lod = band === BANDS.length - 1
+              ? (part.impostorShared ? part.lods[part.lods.length - 1]! : part.impostor)
+              : part.lods[Math.min(band, part.lods.length - 1)]!
             const mesh = new THREE.InstancedMesh(lod.geometry, this.material(atmosphere, part.surface, part.material), cap)
             mesh.name = `scatter-${id}-v${v}-b${band}-${part.slot}`
             mesh.count = 0
@@ -365,11 +402,10 @@ export class Scatter {
         // see; band 2 is 260-900 m away under aerial perspective and paying
         // 14,000 noise taps a rebuild to straighten a silhouette three pixels
         // tall is how a streaming system turns into a frame hitch.
-        if (band < 2) {
-          const gx = this.world.heightAt(x + 1.5, z) - y
-          const gz = this.world.heightAt(x, z + 1.5) - y
-          if (Math.atan(Math.hypot(gx, gz) / 1.5) > choice.maxSlope) continue
-        }
+        // `roughSlopeAt` rather than two more `heightAt` evaluations — see the
+        // note on that method. Same threshold question, a quarter of the cost,
+        // and band 1 alone asks it of ~1400 lattice cells per rebuild.
+        if (band < 2 && this.world.roughSlopeAt(x, z, 1.5) > choice.maxSlope) continue
 
         const v = info.variants > 1 ? Math.floor(hash2(i, j, 17) * info.variants) % info.variants : 0
         const batch = this.batches.get(`${choice.id}#${v}#${band}`)
