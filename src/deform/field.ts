@@ -373,7 +373,45 @@ export class DeformField implements DeformHook {
     const fromCommit = texture(this.committed.rt.texture, fract(bandWorld.div(COMMIT_SPAN)))
     // The committed tier has nothing coarser to fall back to — 2 km IS the
     // memory — so its own exposed bands are cleared. `bandKeep` is the switch.
-    bandMat.fragmentNode = vec4(fromCommit).mul(this.bandKeep)
+    //
+    // The mask and wet channels go through a TOE on the way back down. Without
+    // it a demoted mark returns 3.7x too wide: measured, a 7.5 m contiguous
+    // smear against the 2.0 m the fresh near-tier pair occupies. Two blurs
+    // stack — `stampMinHalf` floors the committed stamp at 0.75 texel = 1.5 m
+    // half-width, and then this refill bilinear-upsamples 2 m/texel committed
+    // data straight into the 0.125 m/texel near tier, adding roughly another
+    // +/-2 m of skirt.
+    //
+    // That smear is what the persistence gate was actually scoring, which is
+    // the "gate satisfied by the wrong thing" failure CLAUDE.md warns about,
+    // and ART_BIBLE §4 is explicit that wet sand holds SHARP dark tracks. It
+    // also reached physics: the band lands in the near tier, so the CPU mirror
+    // handed the car rolling resistance across 7.5 m it never drove through.
+    //
+    // Cutting the bilinear skirt rather than the mark: the toe removes the low
+    // tail the upsample invents and rescales what is left, so a returning mark
+    // keeps its peak and loses its shoulders. Depth (r) and age (a) pass
+    // through untouched — narrowing a rut's DEPTH would change the ground the
+    // car drives on, not just how the mark reads.
+    // 0.40 measured, not guessed: swept against the demoted band's across-track
+    // extent, which fell 7.5 m -> 3.38 m and then PLATEAUED — 0.40, 0.55 and
+    // 0.68 all return 3.38 m. So the toe has removed all of the bilinear skirt,
+    // and the 3.38 m that remains is the stored capsule itself: `stampMinHalf`
+    // floors the committed stamp at 0.75 texel = 1.5 m half-width, i.e. 3.0 m
+    // across before any filtering. Narrowing further means splitting that floor
+    // so it applies only perpendicular to the segment and not to the caps —
+    // a change to the WRITE side, which this toe cannot reach.
+    // Lowest value that reaches the plateau, since a higher toe would start
+    // eating genuinely faint old marks for no further narrowing.
+    const DEMOTE_TOE = 0.40
+    const sharpen = (v: Node<'float'>): Node<'float'> =>
+      saturate(v.sub(DEMOTE_TOE).div(1 - DEMOTE_TOE))
+    bandMat.fragmentNode = vec4(
+      fromCommit.r,
+      sharpen(fromCommit.g),
+      sharpen(fromCommit.b),
+      fromCommit.a,
+    ).mul(this.bandKeep)
     bandMat.blending = THREE.NoBlending
     bandMat.depthTest = false
     bandMat.depthWrite = false
