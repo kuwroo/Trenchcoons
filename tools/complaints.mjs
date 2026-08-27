@@ -447,32 +447,71 @@ check('distance reads as blue haze', drop >= 60,
   `far H${L[0].h.toFixed(0)} -> near H${nearBand.h.toFixed(0)}, ` +
   `drop ${drop.toFixed(0)}deg (ref 126, must be >=60 and far bluer than near)`)
 
-// 9. Is the FOREGROUND warm — and warm the right way?
+// 9. Is the FOREGROUND warm and bright?
 //
-// MEASURED ON A GROUND-LEVEL FRAME, not on the vista above, and that matters:
-// from 120 m up the nearest band is still 150-300 m out, so it is mid-ground.
-// Scoring "foreground" there reported H111 S0.30 and read as a washed-out
-// foreground; at eye level the same terrain is H86-108 at S0.55-0.68. The
-// vista frame is the right instrument for DISTANCE and the wrong one for the
-// near end, so the two checks use two cameras.
+// MEASURED ON A GROUND-LEVEL FRAME, not on the vista above. From 120 m up the
+// nearest band is still 150-300 m out, so scoring "foreground" there reported
+// H111 S0.30 and read as washed; at eye level the same terrain is H113 S0.66.
+// The vista is the right instrument for DISTANCE and the wrong one for the near
+// end, so the two checks use two cameras.
 //
-// The reference's composition is eye-level: grass at your feet, rock shelves
-// mid-distance, blue peaks at the top of frame.
+// HUE AND VALUE, NOT SATURATION, and that is the third instrument correction on
+// this one metric. The first version of this check compared the brightest half
+// of the band and concluded the build was OVER-saturated (0.68 against the
+// reference's 0.56). Taking the MEDIAN of the same band instead reverses it --
+// the reference reads S0.736 and the build S0.664, i.e. the build is UNDER-
+// saturated. Both cannot be true, and the disagreement is content, not colour:
+// this build draws instanced blades whose bright lime tips dominate any
+// brightest-N selection, and the reference's foreground is painted grass with no
+// such tips. So saturation is not measurable this way and is not gated.
+//
+// Hue and value survive both samplings and both say the same thing:
+//
+//                    brightest-half        median
+//   reference        H73  V0.89            H78  V0.85
+//   this build       H107 V0.61            H113 V0.55
+//
+// which is ART_BIBLE 2 exactly: "lit surfaces warm ~50deg toward yellow and jump
+// ~0.4 in VALUE". The build is ~35 degrees too cool and ~0.30 too dark. Both
+// have to move TOGETHER: warming the hue while leaving the value alone produces
+// khaki, which is what a sweep of three candidates did (measured — a warm, dark,
+// desaturated ground reads as dry stubble, not meadow). Warm AND bright is the
+// vivid lime-green the reference actually has.
 await load('shot=1&car=0&time=0.42&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06')
-const fg = depthLadder(await shot(page))[4]
-// A JOINT CONDITION, because the hue alone is a trap.
-//
-// ART_BIBLE 2: lit surfaces warm toward yellow while LOSING about 0.15 of
-// saturation. Gating hue on its own invites the fix that has already shipped
-// once -- an earlier round drove the meadow to H79 while HOLDING S0.66 and
-// produced an acid highlighter lime, which is why CLAUDE.md now carries a
-// warning about it. The reference is warm AND comparatively unsaturated
-// (H73 at S0.56 through this same brightest-half sampling); this build is both
-// cooler and MORE saturated (H107 at S0.68), so it fails on both axes and the
-// only way to satisfy it is to move both together.
-check('foreground grass is warm, not acid', fg.h <= 100 && fg.s <= 0.62,
-  `near band H${fg.h.toFixed(0)} S${fg.s.toFixed(2)} ` +
-  `(ref H73 S0.56; want H<=100 AND S<=0.62 — warmer and LESS saturated together)`)
+const fgPng = await shot(page)
+function medianBand(png) {
+  const { width: W, height: H, data } = png
+  const ya = Math.floor(H * (0.34 + 0.64 * 4 / 5))
+  const yb = Math.floor(H * 0.98)
+  const px = []
+  for (let y = ya; y < yb; y += 2) {
+    for (let x = Math.floor(W * 0.15); x < Math.floor(W * 0.85); x += 2) {
+      const i = (y * W + x) * 4
+      const r = data[i], g = data[i + 1], bl = data[i + 2]
+      px.push([r, g, bl, 0.2126 * r + 0.7152 * g + 0.0722 * bl])
+    }
+  }
+  // The middle fifth by luminance: dominated by ground area rather than by the
+  // handful of very bright blade tips that broke the brightest-N version.
+  px.sort((a, c) => a[3] - c[3])
+  const sel = px.slice(Math.floor(px.length * 0.4), Math.ceil(px.length * 0.6))
+  let r = 0, g = 0, bl = 0
+  for (const q of sel) { r += q[0]; g += q[1]; bl += q[2] }
+  r /= sel.length; g /= sel.length; bl /= sel.length
+  const mx = Math.max(r, g, bl), mn = Math.min(r, g, bl), d = mx - mn
+  let h = 0
+  if (d) {
+    if (mx === r) h = ((g - bl) / d + (g < bl ? 6 : 0))
+    else if (mx === g) h = ((bl - r) / d + 2)
+    else h = ((r - g) / d + 4)
+    h *= 60
+  }
+  return { h, s: mx ? d / mx : 0, v: mx / 255 }
+}
+const fg = medianBand(fgPng)
+check('foreground is warm and bright', fg.h <= 95 && fg.v >= 0.75,
+  `median band H${fg.h.toFixed(0)} S${fg.s.toFixed(2)} V${fg.v.toFixed(2)} ` +
+  `(ref H78 S0.74 V0.85; want H<=95 AND V>=0.75 — warm and bright together)`)
 
 console.log(errs.length ? `\npage errors: ${[...new Set(errs)].slice(0,3).join(' | ')}` : '\nno page errors')
 const failed = results.filter((r) => !r.ok).length
