@@ -2,7 +2,7 @@
   "id": "bush",
   "version": 1,
   "type": "surface",
-  "notes": "The DARK ANCHOR. Every landscape reference leans on one: cliffs-tohad.jpg's near hedges, grasslands.jpg's conifer masses, water-lagoon.webp's palm shade. Without something authored genuinely dark the frame has no bottom to its value range — measured p05 of HSV value sat at 0.62 against 0.48 in the references — and 'lifted shadows' degenerates into 'no darks at all'. So this def is deliberately 2.5 stops under the meadow it sits on, and it stays chromatic (deep emerald, not black) the way ART_BIBLE 2 requires. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
+  "notes": "The DARK ANCHOR. Every landscape reference leans on one: cliffs-tohad.jpg's near hedges, grasslands.jpg's conifer masses, water-lagoon.webp's palm shade. Without something authored genuinely dark the frame has no bottom to its value range \u2014 measured p05 of HSV value sat at 0.62 against 0.48 in the references \u2014 and 'lifted shadows' degenerates into 'no darks at all'. So this def is deliberately 2.5 stops under the meadow it sits on, and it stays chromatic (deep emerald, not black) the way ART_BIBLE 2 requires. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 0.9 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#1b4d26",
     "shadow": "#143a38",
@@ -13,7 +13,7 @@
     "gradientStrength": 0.55,
     "rampSoftness": 0.22,
     "brushScale": 1.6,
-    "brushStrength": 0.9,
+    "brushStrength": 0.18,
     "saturationGain": 0.3,
     "rimStrength": 0.7,
     "rimPower": 2.6,

@@ -2,7 +2,7 @@
   "id": "rock",
   "version": 1,
   "type": "surface",
-  "notes": "ART_BIBLE 4: rock lit is a light blue, rock shadow unmistakably blue. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead — the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel.",
+  "notes": "ART_BIBLE 4: rock lit is a light blue, rock shadow unmistakably blue. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Brush params re-authored once the LOD ladder gained a floor (see `lod` in painterly.ts): with `.max(0)` clamping the ladder at the authored world scale, a 5 m mark period on a 10 m block meant ZERO variation across a 200 px facet, and a 60x60 patch inside the nearest cliff face in lagoon-morning.png measured luma std 0.009 against 0.096 in the cliff interior of refs/painterly/cliffs-tohad.jpg. The terrain's own brushStrength (meadow 1.45) was carrying the structure gate while every instanced prop rode for free. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead \u2014 the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel. Brush overlay reduced 0.95 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#7e9fc4",
     "shadow": "#4d6288",
@@ -13,7 +13,7 @@
     "gradientStrength": 0.45,
     "rampSoftness": 0.1,
     "brushScale": 1.2,
-    "brushStrength": 0.95,
+    "brushStrength": 0.0,
     "saturationGain": 0.26,
     "rimStrength": 0.5,
     "gradientBase": -1.0,

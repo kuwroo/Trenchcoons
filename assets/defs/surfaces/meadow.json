@@ -2,7 +2,7 @@
   "id": "meadow",
   "version": 1,
   "type": "surface",
-  "notes": "Rolling grassland \u2014 the M1 hub surface. ART_BIBLE 4, Meadow / hub. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. M4: `deform` opts this surface into the deformation field. ART_BIBLE 4 gives the meadow shallow ruts that spring back over ~20s with mud only under hard cornering, and those rates live in src/deform/biome.ts. The ground mesh is 19 m quads, so ALL of the visible mark here comes from the FRAGMENT normal and the albedo blend rather than from displaced vertices \u2014 `deformNormal` is the knob for that. `deformRelief` is therefore 0, and that is a compile-time zero: painterly.ts emits no `positionNode` at all for this surface, so the one 177k-vertex mesh in the build stops paying ten vertex-stage texture fetches per vertex for a displacement that cannot resolve on a 19 m quad. M2's CDLOD terrain is what earns it back \u2014 turn it on with the tessellation, not before.",
+  "notes": "Rolling grassland \u2014 the M1 hub surface. ART_BIBLE 4, Meadow / hub. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. M4: `deform` opts this surface into the deformation field. ART_BIBLE 4 gives the meadow shallow ruts that spring back over ~20s with mud only under hard cornering, and those rates live in src/deform/biome.ts. The ground mesh is 19 m quads, so ALL of the visible mark here comes from the FRAGMENT normal and the albedo blend rather than from displaced vertices \u2014 `deformNormal` is the knob for that. `deformRelief` is therefore 0, and that is a compile-time zero: painterly.ts emits no `positionNode` at all for this surface, so the one 177k-vertex mesh in the build stops paying ten vertex-stage texture fetches per vertex for a displacement that cannot resolve on a 19 m quad. M2's CDLOD terrain is what earns it back \u2014 turn it on with the tessellation, not before. Brush overlay reduced 1.45 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#5eb02e",
     "shadow": "#318f38",
@@ -13,7 +13,7 @@
     "gradientHeight": 260,
     "gradientStrength": 0.3,
     "brushScale": 3.6,
-    "brushStrength": 1.45,
+    "brushStrength": 0.0,
     "rampSoftness": 0.15,
     "saturationGain": 0.34,
     "rimStrength": 0.24,

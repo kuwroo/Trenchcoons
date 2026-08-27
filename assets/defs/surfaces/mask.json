@@ -2,7 +2,7 @@
   "id": "mask",
   "version": 2,
   "type": "surface",
-  "notes": "The raccoon mask — the one shape that says 'raccoon' rather than 'small brown animal'. v1 was a flattened lens on the front of the face, which from the chase camera's dead-astern view survived as a single purple crescent on one cheek of one head and nothing at all on the other; the geometry in kart.ts is now a band that wraps the sides. Lightened a stop from v1 so the near-black eyes still punch out of it (refs/character/raccoon-artstyle-capycastaway.jpg: hard dark eye against a lighter mask), and kept violet rather than neutral because the palette gate counts near-grey pixels.",
+  "notes": "The raccoon mask \u2014 the one shape that says 'raccoon' rather than 'small brown animal'. v1 was a flattened lens on the front of the face, which from the chase camera's dead-astern view survived as a single purple crescent on one cheek of one head and nothing at all on the other; the geometry in kart.ts is now a band that wraps the sides. Lightened a stop from v1 so the near-black eyes still punch out of it (refs/character/raccoon-artstyle-capycastaway.jpg: hard dark eye against a lighter mask), and kept violet rather than neutral because the palette gate counts near-grey pixels. Brush overlay reduced 0.45 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#4e3550",
     "shadow": "#33243c",
@@ -13,7 +13,7 @@
     "gradientHeight": 0.3,
     "gradientStrength": 0.35,
     "brushScale": 0.2,
-    "brushStrength": 0.45,
+    "brushStrength": 0.18,
     "brushSaturation": 0.35,
     "detailStrength": 0.28,
     "rimStrength": 0.55,

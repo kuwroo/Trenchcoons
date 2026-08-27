@@ -2,7 +2,7 @@
   "id": "mountain",
   "version": 1,
   "type": "surface",
-  "notes": "Distant massifs. ART_BIBLE 4 (alpine): exposed rock is DARK and wet-looking, the summit is near-white with a faint cool cast, and the shadow is unmistakably blue at low contrast. The vertical gradient runs over 240 m so a 380 m peak reads pale at the cap and sinks into its own shadow at the base — which is the only reason a cone silhouette holds up at 3 km. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead — the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel.",
+  "notes": "Distant massifs. ART_BIBLE 4 (alpine): exposed rock is DARK and wet-looking, the summit is near-white with a faint cool cast, and the shadow is unmistakably blue at low contrast. The vertical gradient runs over 240 m so a 380 m peak reads pale at the cap and sinks into its own shadow at the base \u2014 which is the only reason a cone silhouette holds up at 3 km. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. rampSoftness is back at its near-cel width. It was widened for a round to hide a ragged terminator on the shaded faces, and that traded the one mechanism in this material that makes a full-amplitude hard boundary for a cosmetic fix in the wrong place: lagoon-morning's >0.12 edge density fell to 2.63% against a reference floor of 5.83%. The terminator is now steadied at the source instead \u2014 the coarse region mask (see `regionStep`) moves a whole patch across the step at once rather than letting the micro-relief flip it pixel by pixel. Brush overlay reduced 1.15 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#5a6f96",
     "shadow": "#33476c",
@@ -14,7 +14,7 @@
     "gradientStrength": 0.9,
     "rampSoftness": 0.11,
     "brushScale": 9.0,
-    "brushStrength": 1.15,
+    "brushStrength": 0.0,
     "brushSaturation": 0.45,
     "detailStrength": 0.5,
     "saturationGain": 0.28,

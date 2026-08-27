@@ -2,7 +2,7 @@
   "id": "cardboardFlap",
   "version": 2,
   "type": "surface",
-  "notes": "The box flaps. Same kraft family as `cardboard` and the same v2 correction — the flaps are most of the kart's screen area in every capture, so they were carrying most of the amoeba camouflage the critique measured. Held about a stop below the body so the open rim still reads as a rim: the flaps splay out past the silhouette and need a value break against the deck, not just an outline. brushScale is a little finer than the body's (2.2 against 2.6) so the two do not mottle in lockstep, but both sit below the LOD ladder's floor and are therefore world-locked rather than screen-locked. The corrugated cut along the free edge is geometry — see `flapGeometry` in src/vehicle/box.ts.",
+  "notes": "The box flaps. Same kraft family as `cardboard` and the same v2 correction \u2014 the flaps are most of the kart's screen area in every capture, so they were carrying most of the amoeba camouflage the critique measured. Held about a stop below the body so the open rim still reads as a rim: the flaps splay out past the silhouette and need a value break against the deck, not just an outline. brushScale is a little finer than the body's (2.2 against 2.6) so the two do not mottle in lockstep, but both sit below the LOD ladder's floor and are therefore world-locked rather than screen-locked. The corrugated cut along the free edge is geometry \u2014 see `flapGeometry` in src/vehicle/box.ts. Brush overlay reduced 0.2 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#9c7f5e",
     "shadow": "#66503c",
@@ -13,7 +13,7 @@
     "gradientHeight": 0.8,
     "gradientStrength": 0.28,
     "brushScale": 2.2,
-    "brushStrength": 0.2,
+    "brushStrength": 0.18,
     "brushSaturation": 0.13,
     "brushHue": 0.06,
     "regionStep": 0.06,

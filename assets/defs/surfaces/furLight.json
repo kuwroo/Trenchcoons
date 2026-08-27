@@ -2,7 +2,7 @@
   "id": "furLight",
   "version": 1,
   "type": "surface",
-  "notes": "Muzzle and ear insides. The pale counter-shape that makes the dark mask read as a mask (ART_BIBLE 6: 'the mask reads as a strong dark shape').",
+  "notes": "Muzzle and ear insides. The pale counter-shape that makes the dark mask read as a mask (ART_BIBLE 6: 'the mask reads as a strong dark shape'). Brush overlay reduced 0.55 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#dcb98c",
     "shadow": "#a3805a",
@@ -13,7 +13,7 @@
     "gradientHeight": 0.32,
     "gradientStrength": 0.4,
     "brushScale": 0.2,
-    "brushStrength": 0.55,
+    "brushStrength": 0.18,
     "brushSaturation": 0.42,
     "rimStrength": 0.8,
     "saturationGain": 0.28,

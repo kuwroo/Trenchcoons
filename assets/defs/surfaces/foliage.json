@@ -2,7 +2,7 @@
   "id": "foliage",
   "version": 1,
   "type": "surface",
-  "notes": "Conifer tiers and bushes. Strong sky rim, no specular. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted.",
+  "notes": "Conifer tiers and bushes. Strong sky rim, no specular. gradientBase/gradientHeight are OBJECT space and this geometry is unit-sized: metre-scale values here saturate the sweep to a constant and switch the vertical gradient off entirely, which is how every instanced asset in the greybox lost it. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 1.45 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
   "material": {
     "base": "#2f7c1b",
     "shadow": "#1c5226",
@@ -13,7 +13,7 @@
     "gradientStrength": 0.7,
     "rampSoftness": 0.26,
     "brushScale": 3.6,
-    "brushStrength": 1.45,
+    "brushStrength": 0.18,
     "saturationGain": 0.32,
     "rimStrength": 0.85,
     "rimPower": 2.4,
