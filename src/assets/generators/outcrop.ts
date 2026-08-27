@@ -14,6 +14,7 @@
 // per layer — which is a far better fit than one hull around the whole stack,
 // where the kart would collide with a metre of empty air above every step.
 
+import type * as THREE from 'three/webgpu'
 import { Polytope, type Plane } from '../hull'
 import { MeshBuilder, dot, normalize, rotY, type Vec3 } from '../mesh'
 import { coarseSolid, coarseUnder } from '../impostor'
@@ -33,6 +34,33 @@ const schema = {
   lip: num(0.1, 0, 0.4, 'How far a layer overhangs at its base — undercuts the face.'),
   twist: num(0.18, 0, 0.8, 'Yaw jitter between layers.', 'rad'),
 } as const
+
+type Vec2 = [number, number]
+
+/**
+ * Convex hull of a point set in XZ, counter-clockwise (monotone chain).
+ *
+ * Used to turn a finished course into the set of vertical planes that confine
+ * the course above it. A hull rather than the course's own cut planes because
+ * by that point the solid has been clipped, placed, slid and yawed, and its
+ * footprint is no longer any simple function of the planes that made it.
+ */
+function hull2d(pts: readonly Vec2[]): Vec2[] {
+  if (pts.length < 3) return []
+  const p = [...pts].sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]))
+  const cross = (o: Vec2, a: Vec2, b: Vec2): number =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+  const half = (src: Vec2[]): Vec2[] => {
+    const out: Vec2[] = []
+    for (const q of src) {
+      while (out.length >= 2 && cross(out[out.length - 2]!, out[out.length - 1]!, q) <= 0) out.pop()
+      out.push(q)
+    }
+    out.pop()
+    return out
+  }
+  return [...half(p), ...half([...p].reverse())]
+}
 
 export const outcrop = defineGenerator({
   info: { name: 'outcrop', slots: ['body'], defaultSurfaces: { body: 'cliff' } },
@@ -74,10 +102,31 @@ export const outcrop = defineGenerator({
       yaw: number
       planes: Plane[]
       depths: number[]
+      /**
+       * Vertical planes, in this course's LOCAL frame, confining its footprint
+       * to the footprint of the course BELOW. Empty for the bottom course.
+       * Filled bottom-up after placement (see the support pass) and applied by
+       * `courseSolid` at every rung, so a coarse LOD cannot float either.
+       */
+      support: Plane[]
+      /**
+       * Offset from the CENTROID of the course below, not from the origin.
+       * Resolved in the support pass once that centroid is known.
+       */
+      slideX: number
+      slideZ: number
     }
     const courses: Course[] = []
-    let cx = 0
-    let cz = 0
+    // The slide is applied relative to the course BELOW rather than accumulated
+    // from the origin. Accumulating walks the stack off its own base: the
+    // offsets are independent draws, so they random-walk, and the asymmetric
+    // cuts move each course's effective centre on top of that. Anchoring to the
+    // measured centroid keeps the stack broad and concentric, which is what
+    // makes the containment clip below cost almost nothing on a well-formed
+    // stack -- without it, containment alone whittles the upper courses away
+    // instead of moving them over the base, and the stack narrows into a tower.
+    let pendingX = 0
+    let pendingZ = 0
     let yaw = 0
     for (let i = 0; i < p.strata; i++) {
       const shrink = Math.pow(1 - p.setback, i)
@@ -132,10 +181,13 @@ export const outcrop = defineGenerator({
       // key as a single flat value, which is the whole read.
 
 
-      courses.push({ hx, hy, hz, y0: i * layerH, dx: cx, dz: cz, yaw, planes, depths })
+      courses.push({
+        hx, hy, hz, y0: i * layerH, dx: 0, dz: 0, yaw, planes, depths,
+        support: [], slideX: pendingX, slideZ: pendingZ,
+      })
       const slide = p.size * 0.5 * p.setback * p.step
-      cx += rng.range(-slide, slide)
-      cz += rng.range(-slide, slide)
+      pendingX = rng.range(-slide, slide)
+      pendingZ = rng.range(-slide, slide)
       yaw += rng.range(-p.twist, p.twist)
     }
 
@@ -154,6 +206,28 @@ export const outcrop = defineGenerator({
         for (const q of pts) { s = Math.max(s, dot(pl.n, q)); e = Math.min(e, dot(pl.n, q)) }
         solid.clip({ n: pl.n, d: s - (s - e) * (c.depths[i] ?? 0.2) })
       }
+      // NOTHING OVERHANGS THE COURSE BELOW IT.
+      //
+      // Applied after the cuts and before placement, because these planes are
+      // already expressed in this course's local frame. Each course gets
+      // `cuts` independent random planes at up to 30% bite, so two adjacent
+      // courses are routinely trimmed on OPPOSITE sides: measured on
+      // cliff-block, course 0 spanned x[-10.65, 5.59] and course 1
+      // x[-5.66, 10.20], leaving 4.6 m of course 1 hanging over a 5 m drop with
+      // nothing beneath it, and open sky visible through the silhouette at two
+      // places in shots/forge/forge-close-cliff-block.png.
+      //
+      // The generator already had two rounds of fixes for courses that floated
+      // VERTICALLY (see OVERLAP above, 0.4 -> 0.8). This is the horizontal
+      // version of the same failure and the bbox-based "no asset floats" budget
+      // invariant is structurally blind to it -- the stack's bounding box sits
+      // on the ground no matter where its middle course is.
+      //
+      // Containment, not a tolerance: `setback` already shrinks each course, so
+      // for a well-behaved stack this clips nothing. It only bites when the cuts
+      // have pushed a course off its base, which is exactly the bug.
+      for (const pl of c.support) solid.clip(pl)
+
       // Place: lift onto its course so the base of the bottom slab is exactly
       // y = 0, slide, and turn.
       const put = (q: Vec3): Vec3 => {
@@ -161,6 +235,43 @@ export const outcrop = defineGenerator({
         return [r[0] + c.dx, r[1] + c.y0 + c.hy, r[2] + c.dz]
       }
       return { solid, put }
+    }
+
+    // ── support pass: bottom-up, each course confined to the one below ───────
+    // Runs before any geometry is emitted so that every rung of every LOD sees
+    // the same constraint. Course i's planes are derived from course i-1's
+    // FINISHED footprint, which is itself already confined -- so the invariant
+    // composes up the stack rather than only holding pairwise.
+    for (let i = 0; i + 1 < courses.length; i++) {
+      const below = courses[i]!
+      const above = courses[i + 1]!
+      const { solid, put } = courseSolid(below, below.planes.length)
+      const foot = hull2d(solid.points().map(put).map((q): Vec2 => [q[0], q[2]]))
+      if (foot.length < 3) continue
+      // Anchor the upper course over the mass it actually rests on, THEN derive
+      // the containment planes -- in that order, because the planes are stored
+      // in the upper course's local frame and that frame depends on dx/dz.
+      let gx = 0
+      let gz = 0
+      for (const q of foot) { gx += q[0]; gz += q[1] }
+      above.dx = gx / foot.length + above.slideX
+      above.dz = gz / foot.length + above.slideZ
+      for (let e = 0; e < foot.length; e++) {
+        const a = foot[e]!
+        const bb = foot[(e + 1) % foot.length]!
+        const ex = bb[0] - a[0]
+        const ez = bb[1] - a[1]
+        const L = Math.hypot(ex, ez)
+        if (L < 1e-9) continue
+        // Outward normal of a CCW edge, then rotated INTO the upper course's
+        // local frame: dot(n, rotY(q, yaw)) === dot(rotY(n, -yaw), q).
+        const nWorld: Vec3 = [ez / L, 0, -ex / L]
+        const dWorld = nWorld[0] * a[0] + nWorld[2] * a[1]
+        above.support.push({
+          n: rotY(nWorld, -above.yaw),
+          d: dWorld - (nWorld[0] * above.dx + nWorld[2] * above.dz),
+        })
+      }
     }
 
     const layerPoints: Vec3[][] = []
@@ -182,14 +293,31 @@ export const outcrop = defineGenerator({
     // LOD1 keeps every course and drops the later cuts: the steps survive, the
     // finer fracture facets do not. LOD2 collapses the stack into one solid,
     // which is all that is left of it past a couple of hundred metres anyway.
-    const lodMid = new MeshBuilder()
-    for (const c of courses) {
-      const keep = Math.max(1, Math.round(c.planes.length * 0.3))
-      const { solid, put } = courseSolid(c, keep)
-      solid.emit(lodMid, put)
-    }
     const geoLod0 = b.build()
-    const geoLod1 = lodMid.build()
+    const lod0Tris = (geoLod0.index?.count ?? 0) / 3
+
+    // LOD1 WALKS DOWN UNTIL IT IS GENUINELY CHEAPER, exactly as rock.ts does.
+    //
+    // A fixed 0.3 fraction stopped being monotone once the containment planes
+    // arrived: every rung now carries the same support clip, so the saving from
+    // dropping cut planes can be cancelled by the faces containment adds back,
+    // and outcrop-shelf#0 came out at 88 triangles for both LOD0 and LOD1 --
+    // an inverted ladder, which the budget invariant rejects and which costs a
+    // batch to render no faster.
+    const buildMid = (frac: number): THREE.BufferGeometry => {
+      const mb = new MeshBuilder()
+      for (const c of courses) {
+        const keep = Math.max(1, Math.round(c.planes.length * frac))
+        const { solid, put } = courseSolid(c, keep)
+        solid.emit(mb, put)
+      }
+      return mb.build()
+    }
+    let geoLod1 = buildMid(0.3)
+    for (let frac = 0.3; frac > 0.04 && (geoLod1.index?.count ?? 0) / 3 >= lod0Tris; frac -= 0.05) {
+      geoLod1.dispose()
+      geoLod1 = buildMid(frac)
+    }
     const lodFar = coarseUnder(all, (geoLod1.index?.count ?? 0) / 3)
 
     return {
