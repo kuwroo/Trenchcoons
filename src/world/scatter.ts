@@ -335,6 +335,84 @@ export class Scatter {
     return vec2(vec2(wp.x, wp.z).div(float(this.world.span)).add(0.5))
   }
 
+  /**
+   * Rebuild the placement choice table from the live `BIOME_STYLES`.
+   * Forge Environments mutates densities / scatter sets and then calls this
+   * before a forced `update(..., true)`. New asset ids are registered on
+   * demand so an editor can add library entries that were not in the table
+   * at construction time.
+   */
+  reloadChoices(atmosphere: Atmosphere): void {
+    this.choices.length = 0
+    const needed = new Set<string>()
+    for (let b = 0; b < BIOME_COUNT; b++) {
+      for (const entry of BIOME_STYLES[BIOME_IDS[b]!].scatter) {
+        needed.add(entry.id)
+        this.choices.push({
+          biome: b,
+          id: entry.id,
+          perM2: entry.perKm2 * 1e-6,
+          scaleLo: entry.scale[0],
+          scaleHi: entry.scale[1],
+          maxSlope: entry.maxSlope ?? 0.7,
+        })
+      }
+    }
+    if (this.choices.length > this.acc.length) {
+      throw new Error(`scatter: ${this.choices.length} entries exceeds the acc buffer`)
+    }
+    for (const id of needed) {
+      if (!this.defs.has(id)) this.registerDef(atmosphere, id)
+    }
+    this.dirty = true
+  }
+
+  /** Ensure batches exist for a scatter def that was not in the table at boot. */
+  private registerDef(atmosphere: Atmosphere, id: string): void {
+    const variants = this.library.variants(id)
+    const box = new THREE.Box3()
+    const info: DefInfo = { id, variants, lift: [], height: [], footprint: [], proxy: [] }
+    for (let v = 0; v < variants; v++) {
+      const asset = this.library.asset(id, v)
+      let floor = 0
+      for (const part of asset.parts) {
+        const geo = part.lods[0]!.geometry
+        if (!geo.boundingBox) geo.computeBoundingBox()
+        box.copy(geo.boundingBox!)
+        if (box.min.y < floor) floor = box.min.y
+      }
+      info.lift.push(-floor)
+      info.height.push(asset.bounds.height)
+      info.footprint.push(asset.bounds.footprint)
+      info.proxy.push(buildProxy(asset.collider))
+    }
+    this.defs.set(id, info)
+
+    for (let v = 0; v < variants; v++) {
+      const asset = this.library.asset(id, v)
+      for (let band = 0; band < BANDS.length; band++) {
+        const key = `${id}#${v}#${band}`
+        if (this.batches.has(key)) continue
+        const cap = BAND_CAP[band]!
+        const meshes: THREE.InstancedMesh[] = []
+        for (const part of asset.parts) {
+          const lod = band === BANDS.length - 1
+            ? (part.impostorShared ? part.lods[part.lods.length - 1]! : part.impostor)
+            : part.lods[Math.min(band, part.lods.length - 1)]!
+          const mesh = new THREE.InstancedMesh(
+            lod.geometry, this.material(atmosphere, part.surface, part.material), cap,
+          )
+          mesh.name = `scatter-${id}-v${v}-b${band}-${part.slot}`
+          mesh.count = 0
+          mesh.frustumCulled = false
+          ;(band === 0 ? this.nearGroup : this.farGroup).add(mesh)
+          meshes.push(mesh)
+        }
+        this.batches.set(key, { meshes, cap, count: 0 })
+      }
+    }
+  }
+
   get instances(): number {
     let n = 0
     for (const b of this.batches.values()) n += b.count

@@ -434,6 +434,8 @@ async function boot() {
     // which is where a tyre mark has to resolve.
     const fx = car ? car.vehicle.object.position.x : camera.position.x
     const fz = car ? car.vehicle.object.position.z : camera.position.z
+    if (car) world.grass.setKartPos(fx, fz)
+    else world.grass.setKartPos(null)
     world.recentre(fx, fz)
 
     // ── the per-biome grade (ART_BIBLE §5) ──────────────────────────────────

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Procedural Grass — Three.js Prototype</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+
+    <aside id="panel" class="panel">
+      <header class="panel-header">
+        <div>
+          <h1>Grass Control Panel</h1>
+          <p class="sub">WASD move · drag orbit · scroll zoom</p>
+        </div>
+        <button type="button" id="panelToggle" class="icon-btn" title="Collapse">▾</button>
+      </header>
+
+      <div id="panelBody" class="panel-body">
+        <div id="stats" class="stats">—</div>
+
+        <!-- WIND -->
+        <section class="section">
+          <div class="section-head">
+            <h2>Wind</h2>
+            <label class="toggle">
+              <input type="checkbox" id="windEnabled" checked />
+              <span>On</span>
+            </label>
+          </div>
+
+          <div class="wind-compass-wrap">
+            <canvas id="windCompass" width="140" height="140" aria-label="Wind direction"></canvas>
+            <div class="wind-compass-meta">
+              <div>Dir <strong id="windAngleLabel">45°</strong></div>
+              <div class="hint-sm">Drag dial or use angle</div>
+            </div>
+          </div>
+
+          <p class="section-note">Ghibli-style: long synchronized waves roll across the field</p>
+          <label class="ctrl">
+            <span>Direction</span>
+            <input id="windAngle" type="range" min="0" max="360" step="1" value="45" />
+            <em id="windAngleVal">45°</em>
+          </label>
+          <label class="ctrl">
+            <span>Strength</span>
+            <input id="windStrength" type="range" min="0" max="2.5" step="0.05" value="1.15" />
+            <em id="windStrengthVal">1.15</em>
+          </label>
+          <label class="ctrl">
+            <span>Field breath</span>
+            <input id="windGlobal" type="range" min="0" max="2" step="0.05" value="0.55" />
+            <em id="windGlobalVal">0.55</em>
+          </label>
+          <label class="ctrl">
+            <span>Rolling waves</span>
+            <input id="windGust" type="range" min="0" max="2.5" step="0.05" value="1.35" />
+            <em id="windGustVal">1.35</em>
+          </label>
+          <label class="ctrl">
+            <span>Micro flutter</span>
+            <input id="windTurb" type="range" min="0" max="1.5" step="0.05" value="0.18" />
+            <em id="windTurbVal">0.18</em>
+          </label>
+          <label class="ctrl">
+            <span>Wind speed</span>
+            <input id="windSpeed" type="range" min="0.2" max="3" step="0.05" value="0.85" />
+            <em id="windSpeedVal">0.85</em>
+          </label>
+          <label class="ctrl">
+            <span>Wave length</span>
+            <input id="waveScale" type="range" min="0.08" max="1.2" step="0.02" value="0.38" />
+            <em id="waveScaleVal">0.38</em>
+          </label>
+          <label class="ctrl">
+            <span>Wave travel</span>
+            <input id="waveTravel" type="range" min="0.2" max="3.5" step="0.05" value="1.45" />
+            <em id="waveTravelVal">1.45</em>
+          </label>
+          <label class="ctrl">
+            <span>Gust width</span>
+            <input id="waveWidth" type="range" min="1" max="5" step="0.1" value="2.2" />
+            <em id="waveWidthVal">2.20</em>
+          </label>
+          <label class="ctrl">
+            <span>Sync</span>
+            <input id="windSync" type="range" min="0" max="1" step="0.02" value="0.92" />
+            <em id="windSyncVal">0.92</em>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="windAutoRotate" />
+            Auto-rotate wind direction
+          </label>
+          <label class="ctrl" id="windAutoSpeedRow">
+            <span>Rotate speed</span>
+            <input id="windAutoSpeed" type="range" min="0.02" max="0.5" step="0.01" value="0.08" />
+            <em id="windAutoSpeedVal">0.08</em>
+          </label>
+        </section>
+
+        <!-- TERRAIN -->
+        <section class="section">
+          <div class="section-head"><h2>Terrain</h2></div>
+          <p class="section-note">Hills/slopes — grass aligns to the ground normal</p>
+          <label class="ctrl">
+            <span>Hill height</span>
+            <input id="terrainAmp" type="range" min="0.15" max="2.5" step="0.05" value="1.35" />
+            <em id="terrainAmpVal">1.35</em>
+          </label>
+          <label class="ctrl">
+            <span>Hill scale</span>
+            <input id="terrainFreq" type="range" min="0.4" max="2.2" step="0.05" value="1" />
+            <em id="terrainFreqVal">1.00</em>
+          </label>
+          <button type="button" id="rebuildTerrainBtn" class="btn ghost">Rebuild terrain + grass</button>
+        </section>
+
+        <!-- BLADE / FIELD -->
+        <section class="section">
+          <div class="section-head">
+            <h2>Blade &amp; field</h2>
+          </div>
+          <p class="section-note">Each instance = one silhouette clump (vector grass icon)</p>
+          <label class="ctrl">
+            <span>Clump width</span>
+            <input id="bladeWidth" type="range" min="0.4" max="1.8" step="0.02" value="0.95" />
+            <em id="bladeWidthVal">0.95</em>
+          </label>
+          <label class="ctrl">
+            <span>Clump height</span>
+            <input id="bladeHeight" type="range" min="0.3" max="1.5" step="0.02" value="0.72" />
+            <em id="bladeHeightVal">0.72</em>
+          </label>
+          <!-- kept for settings restore compatibility (hidden via CSS if needed) -->
+          <input type="hidden" id="bladeCurve" value="0.2" />
+          <input type="hidden" id="bladeSegments" value="1" />
+          <input type="hidden" id="bunchBlades" value="1" />
+          <label class="ctrl">
+            <span>Density</span>
+            <input id="density" type="range" min="0.3" max="1.5" step="0.05" value="1" />
+            <em id="densityVal">1.00</em>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="lodEnabled" checked />
+            Distance LOD (blades → chunks)
+          </label>
+          <label class="ctrl">
+            <span>LOD near</span>
+            <input id="lodNear" type="range" min="4" max="40" step="1" value="14" />
+            <em id="lodNearVal">14</em>
+          </label>
+          <label class="ctrl">
+            <span>LOD far</span>
+            <input id="lodFar" type="range" min="10" max="70" step="1" value="28" />
+            <em id="lodFarVal">28</em>
+          </label>
+          <label class="ctrl">
+            <span>Scale min</span>
+            <input id="scaleMin" type="range" min="0.3" max="1.2" step="0.05" value="0.55" />
+            <em id="scaleMinVal">0.55</em>
+          </label>
+          <label class="ctrl">
+            <span>Scale max</span>
+            <input id="scaleMax" type="range" min="0.5" max="2" step="0.05" value="1.4" />
+            <em id="scaleMaxVal">1.40</em>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="usePath" checked />
+            Clear path through field
+          </label>
+          <label class="check">
+            <input type="checkbox" id="slopeMask" checked />
+            Slope mask (no cliff grass)
+          </label>
+          <label class="check">
+            <input type="checkbox" id="grassVisible" checked />
+            Show grass
+          </label>
+          <button type="button" id="rebuildBtn" class="btn">Rebuild field</button>
+        </section>
+
+        <!-- PLAYER INTERACTION -->
+        <section class="section">
+          <div class="section-head">
+            <h2>Player interaction</h2>
+            <label class="toggle">
+              <input type="checkbox" id="interactEnabled" checked />
+              <span>On</span>
+            </label>
+          </div>
+          <label class="ctrl">
+            <span>Radius</span>
+            <input id="playerRadius" type="range" min="0.2" max="3" step="0.05" value="0.95" />
+            <em id="playerRadiusVal">0.95</em>
+          </label>
+          <label class="ctrl">
+            <span>Push</span>
+            <input id="pushStrength" type="range" min="0" max="1.5" step="0.05" value="0.55" />
+            <em id="pushStrengthVal">0.55</em>
+          </label>
+          <label class="ctrl">
+            <span>Flatten</span>
+            <input id="flattenStrength" type="range" min="0" max="1" step="0.05" value="0.28" />
+            <em id="flattenStrengthVal">0.28</em>
+          </label>
+          <label class="ctrl">
+            <span>Push shadow</span>
+            <input id="pushShadow" type="range" min="0" max="1" step="0.05" value="0.72" />
+            <em id="pushShadowVal">0.72</em>
+          </label>
+          <label class="ctrl">
+            <span>Move speed</span>
+            <input id="moveSpeed" type="range" min="1" max="12" step="0.5" value="5.5" />
+            <em id="moveSpeedVal">5.5</em>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="playerVisible" checked />
+            Show player
+          </label>
+          <label class="check">
+            <input type="checkbox" id="cameraFollow" checked />
+            Camera follow player
+          </label>
+        </section>
+
+        <!-- COLORS / LOOK (A+ style: flat + noise) -->
+        <section class="section">
+          <div class="section-head"><h2>Color (flat + noise)</h2></div>
+          <p class="section-note">
+            A+ Grass style — one flat colour, variation from a noise texture (no tip gradient)
+          </p>
+          <label class="ctrl color">
+            <span>Grass</span>
+            <input id="grassColor" type="color" value="#7dcf72" />
+          </label>
+          <label class="ctrl color">
+            <span>Noise tint</span>
+            <input id="noiseColor" type="color" value="#8fd97a" />
+          </label>
+          <label class="ctrl">
+            <span>Patch size</span>
+            <input id="noiseScale" type="range" min="0.015" max="0.25" step="0.005" value="0.04" />
+            <em id="noiseScaleVal">0.04</em>
+          </label>
+          <label class="ctrl">
+            <span>Patch amount</span>
+            <input id="noiseStrength" type="range" min="0" max="1" step="0.02" value="0.1" />
+            <em id="noiseStrengthVal">0.10</em>
+          </label>
+          <label class="ctrl">
+            <span>Patch contrast</span>
+            <input id="noiseContrast" type="range" min="0.5" max="2.5" step="0.05" value="0.7" />
+            <em id="noiseContrastVal">0.70</em>
+          </label>
+          <label class="ctrl">
+            <span>Edge soft</span>
+            <input id="patchSoftness" type="range" min="0.02" max="0.45" step="0.01" value="0.45" />
+            <em id="patchSoftnessVal">0.45</em>
+          </label>
+          <label class="ctrl">
+            <span>Root AO</span>
+            <input id="rootAO" type="range" min="0" max="0.5" step="0.02" value="0.04" />
+            <em id="rootAOVal">0.04</em>
+          </label>
+          <label class="ctrl color">
+            <span>Ground</span>
+            <input id="groundColor" type="color" value="#6fc468" />
+          </label>
+          <label class="ctrl color">
+            <span>Sky / fog</span>
+            <input id="fogColor" type="color" value="#a8d4f5" />
+          </label>
+          <label class="ctrl">
+            <span>Ambient</span>
+            <input id="ambient" type="range" min="0" max="1" step="0.05" value="0.68" />
+            <em id="ambientVal">0.68</em>
+          </label>
+          <label class="ctrl">
+            <span>SSS</span>
+            <input id="sss" type="range" min="0" max="1.5" step="0.05" value="0.28" />
+            <em id="sssVal">0.28</em>
+          </label>
+          <label class="ctrl">
+            <span>Specular</span>
+            <input id="specular" type="range" min="0" max="1" step="0.05" value="0.06" />
+            <em id="specularVal">0.06</em>
+          </label>
+        </section>
+
+        <!-- SCENE -->
+        <section class="section">
+          <div class="section-head"><h2>Scene</h2></div>
+          <label class="check">
+            <input type="checkbox" id="fogEnabled" checked />
+            Fog
+          </label>
+          <label class="ctrl">
+            <span>Fog near</span>
+            <input id="fogNear" type="range" min="5" max="60" step="1" value="28" />
+            <em id="fogNearVal">28</em>
+          </label>
+          <label class="ctrl">
+            <span>Fog far</span>
+            <input id="fogFar" type="range" min="20" max="120" step="1" value="78" />
+            <em id="fogFarVal">78</em>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="shadowsEnabled" checked />
+            Shadows
+          </label>
+          <label class="check">
+            <input type="checkbox" id="groundVisible" checked />
+            Show ground
+          </label>
+          <label class="check">
+            <input type="checkbox" id="sunDiscVisible" checked />
+            Show sun disc
+          </label>
+          <label class="ctrl">
+            <span>Sun azimuth</span>
+            <input id="sunAzimuth" type="range" min="0" max="360" step="1" value="40" />
+            <em id="sunAzimuthVal">40°</em>
+          </label>
+          <label class="ctrl">
+            <span>Sun elevation</span>
+            <input id="sunElevation" type="range" min="5" max="85" step="1" value="48" />
+            <em id="sunElevationVal">48°</em>
+          </label>
+          <label class="ctrl">
+            <span>Sun intensity</span>
+            <input id="sunIntensity" type="range" min="0" max="4" step="0.05" value="1.6" />
+            <em id="sunIntensityVal">1.60</em>
+          </label>
+          <label class="ctrl">
+            <span>Sky fill</span>
+            <input id="hemiIntensity" type="range" min="0" max="1.5" step="0.05" value="0.55" />
+            <em id="hemiIntensityVal">0.55</em>
+          </label>
+          <label class="ctrl">
+            <span>Exposure</span>
+            <input id="exposure" type="range" min="0.4" max="2" step="0.05" value="1.05" />
+            <em id="exposureVal">1.05</em>
+          </label>
+          <button type="button" id="saveDefaultsBtn" class="btn">Save as project defaults (F2)</button>
+          <button type="button" id="resetBtn" class="btn ghost">Reset to project defaults</button>
+          <p class="section-note" id="saveStatus">
+            Panel auto-saves to this browser. Soft refresh (Cmd+R) keeps it. F2 bakes into the project.
+          </p>
+        </section>
+      </div>
+    </aside>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

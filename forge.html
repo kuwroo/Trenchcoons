@@ -4,20 +4,69 @@
   <meta charset="utf-8" />
   <title>Trenchcoons — Asset Forge</title>
   <style>
-    html,body{margin:0;height:100%;background:#0b0d10;overflow:hidden}
+    html,body{margin:0;height:100%;background:#0b0d10;overflow:hidden;font:12px/1.45 ui-monospace,Menlo,monospace;color:#cfe3ef}
     canvas{display:block;width:100vw;height:100vh}
-    #hud{position:fixed;top:8px;left:8px;font:11px/1.45 ui-monospace,Menlo,monospace;
+    #hud{position:fixed;top:44px;left:8px;font:11px/1.45 ui-monospace,Menlo,monospace;
          color:#cfe3ef;background:#0b0d10a8;padding:7px 9px;border-radius:5px;
          white-space:pre;pointer-events:none;z-index:10;backdrop-filter:blur(6px)}
-    body.shot #hud{display:none}
+    body.shot #hud,body.shot #forge-chrome,body.shot #env-panel{display:none!important}
     #err{position:fixed;inset:0;display:none;place-items:center;padding:40px;
          font:13px/1.6 ui-monospace,monospace;color:#ff9a9a;background:#0b0d10;
          white-space:pre-wrap;z-index:99}
+
+    #forge-chrome{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;gap:8px;align-items:center;
+      padding:8px 10px;background:linear-gradient(#0b0d10e8,#0b0d1000);pointer-events:none}
+    #forge-chrome>*{pointer-events:auto}
+    .forge-mode{display:flex;gap:4px;background:#12161ccc;padding:3px;border-radius:8px;border:1px solid #243040}
+    .forge-mode button,.forge-tabs-biome button,.forge-actions button,.forge-mini{
+      appearance:none;border:0;background:#1a2230;color:#cfe3ef;padding:6px 10px;border-radius:6px;
+      cursor:pointer;font:inherit}
+    .forge-mode button.on,.forge-tabs-biome button.on{background:#3a7ab5;color:#fff}
+    .forge-mode button:hover,.forge-tabs-biome button:hover,.forge-actions button:hover{background:#2a3a50}
+    .forge-title{opacity:.7;margin-left:6px}
+
+    #env-panel{position:fixed;top:44px;right:8px;bottom:8px;width:min(360px,42vw);z-index:20;
+      overflow:auto;background:#0b0d10d6;border:1px solid #243040;border-radius:10px;
+      padding:10px 12px;backdrop-filter:blur(10px);box-sizing:border-box}
+    body[data-forge-mode="assets"] #env-panel{display:none}
+    .forge-section{margin:0 0 14px;padding:0 0 12px;border-bottom:1px solid #1c2736}
+    .forge-section:last-child{border-bottom:0}
+    .forge-section h3{margin:0 0 8px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;opacity:.75;
+      display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .forge-section label{display:block;margin:6px 0;font-size:11px}
+    .forge-section input[type="range"]{width:100%;accent-color:#3a7ab5}
+    .forge-section select,.forge-section input[type="number"]{
+      background:#121820;color:#cfe3ef;border:1px solid #2a3a50;border-radius:4px;padding:3px 5px;font:inherit}
+    .forge-colors{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+    .forge-colors label{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+    .forge-colors input[type="color"]{width:100%;height:28px;padding:0;border:1px solid #2a3a50;border-radius:4px;background:transparent}
+    .forge-tabs-biome{display:flex;flex-wrap:wrap;gap:4px}
+    .forge-tabs-biome button{padding:5px 8px;font-size:11px}
+    .forge-scatter-row{display:grid;grid-template-columns:1fr 52px 44px 44px 22px;gap:4px;align-items:end;margin:6px 0}
+    .forge-scatter-row label{margin:0;font-size:10px;opacity:.8}
+    .forge-scatter-row input[type="number"]{width:100%;box-sizing:border-box}
+    .forge-actions{display:flex;flex-wrap:wrap;gap:6px}
+    .forge-actions button{flex:1 1 auto}
+    .forge-mini{padding:2px 7px;font-size:11px}
+    .forge-muted{opacity:.55;font-size:10px;line-height:1.4;margin:8px 0 0}
+    .forge-muted code{color:#9fd0ff}
+    .forge-export{display:block;width:100%;min-height:120px;margin-top:8px;box-sizing:border-box;
+      background:#0a1018;color:#cfe3ef;border:1px solid #2a3a50;border-radius:6px;padding:6px;
+      font:10px/1.35 ui-monospace,Menlo,monospace;resize:vertical}
+    [data-readout]{float:right;opacity:.7}
   </style>
 </head>
-<body>
+<body data-forge-mode="assets">
+  <div id="forge-chrome">
+    <div class="forge-mode">
+      <button type="button" data-mode="assets" class="on">Assets</button>
+      <button type="button" data-mode="env">Environments</button>
+    </div>
+    <span class="forge-title">Forge</span>
+  </div>
   <canvas id="app"></canvas>
   <div id="hud"></div>
+  <aside id="env-panel" hidden></aside>
   <div id="err"></div>
   <script type="module" src="/src/assets/forge/main.ts"></script>
 </body>
