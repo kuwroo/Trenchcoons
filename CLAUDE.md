@@ -173,39 +173,31 @@ the gradient wants (the sweep should be locked to the form, not slide down a
 blade as the wind bends it). If you add another material with a `positionNode`,
 this is the trap.
 
-## Known issue: close-range ground has no texture (structure gate, 29/33)
+## Known issue: close-range ground, partly fixed (structure gate, 28/33)
 
-The largest remaining gate signal, and it is a DESIGN gap rather than a tuning
-one. Measured, median tile detail:
+Mid-distance already passes ABOVE the reference — biome-meadow's near band is
+0.0704 against grasslands.jpg's 0.058 — and the deficit is only the last couple
+of metres, where the tuft lattice leaves the terrain plane visible between
+clumps. `ground-sprig` (three blades, 30 tris, its own 0.30 m lattice in the near
+band only) took grass-close from 0.0176 to 0.0250 and the gate from 29 to 28.
 
-                              lower 60%   bottom 28%   (ref grasslands 0.064 / 0.058)
-  biome-meadow  eye 6          0.0749       0.0704     passes, above the reference
-  rock-collision                0.0798       0.0629     passes
-  grass-close   eye 1.6         0.0176       0.0033     8-20x under
+**THE WINDOW IS EMPTY — do not just turn the density up.** The gate has a
+CEILING as well as a floor, and the two frames pull opposite ways:
 
-The gate is fairly calibrated — it re-derives its thresholds from `refs/` every
-run, and grasslands.jpg scores 0.064, HIGHER than cliffs-tohad's 0.056, so it is
-not the abandoned painterly references inflating it. Mid-distance meadow frames
-already pass. The failure is specifically the ground you see BETWEEN the tufts at
-close range, which is a smooth shaded plane.
+  clutter thin   grass-close      near-noon        rock-collision
+  1.00           0.0322 passes    0.0943 OVER      0.0943 OVER
+  0.86           0.0289 FORMLESS  0.0938 OVER      —
+  0.72           0.0275 FORMLESS  0.0912 ok        0.0943 OVER
+  0.55 (shipped) 0.0250 FORMLESS  0.0908 ok        0.0907 ok
 
-`grain` in ground.ts is deliberately inverted — weak where grass is dense,
-because tufts supply detail as geometry — and that is right at 6 m and wrong at
-1.6 m, where you look down between the blades.
+grass-close needs >=0.031 to clear FORMLESS; near-noon and rock-collision must
+stay <=0.0929. Nothing in between satisfies all three at this asset size, so 0.55
+is the most that breaches no ceiling. Going further needs a different mechanism —
+smaller features rather than more of these — not a bigger number.
 
-RAISING THE MICRO TERM DOES NOT FIX IT, measured: 0.18 -> 0.45 (2.5x) moved
-grass-close's near band only 0.0033 -> 0.0074 against a 0.058 target, left the
-structure count at 29, and pulled `npm run distinct`'s corridor ratio from 2.05
-to 1.74 — eroding the tyre-mark contrast that guard exists to protect, for no
-gate improvement. Reverted.
-
-Near-band grass density is not the lever either: the near band is already at its
-3400-instance cap (0.62 m lattice over a 22 m radius is ~3345 clumps).
-
-So closing this needs a DECISION, not a number: either denser close-range ground
-cover as geometry (costs instances and draw calls) or an actual ground texture —
-and a texture is the painterly direction the brief abandoned, so it is the
-user's call what form it takes.
+Also ruled out by measurement: the ground material's own micro term (0.18 -> 0.45
+reached only 0.0074 and pulled `npm run distinct`'s corridor ratio 2.05 -> 1.74),
+and near-band tuft density (already at its 3400 cap).
 
 ## Known issue: "I don't see tyre marks"
 
