@@ -71,6 +71,35 @@ const BAND_THIN = [1, 0.5, 0.28] as const
 /** Instance ceiling per band, per def. */
 const BAND_CAP = [3400, 2400, 2000] as const
 /**
+ * GROUND CLUTTER: a second, finer lattice in the NEAR BAND ONLY.
+ *
+ * The tuft lattice is 0.62 m and a tuft is 0.27 m across, so at a metre and a
+ * half off the deck you are looking at the smooth terrain plane BETWEEN the
+ * clumps. Measured: shots/grass-close.png's near band scored 0.0033 median tile
+ * detail against refs/genshin/grasslands.jpg's 0.058, while the SAME meadow at
+ * eye 6 (shots/biome-meadow.png) scores 0.0704 and passes above the reference.
+ * The deficit is only in the last couple of metres, so the fix belongs only in
+ * the near band.
+ *
+ * Geometry rather than a texture, on two grounds: the brief abandoned the
+ * painterly overlay because it read as mottled camouflage, and raising the
+ * ground material's own micro term instead was measured and rejected — 2.5x
+ * moved the near band to only 0.0074 and pulled `npm run distinct`'s corridor
+ * ratio from 2.05 to 1.74, eroding the tyre-mark contrast for no gain. The
+ * reference's close-range detail is discrete objects anyway.
+ */
+const CLUTTER_ID = 'ground-sprig'
+const CLUTTER_CELL = 0.30
+const CLUTTER_CAP = 5200
+/**
+ * Thinning on the clutter, tuned against the structure gate's CEILING as well
+ * as its floor. At 1.0 the sprigs took grass-close's median tile detail from
+ * 0.0176 to 0.0322 — the intended fix — but pushed near-noon (eye 3.5) from
+ * 0.0669 to 0.0943, outside the references' own 0.056-0.080 band and into
+ * OVER-DETAILED. Detail has to land IN the band, not above it.
+ */
+const CLUTTER_THIN = 0.55
+/**
  * Global density scale on the art-bible numbers.
  *
  * The biome table authors "clumps per square metre" as a look, and a clump here
@@ -135,7 +164,7 @@ export class Grass {
     private readonly deform: DeformHook | null = null,
   ) {
     this.group.name = 'grass'
-    this.ids = options.ids ?? ['grass-tuft', 'grass-cluster']
+    this.ids = options.ids ?? ['grass-tuft', 'grass-cluster', CLUTTER_ID]
 
     for (const id of this.ids) {
       const part = library.asset(id, 0).parts[0]
@@ -145,7 +174,12 @@ export class Grass {
       const row: Batch[] = []
       for (let b = 0; b < BANDS.length; b++) {
         const lod = part.lods[Math.min(b, part.lods.length - 1)]!
-        const cap = BAND_CAP[b]!
+        // 1, not 0, for the clutter's unused bands: a zero-length
+        // InstancedBufferAttribute is a zero-size WebGPU binding, and the
+        // renderer throws `Binding size ... is zero` once per draw — 264 of them
+        // across the shot set. The mesh still never draws, because `count` stays
+        // at 0.
+        const cap = id === CLUTTER_ID ? (b === 0 ? CLUTTER_CAP : 1) : BAND_CAP[b]!
         const mesh = new THREE.InstancedMesh(lod.geometry, material, cap)
         mesh.name = `grass-${id}-band${b}`
         mesh.count = 0
@@ -339,6 +373,48 @@ export class Grass {
         counts[idx] = n + 1
       }
     }
+    // ── the clutter pass ─────────────────────────────────────────────────────
+    // Near band only, its own finer lattice, and independent of `grassAt`'s
+    // single-id choice: this is not a biome's grass, it is ground cover under
+    // whatever grass the biome does have. Gated on the same density field, so
+    // it stops at the sand exactly where the tufts do.
+    const ci = this.ids.indexOf(CLUTTER_ID)
+    if (band === 0 && ci >= 0) {
+      const cc = CLUTTER_CELL
+      const cBatch = this.batches[ci]![0]!
+      let n = 0
+      const ca = cc * cc
+      const ci0 = Math.floor((cx - outer) / cc)
+      const ci1 = Math.ceil((cx + outer) / cc)
+      const cj0 = Math.floor((cz - outer) / cc)
+      const cj1 = Math.ceil((cz + outer) / cc)
+      for (let j = cj0; j <= cj1 && n < cBatch.cap; j++) {
+        for (let i = ci0; i <= ci1 && n < cBatch.cap; i++) {
+          const x = (i + hash2(i, j, 131)) * cc
+          const z = (j + hash2(i, j, 137)) * cc
+          if (Math.hypot(x - cx, z - cz) > outer) continue
+          const g = this.world.grassAt(x, z)
+          if (!g.id || g.density <= 0) continue
+          if (hash2(i, j, 149) > g.density * DENSITY * ca * CLUTTER_THIN) continue
+          const y = this.world.heightAt(x, z)
+          if (y < this.world.waterLevel + 0.4) continue
+          if (this.world.roughSlopeAt(x, z, 0.9) > MAX_SLOPE) continue
+          const yaw = hash2(i, j, 151) * Math.PI * 2
+          const scale = g.scale * (SCALE_LO + hash2(i, j, 157) * SCALE_SPAN)
+          this.p.set(x, y - 0.02, z)
+          this.e.set(0, yaw, 0)
+          this.q.setFromEuler(this.e)
+          this.s.set(scale, scale * (0.7 + hash2(i, j, 163) * 0.5), scale)
+          cBatch.mesh.setMatrixAt(n, this.m.compose(this.p, this.q, this.s))
+          cBatch.root.setXY(n, x, z)
+          cBatch.rot.setXY(n, Math.cos(yaw), Math.sin(yaw))
+          cBatch.inv.setX(n, 1 / scale)
+          n++
+        }
+      }
+      counts[ci] = n
+    }
+
     for (let k = 0; k < this.ids.length; k++) {
       const batch = this.batches[k]![band]!
       batch.mesh.count = counts[k]!

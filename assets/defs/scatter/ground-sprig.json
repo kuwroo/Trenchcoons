@@ -1,0 +1,32 @@
+{
+  "id": "ground-sprig",
+  "version": 1,
+  "type": "scatter",
+  "notes": "GROUND-LEVEL CLUTTER, and the cheapest asset in the library on purpose. Its whole job is to break up the smooth terrain plane you see BETWEEN the tufts at close range: the structure gate measured grass-close's near band at 0.0033 median tile detail against refs/genshin/grasslands.jpg's 0.058, an eight-to-twentyfold shortfall, while the same meadow at eye 6 already passes ABOVE the reference. So the deficit is specifically the last couple of metres. Three blades rather than fourteen, and a third of the height, because it is filling gaps rather than reading as a clump — at this size it is a value break on the ground, not a silhouette. Placed by the near band's own finer second lattice in src/world/grass.ts, so it inherits the wind field and the deform crush for free and costs no new material or draw call beyond its own batch. NOT a texture: the brief abandoned the painterly overlay because it read as mottled camouflage, and the reference's close-range detail is discrete objects anyway - individual sprigs, litter and small stones, not noise.",
+  "generator": "grassTuft",
+  "params": {
+    "height": 0.15,
+    "blades": 3,
+    "width": 0.045,
+    "bend": 1.05,
+    "fan": 0.06,
+    "vary": 0.5,
+    "splay": 0.8,
+    "lift": 0.3
+  },
+  "surfaces": {
+    "body": "grassMound"
+  },
+  "variants": 2,
+  "seedJitter": {
+    "height": 0.35,
+    "bend": 0.3,
+    "splay": 0.2
+  },
+  "biomes": [
+    "meadow",
+    "forest",
+    "wetland",
+    "coast"
+  ]
+}

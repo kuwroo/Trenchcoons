@@ -25,6 +25,7 @@
 // there is nothing to author and nothing to carry. An extra attribute here
 // would be dead weight in every instance buffer in the game.
 
+import type * as THREE from 'three/webgpu'
 import { MeshBuilder, normalize, type Vec3 } from '../mesh'
 import { billboard } from '../impostor'
 import { boundsFromPoints, noCollision } from '../collider'
@@ -169,15 +170,31 @@ export const grassTuft = defineGenerator({
     const lod1 = tuft(p, blades, Math.max(2, Math.round(p.blades * 0.45)), 2)
     const lod2 = tuft(p, blades, Math.max(1, Math.round(p.blades * 0.2)), 1)
     const pts = pointsOf(tuft(p, blades, p.blades, 3))
+    // See `impostor` below.
+    const coarsest = lod2.build()
+    const card = billboard(pts, 0.5)
+    let impostor: THREE.BufferGeometry = card
+    if ((card.index?.count ?? 0) >= (coarsest.index?.count ?? 0)) {
+      card.dispose()
+      impostor = coarsest
+    }
     return {
       parts: [{
         slot: 'body',
-        lods: [lod0.build(), lod1.build(), lod2.build()],
+        lods: [lod0.build(), lod1.build(), coarsest],
         // One card from the tuft's bounds, not two from its outline. At the
         // range grass swaps to an impostor it is a few pixels of green; a
         // crossed pair would cost more than the two-blade rung it replaces,
         // which would make the impostor pointless.
-        impostor: billboard(pts, 0.5),
+        //
+        // AND THE CARD IS ONLY USED IF IT IS ACTUALLY CHEAPER. The note above
+        // is right in general and wrong for a small enough tuft: `ground-sprig`
+        // is three blades, so its coarsest rung is 2 triangles and a quad card
+        // is 4 — the impostor cost MORE than the geometry it stood in for, which
+        // the budget invariant rejects. Returning the rung itself makes the
+        // registry share it (`shared` there is an identity test) and the asset
+        // then costs one batch fewer as well.
+        impostor,
       }],
       collider: noCollision(),
       bounds: boundsFromPoints(pts),
