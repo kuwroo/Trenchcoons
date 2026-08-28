@@ -168,7 +168,7 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
     ambient: 0.88,
   },
   // "bark #8B4A3A (warm red-brown ... not grey-brown)".
-  bark: { shadow: 0x6b4436, ambient: 0.82 },
+  bark: { shadow: 0x4f3f37, ambient: 0.82 },
   // Meadow rock: lit #A6B8C4, shadow #6F86A8 (blue). The shadow stop is a
   // LIFTED blue-grey, not a navy: the reference's darkest rock facet sits at
   // luma 0.40, which is most of what makes Genshin's rock read as sculptural

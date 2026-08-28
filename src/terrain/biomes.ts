@@ -235,7 +235,9 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
       S('boulder-large', 300, 0.9, 1.65, 0.35),
       S('outcrop-shelf', 90, 0.9, 1.7, 0.4),
       S('bush-round', 1300, 0.7, 1.3, 0.6),
-      S('conifer-tall', 240, 0.8, 1.25, 0.5),
+      S('conifer-tall', 130, 0.9, 1.4, 0.5),
+      S('pp-tree-broad', 150, 1.2, 2.0, 0.45),
+      S('pp-birch-young', 120, 1.0, 1.7, 0.5),
     ],
     grassDensity: 0.9, grassId: 'grass-tuft', grassScale: 1,
     fog: 0xbfe0f0, fogDensity: 0.7, sunTint: 0xfff6dc, ambient: 1,
@@ -275,8 +277,17 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
       // this biome at a 3 m eye, where overlapping tier plates make the conifer
       // the most overdrawn thing in the build, and it sat 0.2-3 ms over a 17.5 ms
       // bar with the meadow at 16.1.
-      S('conifer-tall', 4000, 0.85, 1.5, 0.55),
-      S('conifer-young', 2300, 0.8, 1.4, 0.6),
+      // FOUR SILHOUETTES, not one repeated. The conifers keep the biome's
+      // spine and the imported pack supplies the broadleaves; scales run to
+      // 1.9 because "trees too small" was the report and a 7 m authored tree
+      // at 0.85 reads as scrub next to a 15 m conifer.
+      S('conifer-tall', 2100, 0.9, 1.6, 0.55),
+      S('conifer-young', 1200, 0.85, 1.45, 0.6),
+      S('pp-tree-broad', 1500, 1.1, 1.9, 0.55),
+      S('pp-tree-round', 1100, 1.0, 1.7, 0.6),
+      S('pp-birch-tall', 900, 1.0, 1.8, 0.5),
+      S('pp-birch-young', 700, 0.9, 1.5, 0.6),
+      S('pp-rock-mossy', 260, 0.7, 1.4, 0.5),
       S('shrub-broadleaf', 2600, 0.8, 1.4, 0.6),
       S('bush-round', 1100, 0.8, 1.4, 0.6),
       S('log-fallen', 300, 0.8, 1.3, 0.4),
