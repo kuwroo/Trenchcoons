@@ -129,7 +129,7 @@ export class TerrainWorld {
   private readonly nTemp: Noise2
   private readonly nMoist: Noise2
   private readonly nRelief: Noise2
-  private readonly forced: BiomeId | null
+  private forced: BiomeId | null
 
   /** Scratch, so `climateAt` never allocates. */
   private readonly scratch: Climate = {
@@ -168,6 +168,25 @@ export class TerrainWorld {
     this.bake()
   }
 
+  /**
+   * Force (or clear) a single biome over the whole world, then rebake.
+   * Forge Environments and `?biome=` both need this without rebuilding the
+   * noise tables.
+   */
+  setForced(id: BiomeId | null): void {
+    this.forced = id
+    this.memoX = Number.NaN
+    this.memoZ = Number.NaN
+    this.bake()
+  }
+
+  /** Re-resolve palette + response maps after a live `BIOME_STYLES` edit. */
+  rebake(): void {
+    this.memoX = Number.NaN
+    this.memoZ = Number.NaN
+    this.bake()
+  }
+
   // ── the heightfield ───────────────────────────────────────────────────────
 
   /**
@@ -179,10 +198,44 @@ export class TerrainWorld {
    */
   private continent(x: number, z: number): number {
     let h = 0
-    h += this.nBase(x / 380, z / 380) * 150
-    h += this.nBase(x / 150 + 13.5, z / 150 - 7.25) * 55
-    h += this.nDetail(x / 88 - 41.0, z / 88 + 22.5) * 17
-    h += this.nDetail(x / 46 + 91.5, z / 46 - 63.0) * 5
+    // AMPLITUDE TO WAVELENGTH IS THE WHOLE THING, and the greybox ladder had it
+    // wrong by about a factor of five at every scale. Measured over a 6 km box
+    // by sampling the drawn height (`__trench.heightAt`) on an 8 m grid:
+    //
+    //   slope        median 28.0deg   p90 45.0deg   p99 55.1deg   max 69.1deg
+    //
+    // A 28-degree median is a black-diamond ski run and 45 degrees is unwalkable,
+    // so the ENTIRE map was steeper than mountain terrain — which is exactly the
+    // "hills too steep, unnatural" report. Real landscapes are the opposite
+    // shape: strongly right-skewed, dominated by gentle ground with steep
+    // features as the exception. Rolling pasture runs a 2-6 degree median; even
+    // hilly countryside sits around 8-15; sustained slopes above ~35 do not
+    // survive because that is roughly the angle of repose for soil, and anything
+    // steeper sheds its regolith and becomes bare rock.
+    //
+    // The old ladder asked for 150 m of relief across a 380 m wavelength — a
+    // 1:2.5 ratio, which is a Himalayan valley wall, and then summed three more
+    // octaves almost as steep on top of it. Natural relief of that size belongs
+    // on a 2-4 km wavelength (1:15 to 1:25). So the octaves keep their heights,
+    // which is what gives the world its vistas, and are stretched out to the
+    // wavelengths that height actually occurs over:
+    //
+    //   octave   was            now            ratio
+    //   1        150 m / 380    190 m / 2400   1:12.6
+    //   2         55 m / 150     62 m /  900   1:14.5
+    //   3         17 m /  88     19 m /  380   1:20
+    //   4          5 m /  46      6 m /  150   1:25
+    //   5        —               1.6 m /  62   1:39   new, ground undulation
+    //
+    // Amplitudes fall faster than wavelengths across the ladder (a Hurst-like
+    // cascade), so each finer octave is gentler than the one above it rather
+    // than equally steep. That is what makes small-scale terrain read as texture
+    // on a landform instead of as more landform.
+    h += this.nBase(x / 2400, z / 2400) * 190
+    h += this.nBase(x / 900 + 13.5, z / 900 - 7.25) * 62
+    h += this.nDetail(x / 380 - 41.0, z / 380 + 22.5) * 19
+    h += this.nDetail(x / 150 + 91.5, z / 150 - 63.0) * 6
+    h += this.nDetail(x / 62 + 17.0, z / 62 - 29.0) * 1.6
     h -= (x * x + z * z) / (2 * CURVE_RADIUS)
     // THE RIM. A ring of real mountains around the playable area.
     //
