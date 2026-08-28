@@ -26,7 +26,7 @@
 import { Polytope, type Plane } from '../hull'
 import type * as THREE from 'three/webgpu'
 import { MeshBuilder, dot, normalize, type Vec3 } from '../mesh'
-import { boundsFromPoints, hullShape, solidCollider } from '../collider'
+import { boundsFromPoints, hullShape, noCollision, solidCollider } from '../collider'
 import { defineGenerator, randomDirection, type GenContext, type RawAsset } from '../generator'
 import { num, type Params } from '../schema'
 
@@ -40,6 +40,7 @@ const schema = {
   tilt: num(0.16, 0, 0.7, 'How far the main top plane tilts off level.', 'rad'),
   embed: num(0.16, 0, 0.6, 'Fraction of the height that sits BELOW y=0, i.e. buried.'),
   jag: num(0.55, 0, 1, 'Spread of cut depths. 0 makes every cut the same size.'),
+  solidAbove: num(0.7, 0, 20, 'Authored height above which the kart collides with it.', 'm'),
 } as const
 
 function support(points: readonly Vec3[], n: Vec3): number {
@@ -108,6 +109,9 @@ export const rock = defineGenerator({
   },
   schema,
   generate(p, ctx): RawAsset {
+    // Authored, not jittered — see `collider` below.
+    const a = ctx.authored as Partial<Record<keyof typeof schema, number>>
+    const nominal = (a.size ?? p.size) * (a.height ?? p.height)
     const planes = buildPlanes(p, ctx)
     // Depths drawn ONCE and shared across the ladder, so LOD1 is LOD0 with the
     // last cuts omitted rather than a differently-shaped rock. The silhouette
@@ -210,9 +214,24 @@ export const rock = defineGenerator({
       // AND read as a paper cutout the moment the sun came off-axis, which is
       // the one thing a solid opaque form must never do.
       parts: [{ slot: 'body', lods, impostor: lods[lods.length - 1]! }],
-      // Exact, and free: the render mesh is already convex, so the proxy is the
-      // same solid. Nothing else in the library gets a proxy this tight.
-      collider: solidCollider(hullShape(pts)),
+      // SOLID BY SIZE. Every rock used to be solid regardless of size, and the
+      // consequence was measured in the running game: of 30 collidable scatter
+      // instances in streaming range, the median radius was 0.21 m — the solid
+      // set was dominated by `rock-pebble`, authored 0.34 m across and 0.20 m
+      // tall. A twenty-centimetre pebble was stopping the kart dead, so driving
+      // anywhere gravelly was a series of collisions with things the player
+      // cannot even see.
+      //
+      // Tested on the AUTHORED nominal height rather than the realised bounds,
+      // for the reason `shrub` documents: `seedJitter` moves the realised size
+      // per variant, so the same def would answer differently for two siblings
+      // and the kart would bounce off one pebble and roll over its twin.
+      //
+      // 0.7 m leaves rock-small (0.76), rock-medium (1.80) and boulder-large
+      // (4.59) solid, and lets the kart through rock-pebble (0.20) and
+      // rock-slab (0.59) — a slab is 2.7 m wide and knee-high, which reads as
+      // something you drive over, not something you stop against.
+      collider: nominal >= p.solidAbove ? solidCollider(hullShape(pts)) : noCollision(),
       bounds,
     }
   },
