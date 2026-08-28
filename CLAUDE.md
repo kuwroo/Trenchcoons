@@ -109,86 +109,31 @@ goes blue here, so a shadowed foreground reads as distant -- greybox-noon's
 plainly green near hill measured H178), and the metric was unsigned, scoring an
 INVERTED ladder as highly as a correct one. See tools/complaints.mjs.
 
-## Known issue: the foreground is too DARK (hue is fixed)
+## Resolved: the foreground was too dark — and the cause was the TERRAIN
 
-The one failing check in `npm run complaints`. Measured on the median of a
-ground-level near band against refs/genshin/grasslands.jpg:
+`npm run complaints` is 9/9. Worth reading before trusting any of the tone-curve
+notes that used to live here, because five mechanisms were tried against this and
+all five were the wrong layer:
 
-  reference   H78  V0.85
-  was         H113 V0.55
-  now         H90  V0.63     hue fixed in biomes.ts; VALUE still 0.22 short
+  toneGamma, BASE_EXPOSURE, ground FILL, a polynomial low-mid lift, and a
+  luminance-gated shaped lift — each raised foreground value and each regressed a
+  gate calibrated on refs/.
 
-**FIVE mechanisms have been tried for the value and every one regresses the gate
-suite.** Measured on the same frame and the same 33-shot set. Do not re-run them:
+The reason none of them worked is that the ground was too STEEP to catch the
+light. At a 28-degree median slope most visible ground faced away from the sun
+and sat on the material's MID stop; no grading operation can make a turned
+surface read as a lit one. Fixing the landform slope to an 8-degree median put
+the ground on its LIT stop and the value arrived on its own:
 
-  lever                            fg V   spread   palette  struct  shadow  hue
-  baseline                         0.625  0.573    12       28      6       6
-  toneGamma 1.27->1.12, exp 1.5    0.698  0.525    20       30      1       6
-  BASE_EXPOSURE 1.26 -> 1.45       0.660  0.569    15       29      5       6
-  ground.ts FILL 0.12 -> 0.30      0.718  0.490    16       30      3       6
-  polynomial low-mid lift, k 0.09  0.687  0.518    19       30      2       6
-  GATED LUMA LIFT, k 0.12          0.681  0.616    12       31      6       6
-  GATED LUMA LIFT, k 0.28          0.749  0.643    16       31      7       6
+  foreground   V0.63  ->  V0.88     (reference 0.85)
 
-The shaped curve the previous note asked for was built and it IS the right shape
-— worth re-implementing rather than re-deriving:
+The lesson generalises: when five independent knobs in one layer all fail the
+same way, the variable is in a different layer. Look for the geometry or the
+lighting geometry, not a harder curve.
 
-    l = luminance(t)
-    w = smoothstep(0.18, 0.40, l) * (1 - smoothstep(0.62, 1.0, l))
-    out = t * (l + k*w) / l
-
-Three properties, all measured. It holds HUE (H88.7 against the baseline's
-H90.0, where a per-channel version drifted to H97 because green sits in the
-window's plateau while red is still in its ramp). It holds the SHADOWS, which a
-`t*(1-t)^2` polynomial does not — that expression is ~6.75t near black, and at
-k 0.09 it pushed ten frames to "NO SHADOW PIXELS AT ALL", i.e. it deleted the
-dark anchor. And it INCREASES p05-p95 spread (0.573 -> 0.616) rather than
-compressing it, because the plateau is a pure offset.
-
-It still fails, on the one gate nobody expected: STRUCTURE. The window's ramp
-(0.18-0.40) has derivative > 1, so it expands local contrast in the darker
-tiles, and rock-collision crosses the over-detail ceiling at k as low as 0.12 —
-the same ceiling the ground clutter was dialled back for. At k 0.28, where the
-value target is finally met, structure goes 28 -> 31.
-
-CONCLUSION: this is not a knob problem. Five independent mechanisms — two
-scalars, a fill floor, and two curve shapes — all buy foreground value and all
-pay for it in a gate calibrated on refs/. Either the V>=0.75 target is wrong for
-this build's look, or several gates need recalibrating together as one decision.
-Both are art-direction calls, not tuning. Do not spend another round bisecting a
-scalar.
-
-**Do not chase the value in the palette either.** Measured: raising the meadow's
-authored base value 0.61 -> 0.80 (+0.19) moved the rendered band 0.547 -> 0.625
-(+0.078). That is a compression of about 0.4, so reaching 0.85 would need an
-authored value above 1.0. The remainder is exposure and tonemap. This is the
-number behind the long-standing "no palette value fixes either end" rule.
-
-Warm and bright must move TOGETHER. Three candidates that warmed the hue with the
-value left alone all turned the sunlit slope to dry stubble — warm plus dark is
-khaki, not meadow.
-
-SATURATION IS NOT MEASURABLE on this frame and is deliberately not gated. The
-brightest-half of the band says the build is over-saturated (0.68 vs 0.56); the
-median of the same band says under-saturated (0.66 vs 0.74). The difference is
-content, not colour: this build draws instanced blades whose bright lime tips
-dominate any brightest-N selection and the reference is painted grass with none.
-
-Ruled out by measurement, so nobody re-derives them:
-  * the scatter grass surfaces (`grassMound`, `scrub`) — magenta-ing
-    base/shadow/lit on both moves the band only H107 -> H103; grass is a
-    minority of it. The band is the terrain ground, shaded by
-    `src/terrain/ground.ts`, which is not a `PainterlyMaterial`.
-  * `assets/defs/surfaces/meadow.json` — its stops were already right.
-
-Resolved, and worth knowing about as a class of bug: the vertical-gradient term
-was dead on every blade of grass in the game. `positionLocal` is
-SELF-REFERENTIAL in any material that overrides `positionNode` — grass does, for
-wind and crush — so the gradient read the node being defined in terms of it and
-evaluated to nothing. Fixed by reading `positionGeometry`, which is also what
-the gradient wants (the sweep should be locked to the form, not slide down a
-blade as the wind bends it). If you add another material with a `positionNode`,
-this is the trap.
+It also required re-greening the palette, because stops tuned against the steep
+world read as straw on the flat one — see the meadow row in
+src/terrain/biomes.ts.
 
 ## Known issue: close-range ground, partly fixed (structure gate, 28/33)
 
