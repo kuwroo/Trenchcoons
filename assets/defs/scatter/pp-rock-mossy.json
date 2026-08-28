@@ -1,0 +1,20 @@
+{
+  "id": "pp-rock-mossy",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Mossy boulder from the pack. One part; the pack's moss is a UV swatch we cannot read, so it takes the stone surface.",
+  "params": {
+    "mesh": "pp-rock-mossy",
+    "scale": 1.1
+  },
+  "surfaces": {
+    "body": "stone"
+  },
+  "variants": 1,
+  "biomes": [
+    "forest",
+    "meadow",
+    "alpine"
+  ]
+}

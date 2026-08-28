@@ -1,0 +1,21 @@
+{
+  "id": "pp-birch-young",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Younger birch, the smallest of the four trees.",
+  "params": {
+    "mesh": "pp-birch-young",
+    "scale": 1.05
+  },
+  "surfaces": {
+    "trunk": "bark",
+    "foliage": "leaf"
+  },
+  "variants": 1,
+  "biomes": [
+    "forest",
+    "wetland",
+    "meadow"
+  ]
+}

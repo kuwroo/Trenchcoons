@@ -33,6 +33,11 @@ export interface BoolSpec {
   default: boolean
   doc: string
 }
+export interface StrSpec {
+  kind: 'str'
+  default: string
+  doc: string
+}
 export interface EnumSpec<V extends string = string> {
   kind: 'enum'
   default: V
@@ -40,15 +45,16 @@ export interface EnumSpec<V extends string = string> {
   doc: string
 }
 
-export type ParamSpec = NumberSpec | IntSpec | BoolSpec | EnumSpec
+export type ParamSpec = NumberSpec | IntSpec | BoolSpec | StrSpec | EnumSpec
 export type Schema = Readonly<Record<string, ParamSpec>>
 export type ParamValue = number | boolean | string
 
 type ValueOf<P extends ParamSpec> =
   P extends NumberSpec | IntSpec ? number
     : P extends BoolSpec ? boolean
-      : P extends EnumSpec<infer V> ? V
-        : never
+      : P extends StrSpec ? string
+        : P extends EnumSpec<infer V> ? V
+          : never
 
 /** The typed params object a generator receives. Derived, never hand-written. */
 export type Params<S extends Schema> = { readonly [K in keyof S]: ValueOf<S[K]> }
@@ -60,6 +66,12 @@ export const num = (
 export const int = (def: number, min: number, max: number, doc: string): IntSpec =>
   ({ kind: 'int', default: def, min, max, doc })
 export const bool = (def: boolean, doc: string): BoolSpec => ({ kind: 'bool', default: def, doc })
+/**
+ * A free string. Only for naming something the generator resolves itself — the
+ * `imported` generator names a document in assets/meshes. Anything with a fixed
+ * set of legal values should be an `oneOf` so the Forge can offer them.
+ */
+export const str = (def: string, doc: string): StrSpec => ({ kind: 'str', default: def, doc })
 export const oneOf = <const V extends string>(
   def: V, values: readonly V[], doc: string,
 ): EnumSpec<V> => ({ kind: 'enum', default: def, values, doc })
@@ -105,6 +117,11 @@ function coerce(id: string, key: string, spec: ParamSpec, value: unknown): Param
       const c = Math.min(spec.max, Math.max(spec.min, value))
       return spec.kind === 'int' ? Math.round(c) : c
     }
+    case 'str':
+      if (typeof value !== 'string') {
+        throw new Error(`${id}.params.${key}: expected a string, got ${JSON.stringify(value)}`)
+      }
+      return value
     case 'bool':
       if (typeof value !== 'boolean') {
         throw new Error(`${id}.params.${key}: expected a boolean, got ${JSON.stringify(value)}`)

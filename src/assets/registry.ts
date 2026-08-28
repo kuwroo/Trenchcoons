@@ -24,11 +24,13 @@ import type { AssetLod, AssetPart, GeneratedAsset } from './types'
 import { conifer } from './generators/conifer'
 import { deadwood } from './generators/deadwood'
 import { grassTuft } from './generators/grass'
+import { imported } from './generators/imported'
 import { outcrop } from './generators/outcrop'
 import { rock } from './generators/rock'
 import { shrub } from './generators/shrub'
 
-const GENERATORS: readonly AnyGenerator[] = [conifer, deadwood, grassTuft, outcrop, rock, shrub]
+const GENERATORS: readonly AnyGenerator[] =
+  [conifer, deadwood, grassTuft, imported, outcrop, rock, shrub]
 
 const BY_NAME = new Map<string, AnyGenerator>()
 for (const g of GENERATORS) {

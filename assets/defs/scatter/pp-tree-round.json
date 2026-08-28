@@ -1,0 +1,20 @@
+{
+  "id": "pp-tree-round",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Rounder, shorter broadleaf. Second silhouette so a stand of trees is not one shape repeated.",
+  "params": {
+    "mesh": "pp-tree-round",
+    "scale": 1.25
+  },
+  "surfaces": {
+    "trunk": "bark",
+    "foliage": "foliage"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow",
+    "forest"
+  ]
+}

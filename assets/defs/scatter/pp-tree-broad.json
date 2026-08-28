@@ -1,0 +1,20 @@
+{
+  "id": "pp-tree-broad",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Broadleaf from the low-poly nature pack. Imported through tools/fbx-import.mjs; the trunk/foliage split is recovered from the pack's UV palette patches, so it lights with the project's own bark and foliage surfaces rather than arriving as one flat mass.",
+  "params": {
+    "mesh": "pp-tree-broad",
+    "scale": 1.35
+  },
+  "surfaces": {
+    "trunk": "bark",
+    "foliage": "foliage"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow",
+    "forest"
+  ]
+}

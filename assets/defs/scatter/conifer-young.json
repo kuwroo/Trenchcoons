@@ -3,7 +3,7 @@
   "version": 1,
   "type": "scatter",
   "generator": "conifer",
-  "notes": "Sapling. Fewer, wider plates relative to height and almost no bare trunk, so it reads as a different age of the same species rather than as the tall one scaled down — which is the tell that gives a procedural forest away.",
+  "notes": "Sapling. Fewer, wider plates relative to height and almost no bare trunk, so it reads as a different age of the same species rather than as the tall one scaled down \u2014 which is the tell that gives a procedural forest away.",
   "params": {
     "height": 5.2,
     "tiers": 5,
@@ -21,7 +21,7 @@
     "foliage": "needle",
     "trunk": "bark"
   },
-  "variants": 2,
+  "variants": 1,
   "seedJitter": {
     "height": 0.3,
     "spread": 0.2,
