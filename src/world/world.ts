@@ -107,23 +107,31 @@ export function buildWorld(
   // plus a pale sky"), and it is what gives the coast biome an edge to exist
   // along — ART_BIBLE §5, "Coast is the exception ... it appears wherever any
   // land biome meets the water."
+  // THE SEA IS A GLOBAL PLANE, not a disc around the lagoon.
+  //
+  // It used to be two cylinders at the lagoon, and they were invisible: the old
+  // `waterLevel` evaluated ~59 m BELOW the bottom of the very bowl they were
+  // meant to fill (see the note in src/terrain/world.ts), so the game shipped
+  // with no water in it anywhere. Meanwhile `coastality` is a function of
+  // height above sea level and therefore global, so beaches were being
+  // classified and painted along a shoreline that had nothing on the other side
+  // of it. That is exactly what "where's the sea next to the coast?" describes.
+  //
+  // A plane rather than a fitted mesh because sea level is a plane — every
+  // basin that reaches -100 m fills, which is how a coastline is supposed to
+  // arise. At the measured height distribution that is about a tenth of the
+  // world, including the lagoon bowl out to roughly a 250 m radius.
+  //
+  // The sand ring went with the cylinders. The shore reads from the coast biome
+  // now, which follows the real waterline everywhere instead of only here.
   const water = mat('water')
-  const sand = mat('sand')
-  const shore = new THREE.Mesh(
-    new THREE.CylinderGeometry(LAGOON.r * 0.86, LAGOON.r * 0.62, 6, 48), sand,
-  )
-  shore.position.set(LAGOON.x, terrain.waterLevel - 3.4, LAGOON.z)
-  shore.frustumCulled = false
-  shore.name = 'lagoon-shore'
-  group.add(shore)
-
-  const lagoon = new THREE.Mesh(
-    new THREE.CylinderGeometry(LAGOON.r * 0.7, LAGOON.r * 0.55, 5, 48), water,
-  )
-  lagoon.position.set(LAGOON.x, terrain.waterLevel, LAGOON.z)
-  lagoon.frustumCulled = false
-  lagoon.name = 'lagoon'
-  group.add(lagoon)
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(24000, 24000, 1, 1), water)
+  sea.rotation.x = -Math.PI / 2
+  sea.position.set(0, terrain.waterLevel, 0)
+  sea.frustumCulled = false
+  sea.renderOrder = -1
+  sea.name = 'sea'
+  group.add(sea)
 
   // ── the skyline ──────────────────────────────────────────────────────────
   // There is no longer a skyline OBJECT. ART_BIBLE §1 names atmospheric
@@ -144,7 +152,7 @@ export function buildWorld(
   // it a tyre track through a meadow is an albedo stain under a field of
   // undisturbed tufts; with it the blades in the corridor fold. See the note on
   // the crush term in src/world/grass.ts.
-  const grass = new Grass(atmosphere, terrain, wind, library, {}, deform)
+  const grass = new Grass(atmosphere, terrain, wind, deform)
   group.add(grass.group)
   materials.push(...scatter.materials)
 
@@ -182,13 +190,13 @@ export function buildWorld(
         const a = (i / n) * Math.PI * 2 + r * 0.37
         const px = x + Math.cos(a) * r
         const pz = z + Math.sin(a) * r
-        // Water is a DISC, not a global plane: testing `height < waterLevel`
-        // everywhere rejected a perfectly dry meadow 1.5 km away whose only
-        // crime was sitting below the lagoon's surface height.
-        const inLagoon = Math.hypot(px - LAGOON.x, pz - LAGOON.z) < LAGOON.r
-        const depth = inLagoon
-          ? terrain.heightAt(px, pz) - (terrain.waterLevel + SPAWN.freeboard)
-          : 1
+        // Water IS a global plane now, so the test is the honest one. The old
+        // note here said a global test "rejected a perfectly dry meadow 1.5 km
+        // away whose only crime was sitting below the lagoon's surface height"
+        // — which was true, and was a symptom of sea level being buried under
+        // the terrain rather than a reason to keep the water local. Ground
+        // below sea level is now genuinely underwater and must not be spawned on.
+        const depth = terrain.heightAt(px, pz) - (terrain.waterLevel + SPAWN.freeboard)
         const slope = terrain.slopeAt(px, pz)
         let clear = true
         for (const o of scatter.obstacles) {

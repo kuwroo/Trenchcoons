@@ -44,6 +44,9 @@ const CURVE_RADIUS = 400_000
  */
 export const LAGOON = { x: -900, z: -1420, r: 640, depth: 128 }
 
+/** Absolute sea level, metres. See the note where `waterLevel` is assigned. */
+export const SEA_LEVEL = -100
+
 /** Where the rim mountains start and finish rising, metres from the origin. */
 const RIM_START = 2700
 const RIM_END = 4400
@@ -163,8 +166,27 @@ export class TerrainWorld {
     this.nMoist = valueNoise(fork.fork('moisture'))
     this.nRelief = valueNoise(fork.fork('relief'))
     this.forced = options.forced ?? null
-    // Partly filled, so a rim of shore shows all the way round.
-    this.waterLevel = this.continent(LAGOON.x, LAGOON.z) - LAGOON.depth * 0.46
+    // SEA LEVEL IS AN ABSOLUTE, and the old formula put it UNDERGROUND.
+    //
+    // `continent(LAGOON) - depth*0.46` evaluated to about -204 m while the
+    // lagoon bowl it was meant to fill bottoms out at -145 m, so the water plane
+    // sat 59 m BELOW the deepest ground in the world and nothing was ever
+    // visible. That is the "where's the sea next to the coast?" report: the
+    // coast biome classifies correctly off `above = h - waterLevel`, so beaches
+    // were being drawn along a shoreline that had no water in it.
+    //
+    // Chosen from the height distribution rather than from the bowl. Measured
+    // over an 8 km box on a 25 m grid, the share of ground under a candidate
+    // level is:
+    //
+    //   -140 m  5.7%     -60 m  16.4%      0 m  31.5%
+    //   -100 m  9.9%     -30 m  22.5%     30 m  42.7%
+    //
+    // -100 m floods a tenth of the world — enough for real coastline wherever a
+    // basin reaches it, including filling the lagoon bowl to roughly a 250 m
+    // radius — while leaving the meadow, the car spawn (-67 m) and every hill
+    // dry. Raising it further starts drowning the drivable middle of the map.
+    this.waterLevel = SEA_LEVEL
     this.bake()
   }
 
