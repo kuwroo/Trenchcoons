@@ -203,7 +203,7 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     // The remainder is exposure and tonemap, not albedo. CLAUDE.md has said "no
     // palette value fixes either end" all along; this is the measurement behind
     // it.
-    base: 0x9dcc56, shadow: 0x2b8a44, lit: 0xcaf26d,
+    base: 0x4b9e2c, shadow: 0x2b8a44, lit: 0x7cd13f,
     cliff: 0x7d95a4, under: 0x8b6a45, rock: 0x7d95a4,
     // 0.86 — rock from 31 degrees of tilt. The docstring in ground.ts records
     // that a global 0.86 threshold once produced "broad brown blotches on green",
@@ -417,4 +417,88 @@ export const BIOME_ALIAS: Record<string, BiomeId> = {
 
 export function biomeId(name: string): BiomeId | null {
   return BIOME_ALIAS[name.toLowerCase()] ?? null
+}
+
+/** Deep-clone one style. Used by the Forge Environments editor so live edits
+ *  can reset without reloading the page. */
+export function cloneBiomeStyle(style: BiomeStyle): BiomeStyle {
+  return {
+    ...style,
+    scatter: style.scatter.map((e) => ({
+      id: e.id,
+      perKm2: e.perKm2,
+      scale: [e.scale[0], e.scale[1]] as [number, number],
+      ...(e.maxSlope === undefined ? {} : { maxSlope: e.maxSlope }),
+    })),
+  }
+}
+
+/** Snapshot of the authored table. Taken once; live edits mutate `BIOME_STYLES`
+ *  in place and rebake the terrain maps. */
+let authoredSnapshot: Record<BiomeId, BiomeStyle> | null = null
+
+function ensureSnapshot(): Record<BiomeId, BiomeStyle> {
+  if (!authoredSnapshot) {
+    authoredSnapshot = {} as Record<BiomeId, BiomeStyle>
+    for (const id of BIOME_IDS) authoredSnapshot[id] = cloneBiomeStyle(BIOME_STYLES[id])
+  }
+  return authoredSnapshot
+}
+
+/** Replace one biome's live style (Forge Environments). Callers must rebake
+ *  `TerrainWorld` and rebuild scatter choices afterward. */
+export function replaceBiomeStyle(id: BiomeId, style: BiomeStyle): void {
+  ensureSnapshot()
+  const next = cloneBiomeStyle(style)
+  next.id = id
+  BIOME_STYLES[id] = next
+}
+
+/** Restore one biome (or every biome) to the authored table. */
+export function resetBiomeStyle(id?: BiomeId): void {
+  const snap = ensureSnapshot()
+  if (id) {
+    BIOME_STYLES[id] = cloneBiomeStyle(snap[id])
+    return
+  }
+  for (const bid of BIOME_IDS) BIOME_STYLES[bid] = cloneBiomeStyle(snap[bid])
+}
+
+/** Authored (pre-edit) style for a biome. */
+export function authoredBiomeStyle(id: BiomeId): BiomeStyle {
+  return cloneBiomeStyle(ensureSnapshot()[id])
+}
+
+/** Serialise a style for Copy JSON — hex colours as `#rrggbb`, numbers plain. */
+export function biomeStyleToJson(style: BiomeStyle): string {
+  const hex = (n: number): string => `#${(n >>> 0).toString(16).padStart(6, '0')}`
+  const body = {
+    id: style.id,
+    label: style.label,
+    base: hex(style.base),
+    shadow: hex(style.shadow),
+    lit: hex(style.lit),
+    cliff: hex(style.cliff),
+    under: hex(style.under),
+    rock: hex(style.rock),
+    relief: style.relief,
+    reliefScale: style.reliefScale,
+    reliefRidge: style.reliefRidge,
+    rockSlope: style.rockSlope,
+    scatter: style.scatter.map((e) => ({
+      id: e.id,
+      perKm2: e.perKm2,
+      scale: e.scale,
+      ...(e.maxSlope === undefined ? {} : { maxSlope: e.maxSlope }),
+    })),
+    grassDensity: style.grassDensity,
+    grassId: style.grassId,
+    grassScale: style.grassScale,
+    fog: hex(style.fog),
+    fogDensity: style.fogDensity,
+    sunTint: hex(style.sunTint),
+    ambient: style.ambient,
+    response: style.response,
+  }
+  return `${JSON.stringify(body, null, 2)}\n`
 }

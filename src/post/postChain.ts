@@ -136,7 +136,7 @@ export const POST_DEFAULTS: PostSettings = {
   // (0.36, 0.06) — the old window's upper edge sat below half the population the
   // shadow gate actually reads.
   satBase: 2.00,
-  satHighlight: 0.30,
+  satHighlight: 1.10,
   satShadow: 0.92,
   // A whisper, and 0.075 was not one; 0.048 is.
   //
