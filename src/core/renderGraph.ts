@@ -42,11 +42,24 @@ export class RenderGraph {
   /**
    * Passes that ACCUMULATE world state, as opposed to consuming it to make
    * pixels. Deformation marks are history — a capture at frame 1200 has to
-   * simulate all 1200 frames or the marks are not there — but nothing in the
-   * shadow, opaque, sky, water or post passes feeds back into that history.
+   * simulate all 1200 frames or the marks are not there — and so is the water's
+   * foam wake, for exactly the same reason.
+   *
+   * `water` WAS NOT IN THIS LIST, and that is the whole explanation for "the
+   * wake is a ten-metre blob under the car". `main.ts` fast-forwards every
+   * capture to within four frames of its target with `stateOnly`, so a wake with
+   * an eleven-second life was being accumulated over four frames — about a metre
+   * of travel per frame at the speeds these captures are taken at. The trail was
+   * not decaying too fast and the stamps were not misplaced; 99% of them had
+   * never been issued.
+   *
+   * The cost is the same as the deform stamp's, which this file already calls "a
+   * handful of quads": one instanced draw per frame plus a full-target decay
+   * every fourth. The sheet's own DRAW is not here — it happens inside the scene
+   * pass, so a fast-forward frame still pays nothing for pixels.
    */
   private static readonly STATEFUL: readonly PassName[] = [
-    'atmosphereLUT', 'windField', 'deformStamp', 'deformDecay',
+    'atmosphereLUT', 'windField', 'deformStamp', 'deformDecay', 'water',
   ]
 
   /**

@@ -23,6 +23,8 @@
 //   ?drive=throttle:0-300,steer:40-300
 //                                 accelerate then turn in
 //   ?frame=90                     resolve `__ready` at frame 90 and freeze
+//   ?camlift=9                    CAPTURE ONLY: raise the rig, look point held,
+//                                 so the view pitches down over the car
 //   ?camyaw=0.8&camarm=0.72       CAPTURE ONLY: swing the chase arm round to a
 //                                 3/4 rear view and pull it in. Nothing in
 //                                 gameplay sets these; see camera.ts.
@@ -162,6 +164,7 @@ export function readVehicleOptions(search = location.search): VehicleUrlOptions 
   const yaw = Number(q.get('caryaw'))
   const camyaw = Number(q.get('camyaw'))
   const camarm = Number(q.get('camarm'))
+  const camlift = Number(q.get('camlift'))
   return {
     enabled: off ? false : shot ? asked : true,
     script,
@@ -173,6 +176,7 @@ export function readVehicleOptions(search = location.search): VehicleUrlOptions 
     framing: {
       yaw: Number.isFinite(camyaw) && q.has('camyaw') ? camyaw : null,
       arm: Number.isFinite(camarm) && q.has('camarm') ? camarm : null,
+      lift: Number.isFinite(camlift) && q.has('camlift') ? camlift : null,
     },
   }
 }

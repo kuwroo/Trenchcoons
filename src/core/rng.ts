@@ -24,9 +24,13 @@ export function hashSeed(s: string): number {
 }
 
 export class Rng {
+  /** u32 seed this stream was constructed from. Terrain, scatter and grass
+   *  fold it into their spatial hashes so `?seed=` changes the whole map. */
+  readonly seed: number
   private next: () => number
   constructor(seed: number | string) {
-    this.next = mulberry32(typeof seed === 'string' ? hashSeed(seed) : seed)
+    this.seed = (typeof seed === 'string' ? hashSeed(seed) : seed) >>> 0
+    this.next = mulberry32(this.seed)
   }
   float(): number { return this.next() }
   range(lo: number, hi: number): number { return lo + this.next() * (hi - lo) }

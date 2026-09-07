@@ -1,0 +1,38 @@
+{
+  "id": "qn-pebble-1",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius Pebble_Round_1. Path/shoulder grit language from overgrown.",
+  "params": {
+    "mesh": "qn-pebble-1",
+    "scale": 1.4,
+    "solidAbove": 0.05,
+    "radius": 0.6
+  },
+  "surfaces": {
+    "body": "stone"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow",
+    "forest"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest"
+    ],
+    "placement": "Small pebbles for meadow grit; high density, tiny footprint.",
+    "maxSlope": 0.85,
+    "densityPerKm2": [
+      600,
+      1800
+    ],
+    "scale": [
+      0.8,
+      1.6
+    ],
+    "avoid": "Not a substitute for coast rock-pebble wading set."
+  }
+}

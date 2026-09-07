@@ -19,6 +19,7 @@ import { ScriptedInput, readVehicleOptions } from './vehicle/replay'
 import { EngineAudio } from './vehicle/audio'
 import { ContactShadow, NO_CAST_LAYER } from './vehicle/contactShadow'
 import { Deformation, readDeformOptions } from './deform'
+import { WaterSystem, readWaterOptions } from './water'
 
 declare global {
   interface Window {
@@ -38,6 +39,8 @@ declare global {
       /** Scatter footprints, so the harness can find a spawn that is not
        *  inside a 13 m bush. */
       obstacles?: () => { x: number; z: number; r: number }[]
+      /** Crew pose: paw reach miss, hover, release. See `Kart.probe`. */
+      crew?: () => ReturnType<Kart['probe']> | null
       /** Vehicle telemetry. The shot harness reads this to find crests and
        *  landings instead of guessing frame numbers. */
       car?: () => (VehicleTelemetry & {
@@ -68,6 +71,26 @@ declare global {
       /** Near solid forms with their proxy extents, so the shot harness can
        *  AIM a collision capture at a real rock instead of guessing. */
       solids?: () => { x: number; z: number; top: number; radius: number }[]
+      /**
+       * Force-rebuild scatter/grass/clipmap at a world XZ and return the near
+       * solid fingerprint. Used to assert the map is fixed under streaming —
+       * drive away, come back, same rocks.
+       */
+      streamAt?: (x: number, z: number) => {
+        solids: { x: number; z: number; top: number; radius: number }[]
+        veg: { grass: number; scatter: number }
+      }
+      /**
+       * Every DRAWN scatter instance at a forced streaming centre, with its
+       * band. Diffing two of these a few metres apart is the only honest way to
+       * measure pop-in — the frame is self-consistent whether an instance is
+       * there or not.
+       */
+      /** Allocated instance slots, so a cap can be sized against what is used. */
+      scatterBatches?: () => { batches: number; meshes: number; slots: number; mib: number }
+      scatterAt?: (x: number, z: number) => {
+        x: number; z: number; band: number; key: string; scale: number; fade: number
+      }[]
     }
   }
 }
@@ -145,7 +168,15 @@ async function boot() {
   const deformOpts = readDeformOptions()
   const deform = deformOpts.enabled ? new Deformation(deformOpts, terrain) : null
 
-  const world = buildWorld(atmosphere, wind, deform?.hook ?? null, terrain)
+  // ── the sea ───────────────────────────────────────────────────────────────
+  // Built before the world, like the deformation field and for the same reason:
+  // `buildWorld` places the sheet and excludes it from the sun cascades, and it
+  // cannot do either with an object that does not exist yet. It reads
+  // `terrain.bathyMap`, so it also has to come after the terrain bake.
+  const waterOpts = readWaterOptions()
+  const water = waterOpts.enabled ? new WaterSystem(atmosphere, terrain, waterOpts) : null
+
+  const world = buildWorld(atmosphere, wind, deform?.hook ?? null, terrain, water?.water ?? null)
   scene.add(world.group)
 
   // `pos`'s y is a floor, not an absolute: the heightfield is procedural, so a
@@ -179,11 +210,31 @@ async function boot() {
   } | null = null
 
   if (carOpts.enabled) {
+    // Object collision first: climbable rocks feed `rideHeightAt` into the
+    // suspension field below, so medium rocks read as ramps rather than walls.
+    // Deliberately outside src/vehicle — see src/world/collision.ts.
+    const collision = new ObjectCollision(world.scatter.solids)
+
     // The vehicle's height field is the terrain PLUS the deformation field, so
     // the suspension, the plane fit and therefore the body roll all feel the
     // ruts. Consumer (3) of ARCHITECTURE's read list.
-    const vehicle = new Vehicle(deform ? deform.heightField(world.groundAt) : world.groundAt)
-    const kart = new Kart(atmosphere)
+    // …and PLUS the water surface, which is what lets the raccoons drive on the
+    // sea. `max` of the two, so over land the terrain (ruts and all) wins and
+    // over water the sheet does; see `WaterSystem.heightField`.
+    // …and PLUS climbable solid tops, so a rock-medium is a slope the wheels
+    // walk up instead of an invisible kerb the chassis bounces off.
+    let field = deform ? deform.heightField(world.groundAt) : world.groundAt
+    if (water) field = water.heightField(field)
+    const baseField = field
+    field = (x: number, z: number) => {
+      const g = baseField(x, z)
+      return collision.rideHeightAt(x, z, g)
+    }
+    const vehicle = new Vehicle(field)
+    // The kart takes the GLOBAL wind field: its flaps and the crew's tails are
+    // the first non-vegetation consumers of it, which is what wind.ts's own
+    // header was holding the slot open for.
+    const kart = new Kart(atmosphere, wind)
     vehicle.object.add(kart.root)
     scene.add(vehicle.object)
     const shadow = new ContactShadow(world.groundAt)
@@ -226,10 +277,40 @@ async function boot() {
       audio = new EngineAudio()
       audio.arm()
     }
-    // Object collision. Deliberately outside src/vehicle — see
-    // src/world/collision.ts for why that is the right seam and not a dodge.
-    const collision = new ObjectCollision(world.scatter.solids)
     car = { vehicle, kart, chase, input, shadow, audio, collision }
+
+    // Left-click drag orbits the chase arm around the kart. Sticky offsets —
+    // release leaves the camera where you put it. Skipped under `?shot=1` so a
+    // capture URL cannot pick up a stray pointer event from the harness.
+    if (!state.shot) {
+      let orbiting = false
+      let lastX = 0
+      let lastY = 0
+      canvas.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return
+        orbiting = true
+        lastX = e.clientX
+        lastY = e.clientY
+        canvas.setPointerCapture(e.pointerId)
+      })
+      canvas.addEventListener('pointerup', (e) => {
+        if (e.button !== 0) return
+        orbiting = false
+      })
+      canvas.addEventListener('pointercancel', () => { orbiting = false })
+      canvas.addEventListener('pointermove', (e) => {
+        if (!orbiting || !car) return
+        const dx = e.clientX - lastX
+        const dy = e.clientY - lastY
+        lastX = e.clientX
+        lastY = e.clientY
+        car.chase.orbitBy(dx, dy)
+      })
+      canvas.addEventListener('dblclick', (e) => {
+        if (e.button !== 0) return
+        car?.chase.orbitReset()
+      })
+    }
   }
 
   const pipeline = buildPostChain(renderer, scene, camera, atmosphere)
@@ -291,6 +372,23 @@ async function boot() {
     }
   })
 
+  // 10 water: recentre the polar sheet on the camera, advance the wave clock,
+  //    stamp the wake and decay it. Like the sky dome, the sheet is part of the
+  //    scene and its DRAW happens inside the scene pass owned by 12 — this pass
+  //    is the state it needs before that draw, plus two render-target passes of
+  //    its own.
+  //
+  //    'water' IS IN RenderGraph.STATEFUL, and the first version of this comment
+  //    argued at length that it should not be: a wake decays in seconds, so
+  //    why simulate a thousand frames of it. Measured, that reasoning was
+  //    wrong by two orders of magnitude — `fastForward` runs stateful passes
+  //    only, up to four frames before the capture, so an eleven-second wake was
+  //    being built out of four frames of travel and `shots/water-wake.png` came
+  //    back as a ten-metre white blob under the hull. See the note there.
+  if (water) {
+    graph.register('water', async (ctx) => { await water.pass(renderer, camera, ctx.dt) })
+  }
+
   // 9  sky: the dome is part of the scene, so the draw itself happens inside
   //    the scene pass owned by 12. This pass only advances its state.
   graph.register('sky', (ctx) => { atmosphere.updateSky(camera, ctx.elapsed) })
@@ -333,11 +431,31 @@ async function boot() {
     solids: () => world.scatter.solids.map((s) => ({
       x: s.x, z: s.z, top: s.topY, radius: s.radius,
     })),
+    scatterBatches: () => world.scatter.budget(),
+    scatterAt: (x: number, z: number) => {
+      world.scatter.dumpSink = []
+      world.recentre(x, z, true)
+      const d = world.scatter.dumpSink
+      world.scatter.dumpSink = null
+      return d
+    },
+    streamAt: (x: number, z: number) => {
+      world.recentre(x, z, true)
+      return {
+        solids: world.scatter.solids.map((s) => ({
+          x: s.x, z: s.z, top: s.topY, radius: s.radius,
+        })),
+        veg: { grass: world.grass.instances, scatter: world.scatter.instances },
+      }
+    },
     deform: (x: number, z: number) => {
       if (!deform) return null
       const m = deform.mirror.sample(x, z)
       return { ...m, displacement: deform.mirror.displacement(x, z) }
     },
+    // Crew pose diagnostics. Exists because a two-bone IK that cannot reach its
+    // target clamps silently — see `Kart.probe`.
+    crew: () => car?.kart.probe() ?? null,
     car: () => {
       if (!car) return null
       const p = car.vehicle.object.position
@@ -405,6 +523,11 @@ async function boot() {
       // ground, applied to the velocity the model is about to read. This is the
       // second pass the spec asks for: your own ruts change how the car drives.
       deform?.applyToVehicle(car.vehicle, dt)
+      // Water drag and the lateral grip cut, through the same seam. Order
+      // against the deformation field does not matter: both compose the
+      // velocity from the same longitudinal/lateral basis and neither reads a
+      // quantity the other writes.
+      water?.applyToVehicle(car.vehicle, dt)
       car.vehicle.update(dt, drive)
       // Object collision, between the model and everything that reads the pose.
       // `Vehicle.update` reads its velocity at the top of the step and
@@ -414,7 +537,17 @@ async function boot() {
       car.collision.resolve(car.vehicle)
       // …and this frame's contacts become next frame's marks.
       deform?.sampleVehicle(car.vehicle, dt)
-      car.kart.update(dt, clock.elapsed, car.vehicle)
+      water?.sampleVehicle(car.vehicle, dt)
+      // Foam collars round anything standing in the water. After
+      // `sampleVehicle`, which clears the stamp list.
+      water?.stampObstacles(
+        world.obstacles, car.vehicle.object.position.x, car.vehicle.object.position.z,
+      )
+      // The camera is passed so the "!" glyph can billboard. It is the same
+      // camera the chase rig drives, read BEFORE `chase.update` — one frame of
+      // lag on a 0.42 m glyph is under a pixel, and reading it after would mean
+      // billboarding against a camera the frame has not been rendered from yet.
+      car.kart.update(dt, clock.elapsed, car.vehicle, camera)
       if (dt > 0) car.audio?.update(dt, car.vehicle.telemetry, drive.throttle, FEEL.maxSpeed)
       // After the kart, before the camera: the shadow reads the same pose the
       // wheels were just placed at, and the shadow patch is scene geometry the
@@ -426,6 +559,12 @@ async function boot() {
     // With no car the field follows the camera, so `?deform=1` on a free-cam
     // URL still has a populated near tier under the view.
     if (deform && !car) deform.setCentre(camera.position.x, camera.position.z)
+    // …and the foam collars do too, or every `car=0` water capture is of a sea
+    // with bare rocks standing in it.
+    if (water && !car) {
+      water.clearStamps()
+      water.stampObstacles(world.obstacles, camera.position.x, camera.position.z)
+    }
 
     // ── streaming: terrain, scatter and grass follow the player ─────────────
     // Centred on the CAR when there is one. The chase camera trails the kart by

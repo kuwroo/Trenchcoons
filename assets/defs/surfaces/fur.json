@@ -1,25 +1,25 @@
 {
   "id": "fur",
-  "version": 2,
+  "version": 9,
   "type": "surface",
-  "notes": "Raccoon fur. v2 moves it OFF the cardboard's hue: v1 measured a mean head hue of 22-30deg against the box front face at 23deg, so heads and vehicle were one material to the eye and the pair read as two teddy bears in a brown box. A raccoon is a grizzled grey-brown, so the shadow and base stops are now cool \u2014 violet-grey, sat ~0.15-0.19, well clear of the box's 0.6 at 36deg \u2014 while the LIT and TOP stops stay warm, which is the ART_BIBLE rule ('light warms hue ~50deg toward yellow and raises value') rather than a compromise. rimStrength came down from 0.9 because a 0.9 sky rim on a 0.29 m sphere floods the whole head and washes out the brush; detailStrength is up so the stroke relief survives on a curved surface the way it does on the flat box face. Saturation corrected: lit must sit BELOW shadow in chroma (measured -0.15 across references); the earlier ART_BIBLE rule had this inverted. Brush overlay reduced 0.78 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. Brush disabled (0.18 -> 0). At brushScale 0.24 m on a head-sized object the pattern repeats once or twice across the whole surface, which reads as speckle rather than texture \u2014 and the painterly direction is abandoned (ART_BIBLE 1).",
+  "notes": "Raccoon fur, the grizzled mid-value mass. v3 WARMS IT BACK, and that is a deliberate reversal of v2 with a condition attached. v2 pushed the base and shadow stops to violet-grey (#7e6b70, H340) to escape a measured failure: at H22-30 the heads were the same material as the box front at H23 and the pair read as two teddy bears in a brown box. The reference sheet (09ea03c1) proves warm fur is right — a quantise of the driver's face puts the mid fur at #8b6f64, H16 S0.28 V0.55, only 12 degrees off the box — but it also shows WHY it works there and did not here: the reference separates fur from cardboard by VALUE and SATURATION (fur V0.55 S0.28 against the box's V0.77 S0.45) and it hangs a cream brow blaze, a cream muzzle and near-black paws, nose and tail rings on the head to break it up. v2's raccoon had none of those marks, so hue was the only separator it had left and it had to spend it. Those marks now exist as geometry, so the hue is spent on being a raccoon instead. V4 PULLED IT BACK OFF PINK. v3 authored lit #b8a291 with topGain 1.1 and it rendered as salmon: the ramp warms the lit stop again on top of the authored warm, and a 0.29 m sphere is nearly all lit stop, so the heads came out pig-pink. The lit and top stops are now held near the reference's own measured #a58974 (H25 S0.30 V0.65) with topGain at 1.0, i.e. the WARMING IS SPENT IN THE DEFINITION INSTEAD OF BY THE RAMP. detailStrength 0.34 -> 0.10 and reliefShade 0.95 -> 0.40 in the same pass: on the flat box face that pair is relief, but on a head-sized sphere it is the terrain camouflage mottle the painterly direction was abandoned for, and it was destroying the face markings it sat under. THE CONDITION: this only holds while `furLight` stays chalky (S0.20) and `furDark` stays near-black. If the pair ever read as teddy bears again, revert THIS stop and keep the marks — the marks are the part that was missing. SATURATION, MEASURED PROPERLY AT LAST — and the two previous notes on it were both wrong, so this replaces them. Three A/B builds settled it against car-crew's passenger head, quantised: (1) `saturationGain` is INERT on this surface — at 1.0 the render moved S0.50 -> S0.48, so the term cannot reach it and the earlier round spent pushing it (0.30 -> 0.08, no movement) was pushing on nothing. (2) With a PURE NEUTRAL GREY albedo at the same values, the fur still renders S0.22-0.33 — that is the ILLUMINANT's own floor, and it happens to be exactly the reference's S0.28. (3) Therefore the pipeline roughly ADDS the albedo's chroma to the light's rather than multiplying: authored S0.18 plus a floor of ~0.30 came to the S0.50 that was measured. THE RULE: to render the reference's S0.28 the albedo has to be authored at near-zero chroma. A trace is kept (S0.05-0.11) rather than pure grey so the surface still has a material identity of its own at hours when the light is cool, and so the palette gate's near-grey count does not rise. VALUE was already right and is left alone — the quantise put the dominant fur stop at V0.60 against the reference's V0.55, which is within the illuminant's own spread; only the chroma was 0.22 over.",
   "material": {
-    "base": "#7e6b70",
-    "shadow": "#4a3c4a",
-    "lit": "#b8a497",
-    "top": "#d9bda2",
-    "topGain": 1.1,
+    "base": "#7c7471",
+    "shadow": "#443d3c",
+    "lit": "#837b76",
+    "top": "#948b84",
+    "topGain": 1.0,
     "gradientBase": -0.3,
     "gradientHeight": 0.62,
     "gradientStrength": 0.5,
     "brushScale": 0.24,
     "brushStrength": 0.0,
     "brushSaturation": 0.5,
-    "detailStrength": 0.34,
-    "reliefShade": 0.95,
+    "detailStrength": 0.1,
+    "reliefShade": 0.4,
     "rimStrength": 0.5,
     "rimPower": 2.6,
-    "saturationGain": 0.3,
-    "shadowSkyTint": 0.24
+    "saturationGain": 0.55,
+    "shadowSkyTint": 0.14
   }
 }

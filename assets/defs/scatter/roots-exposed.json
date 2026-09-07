@@ -36,5 +36,23 @@
       "shadowSkyTint": 0.45,
       "ambient": 1.05
     }
+  },
+  "rules": {
+    "biomes": [
+      "forest",
+      "wetland",
+      "alpine"
+    ],
+    "placement": "Eroded slope roots with no trunk — ankle-high non-solid scenery where soil has washed from trees.",
+    "maxSlope": 0.5,
+    "densityPerKm2": [
+      126,
+      294
+    ],
+    "scale": [
+      0.8,
+      1.3
+    ],
+    "avoid": "Avoid desert, coast, and open meadow — needs eroded forest / alpine slopes."
   }
 }

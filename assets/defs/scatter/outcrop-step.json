@@ -23,5 +23,22 @@
   "biomes": [
     "meadow",
     "alpine"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "alpine"
+    ],
+    "placement": "Drivable four-course hillside terrace — wide ledges that read as a route, not a fence.",
+    "maxSlope": 0.35,
+    "densityPerKm2": [
+      90,
+      210
+    ],
+    "scale": [
+      0.9,
+      1.8
+    ],
+    "avoid": "Avoid steep cliffs — ledges need drivably gentle setbacks."
+  }
 }

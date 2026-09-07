@@ -26,5 +26,23 @@
     "meadow",
     "forest",
     "coast"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "coast"
+    ],
+    "placement": "Small tight bush for filling verges and rock bases; keep chunky and clustered, not freestanding mid-field.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      1100,
+      1300
+    ],
+    "scale": [
+      0.7,
+      1.4
+    ],
+    "avoid": "Avoid desert and alpine; not for open sand or snowfields."
+  }
 }

@@ -17,26 +17,24 @@
 //   3. keep a little of it as a bounce, so hitting a boulder reads as an impact
 //      rather than as the car quietly stopping
 //
-// …and the vertical axis is left entirely to the suspension, which is already
-// sampling the heightfield. An obstacle whose top is below the chassis is not a
-// collision at all: you drive over a slab, you do not stop against it.
+// …and the vertical axis is left to the suspension. Climbable rocks (medium
+// and below) feed their top into the wheel heightfield via `rideHeightAt`, so
+// the kart rides up them like a ramp; only tall solids (boulders, trunks)
+// produce a hard horizontal block.
 
 import * as THREE from 'three/webgpu'
 import type { Vehicle } from '../vehicle/vehicle'
-import { polyPush, type ProxyPoly } from './proxy'
+import { polyInset, polyPush, type ProxyPoly } from './proxy'
 import type { SolidInstance } from './scatter'
 
 /**
  * Radius of the chassis disc, metres.
  *
- * The kart is 2.7 x 1.6 m. A disc is the right approximation here rather than a
- * box because the proxies are already convex and the response is a push along a
- * surface normal: a box would need an SAT solve to produce the same number, and
- * the difference is under half a metre on a form whose own footprint is 2-8 m.
- * Sized between the half-width and the half-length so a nose-on hit stops the
- * car about where the bumper is.
+ * Shrunk from 1.05: the old disc reached past the bumper and snagged every
+ * pebble beside the wheels. Half-width of the box is ~0.8 m; 0.70 sits inside
+ * the visible body so small rocks glance under / past.
  */
-const KART_RADIUS = 1.05
+const KART_RADIUS = 0.70
 /**
  * How much of the incoming speed comes back as a bounce.
  *
@@ -46,10 +44,21 @@ const KART_RADIUS = 1.05
  */
 const RESTITUTION = 0.18
 /**
- * Chassis clearance, metres. An obstacle whose top is below the chassis origin
- * minus this is driven over.
+ * Chassis underside clearance below the axle, metres.
+ *
+ * The collision volume's floor sits at `axleY - CLEARANCE`. A SMALLER value
+ * raises that floor, so low rocks pass under the hitbox. 0.10 clears pebbles
+ * and the low end of rock-small; medium rocks are handled as ramps instead.
  */
-const CLEARANCE = 0.28
+const CLEARANCE = 0.10
+/**
+ * Tallest solid the wheels will ride as a ramp, metres of proxy height.
+ *
+ * rock-medium (incl. scale jitter) tops out around 2 m of proxy height;
+ * boulder-large / outcrops / trunks sit well above and stay hard blockers.
+ * Climbables contribute to `rideHeightAt` so the suspension walks up them.
+ */
+const CLIMB_MAX = 2.15
 /** Solver passes. Two is enough to get out of a corner between two rocks. */
 const PASSES = 2
 
@@ -62,10 +71,51 @@ export interface CollisionState {
   impact: number
 }
 
+function solidHeight(s: SolidInstance): number {
+  return (s.poly.top - s.poly.bottom) * s.scale
+}
+
+function isClimbable(s: SolidInstance): boolean {
+  return solidHeight(s) <= CLIMB_MAX
+}
+
+/** Local-space inset of a world XZ into a solid's footprint. */
+function solidInset(s: SolidInstance, x: number, z: number): number {
+  const dx = x - s.x
+  const dz = z - s.z
+  if (dx * dx + dz * dz > (s.radius + 0.5) * (s.radius + 0.5)) return -Infinity
+  const inv = 1 / s.scale
+  const lx = (dx * s.cos - dz * s.sin) * inv
+  const lz = (dx * s.sin + dz * s.cos) * inv
+  // Inset is in local units; convert to world metres.
+  return polyInset(s.poly.points, lx, lz) * s.scale
+}
+
 export class ObjectCollision {
   readonly state: CollisionState = { contact: false, impact: 0 }
 
   constructor(private readonly solids: readonly SolidInstance[]) {}
+
+  /**
+   * Ground height under a wheel once climbable solids are folded in.
+   *
+   * Near a rock's rim the height eases from `groundY` up to the proxy top over
+   * ~0.7 m of inset, so the kart walks up medium rocks like a ramp instead of
+   * hitting a vertical step the moment a tyre crosses the silhouette.
+   */
+  rideHeightAt(x: number, z: number, groundY: number): number {
+    let y = groundY
+    for (const s of this.solids) {
+      if (!isClimbable(s)) continue
+      const inset = solidInset(s, x, z)
+      if (inset < 0) continue
+      const ramp = Math.min(0.85, Math.max(0.35, s.radius * 0.4))
+      const t = inset >= ramp ? 1 : (inset / ramp) * (inset / ramp) * (3 - 2 * (inset / ramp))
+      const target = groundY + t * Math.max(0, s.topY - groundY)
+      if (target > y) y = target
+    }
+    return y
+  }
 
   /**
    * Resolve, in place. Call AFTER `Vehicle.update` and before anything that
@@ -86,9 +136,10 @@ export class ObjectCollision {
         const dz = p.z - s.z
         const reach = s.radius + KART_RADIUS
         if (dx * dx + dz * dz > reach * reach) continue
-        // Drive-over test. `topY` is the world top of the proxy; the chassis
-        // origin sits on the axle line, so anything below it clears.
+        // Drive-under: raised hitbox floor. Low rocks never become a wall.
         if (s.topY < p.y - CLEARANCE) continue
+        // Climbable solids are ramps via rideHeightAt — do not hard-block.
+        if (isClimbable(s)) continue
         if (!pushOut(s, p, v)) continue
         moved = true
         touched = true

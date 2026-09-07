@@ -109,6 +109,19 @@ export const BOARD = {
   segments: 8,
 } as const
 
+/**
+ * Where the exhaust is taped on. One wall only — the sheet strings it along a
+ * single side and a symmetric pair would read as a design feature rather than as
+ * something scrounged.
+ */
+export const EXHAUST = { x: 1, y: -0.24, z: -0.05 } as const
+
+/** Deterministic 0..1 hash. No Math.random in generation, ever. */
+function hash(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453
+  return x - Math.floor(x)
+}
+
 /** Evenly spaced positions spanning [-half, +half], inclusive of both ends. */
 function span(half: number, pitch: number): number[] {
   const n = Math.max(2, Math.floor((half * 2) / pitch) + 1)
@@ -239,25 +252,80 @@ export function boxShellGeometry(
 }
 
 /**
- * A box flap, hinged at its own origin and spanning y 0..len, with the free
- * edge cut across the flutes so the corrugation shows.
+ * A box flap, hinged at its own origin and spanning y 0..len, with a TORN free
+ * edge.
  *
- * Built at its true width rather than scaled per instance: the long side flaps
- * and the short end flaps therefore need two geometries and two batches instead
- * of one, which is a draw call well spent — an x-scaled flap stretches its
- * scallops into ellipses and the corrugation stops reading as a repeat.
+ * THE REGULAR SCALLOP IS GONE, and it was the single most invented shape on the
+ * vehicle. The free edge used to carry evenly spaced beads at an 0.086 m pitch —
+ * authored as "the corrugation exposed along a cut flap edge", which is a real
+ * thing on real board. Two problems with it, and the second is fatal:
+ *
+ *   IT IS 17x OVERSCALE. Real C-flute is about 5 mm. At 0.086 m the crests are
+ *   9.6 px wide at the chase camera, comfortably resolvable, so the eye reads
+ *   them as individual objects rather than as a texture.
+ *   IT IS PERFECTLY REGULAR, and nothing else on this vehicle is. A row of 31
+ *   identical evenly spaced bumps running the whole top perimeter reads as
+ *   extruded plastic trim or corrugated tubing — manufactured — which fights the
+ *   one thing the box has to say, that two animals tore it off a skip.
+ *
+ * The reference's flap edges are HAND-TORN: an irregular wavering line with the
+ * occasional deeper bite out of it, no repeat anywhere. So the edge is now a
+ * jittered tab profile driven by `hash`, with the tab HEIGHTS varying four times
+ * as much as their widths — which is what tearing does, because the tear follows
+ * the board's own weak points rather than a ruler.
  */
 export function flapGeometry(width: number, len: number, thick: number): THREE.BufferGeometry {
-  const slab = roundedBox(width, len, thick, 0.03, 2)
-  slab.translate(0, len * 0.5, 0)
+  // The tear line sits BELOW the nominal length and what stands proud of it are
+  // the tabs the tear left behind. Additive, because `mergeGeometries` merges and
+  // cannot subtract — an earlier version of this function claimed to take bites
+  // OUT of the edge and was in fact adding boxes at the tip, which would have
+  // produced a lip rather than a tear. Same silhouette either way as long as the
+  // baseline is dropped to make room, and this version can actually do it.
+  // NEARLY SMOOTH NOW, and the reference settled it: THE SHEET TEARS THE TAPE,
+  // NOT THE BOARD. Its rear view draws the box's top edge as a smooth line with a
+  // soft wavy fold, its folded flap band with a clean lower edge, and the only
+  // ragged thing anywhere on the vehicle is the zigzag bottom of a tape patch.
+  // The hand-torn board edge was my idea, not the sheet's, and it has been
+  // flagged by three separate critiques in three different words — saw-tooth
+  // fringe, ribbed pegs, dentil moulding — each time reading as manufactured
+  // trim or as a WOODEN crate, which is the one thing this box must not be.
+  //
+  // What survives is a waver: 0.26 of the board's thickness rather than 1.9,
+  // which at 0.018 m is a soft irregularity in the silhouette rather than a row
+  // of teeth. The tape keeps its torn ends, where the sheet actually puts them.
+  const TABS = Math.max(6, Math.round(width / 0.075))
+  const reach = thick * 0.26
+  const slab = roundedBox(width, len - reach, thick, 0.03, 2)
+  slab.translate(0, (len - reach) * 0.5, 0)
   const parts: THREE.BufferGeometry[] = [slab]
-  const xs = span(width * 0.5 - 0.05, BOARD.cutPitch)
-  // Half the spacing, so the crests touch and the cut reads as one wave rather
-  // than as a row of separate beads.
-  const sr = ((width - 0.1) / Math.max(1, xs.length - 1)) * 0.5
-  for (const x of xs) {
-    const bead = new THREE.CylinderGeometry(sr, sr, thick, BOARD.segments, 1)
-    parts.push(place(bead, x, len - sr * 0.55, 0, Math.PI * 0.5, 0, 0))
+  for (let i = 0; i < TABS; i++) {
+    const j = hash(i * 7 + Math.round(width * 100))
+    const k = hash(i * 23 + 5)
+    // Height varies 4x, width barely at all. Irregular depth over regular
+    // spacing is what tearing looks like — the tear follows the board's own weak
+    // points, so it wanders in DEPTH while travelling steadily along. Regular
+    // depth over irregular spacing reads as damage instead.
+    const high = reach * (0.25 + j * 1.0)
+    // WIDTH VARIES AS MUCH AS HEIGHT NOW, and that is a correction about which
+    // AXIS the viewer sees. A face-on tear reads by its depth profile, so the
+    // first version varied height 4x and width barely — correct for the long
+    // flaps, which fold flat and are seen face-on. The REAR end flap is seen
+    // EDGE-ON from the chase camera for the whole game, and edge-on all you see
+    // is the widths: 28 near-identical blocks in a row, which three separate
+    // critiques called dentil moulding, ribbed pegs, and a wooden crate.
+    // EVERY TAB IS WIDER THAN ITS OWN SPACING, which is what makes the edge a
+    // continuous waver instead of a comb. Varying the width around 1.0 of the
+    // spacing seemed like the way to make the tear irregular and does the
+    // opposite: any tab narrower than the spacing leaves a GAP beside it, so the
+    // row acquires visible teeth with sky between them — which is precisely what
+    // three critiques kept describing. The irregularity has to live in the
+    // OVERLAP, not in whether there is one.
+    const wide = (width / TABS) * (1.15 + k * 0.7)
+    const x = ((i + 0.5) / TABS - 0.5) * width
+    parts.push(place(
+      roundedBox(wide, high, thick, 0.012, 1),
+      x, len - reach + high * 0.5, 0, 0, 0, (k - 0.5) * 0.28,
+    ))
   }
   return mergeGeometries(parts)
 }
@@ -268,44 +336,104 @@ function strip(sx: number, sy: number, sz: number): THREE.BufferGeometry {
 }
 
 /**
- * Packing tape: a band round the girth, a strip under the base, and a shipping
- * label on the rear wall.
+ * Packing tape: DISCRETE PATCHES, plus the strip under the base.
  *
- * The band is the piece that does the work, and it survives the box being open
- * because it never depended on the lid: a band that crosses all four corner
- * folds is unmistakably tape, and it is the only element on the kart that
- * crosses a fold — which is what tells the eye that the folds are folds.
+ * The girth band is gone. It was a continuous loop round all four walls, and the
+ * argument for it was sound as far as it went — a band that crosses every corner
+ * fold is unmistakably tape, and it was the only element on the kart that
+ * crossed a fold. But it is not what the reference does, and the difference
+ * matters: `refs/character/raccoon-boxkart-sheet.png` puts three or four SEPARATE
+ * strips on each face, at slight angles, with torn ends, in the places a box
+ * actually gets taped and re-taped. A continuous band reads as a manufactured
+ * stripe — a racing livery — where a scatter of patches reads as a box that has
+ * been opened and shut a few times, which is the entire character of the
+ * vehicle.
  *
- * What did NOT survive: a spine down the lid seam and a segment of the band
- * running across the lid. Both were drawing a lid. The tape they represented
- * has moved to the underside, which is where the tape on an open box is.
+ * Every patch is deterministic from `hash`. No `Math.random` in generation, ever.
+ *
+ * TORN ENDS ARE THE POINT. A rectangle of tape is a sticker; hand-torn packing
+ * tape has a ragged zigzag at both ends, and at the size these are drawn — about
+ * 0.2 m on a 2.68 m box — the zigzag is the only thing that says "torn by an
+ * animal" rather than "printed on". Each end gets three small triangles cut into
+ * it, which is four extra triangles a patch and the cheapest character on the
+ * whole kart.
  */
+function tapePatch(len: number, high: number, lift: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [strip(len, high, lift)]
+  // Ragged ends: three teeth a side, alternating in and out.
+  const TEETH = 3
+  for (const side of [-1, 1] as const) {
+    for (let i = 0; i < TEETH; i++) {
+      const t = (i + 0.5) / TEETH - 0.5
+      const bite = 0.018 + (i % 2) * 0.014
+      parts.push(place(
+        strip(bite * 2, high / TEETH * 0.9, lift),
+        side * (len * 0.5 + bite * 0.5), t * high, 0,
+      ))
+    }
+  }
+  return mergeGeometries(parts)
+}
+
 export function boxTapeGeometry(
   w: number, h: number, d: number, r: number,
 ): THREE.BufferGeometry {
   const hx = w * 0.5
   const hy = h * 0.5
   const hz = d * 0.5
-  const lift = 0.010
-  const band = 0.30
-  const bandY = -0.02
+  const lift = 0.012
   const parts: THREE.BufferGeometry[] = []
 
-  // Girth band, all the way round the four walls.
-  const b = new MeshBuilder()
-  loft(b, [
-    roundedRect(hx + lift, hz + lift, r + lift, bandY + band * 0.5),
-    roundedRect(hx + lift, hz + lift, r + lift, bandY - band * 0.5),
-  ], { closed: true })
-  parts.push(b.build())
+  // ── the long sides ───────────────────────────────────────────────────────
+  // Placed where the reference puts them: one near each end at about mid-height
+  // and one low and central, all at a few degrees off level.
+  const sidePatches: readonly [number, number, number, number][] = [
+    // along-z, height, length, tilt
+    [-0.72, -0.20, 0.26, 0.09],
+    [0.62, -0.26, 0.22, -0.13],
+    [-0.02, -0.44, 0.30, 0.05],
+  ]
+  for (const face of [-1, 1] as const) {
+    const wall = face * (hx + lift * 0.5)
+    for (let i = 0; i < sidePatches.length; i++) {
+      const [z, y, len, tilt] = sidePatches[i]!
+      // Mirrored per side and jittered off the hash, so the two long faces are
+      // not each other's reflection — a box taped symmetrically looks designed.
+      const j = hash(i * 13 + (face > 0 ? 5 : 0))
+      const g = tapePatch(len * (0.85 + j * 0.3), 0.15, 0.010)
+      // Built in the XY plane; turned onto a wall whose normal is +/-x.
+      g.rotateY(Math.PI * 0.5)
+      parts.push(place(g, wall, y + (j - 0.5) * 0.05, z * face, tilt * face, 0, 0))
+    }
+  }
 
-  // Base tape: the strip that is actually holding the box together, seen every
-  // time the kart leaves the ground.
-  parts.push(place(strip(0.26, 0.014, (hz - r) * 2), 0, -(hy + lift * 0.6), 0))
+  // ── the two ends ─────────────────────────────────────────────────────────
+  for (const face of [-1, 1] as const) {
+    const wall = face * (hz + lift * 0.5)
+    for (let i = 0; i < 2; i++) {
+      const j = hash(i * 29 + (face > 0 ? 11 : 3))
+      const g = tapePatch(0.22 + j * 0.08, 0.14, 0.010)
+      parts.push(place(
+        g, (i === 0 ? -0.44 : 0.5) * face, i === 0 ? 0.16 : -0.28, wall,
+        0, 0, (j - 0.5) * 0.28,
+      ))
+    }
+  }
 
-  // Shipping label: a paper rectangle stuck over the corrugation on the rear
-  // wall, which is the face the chase camera spends the whole game looking at.
-  parts.push(place(strip(0.46, 0.30, 0.012), 0.28, 0.02, hz + 0.020))
+  // ── the two bands strapping the exhaust on ───────────────────────────────
+  // Same surface as the rest of the tape, so they merge here rather than into
+  // `exhaustGeometry` — a second tape material on the vehicle would be one more
+  // draw call for a colour that already exists.
+  for (const z of [-0.24, 0.16]) {
+    const g = tapePatch(0.14, 0.34, 0.010)
+    g.rotateY(Math.PI * 0.5)
+    parts.push(place(g, EXHAUST.x * (hx + lift * 0.5) * 1.06, EXHAUST.y, z, 0, 0, 0))
+  }
+
+  // ── the seam under the base ──────────────────────────────────────────────
+  // The one place tape genuinely holds a box together, and it is seen every time
+  // the kart leaves the ground.
+  parts.push(place(strip(0.26, 0.014, (hz - r) * 2), 0, -(hy + lift * 0.5), 0))
   return mergeGeometries(parts)
 }
 
@@ -324,39 +452,248 @@ function arrowGlyph(x: number, y: number, z: number, size: number): THREE.Buffer
 }
 
 /**
- * Printed marks, in ink. WALLS ONLY — there is no lid seam, because there is no
- * lid; the docstring used to say "and the lid seam" and that was the last
- * mention of one anywhere on the kart.
+ * A minimal stroke font, for the one piece of text this game needs.
  *
- * Small, dark, and deliberately not symmetrical with the tape: a box that has
- * been through a depot has a couple of stencils on it in whatever order the
- * depot felt like. This is also the only near-black element on the vehicle
- * apart from the eyes, which is what gives the box a value anchor — without one
- * the whole kart floats in the top half of the range against the meadow.
+ * WHY A FONT AND NOT A TEXTURE. The reference sheet's single most recognisable
+ * mark is the words FRAGILE and THIS SIDE UP printed on the box — it is the
+ * first thing anyone reads in the concept art and the build had abstract bars
+ * where it should be. A texture would be the obvious answer and it is closed to
+ * this project twice over: the painterly material reads no UVs at all (it works
+ * from `positionLocal` / `positionWorld` / `normalWorld`, which is why
+ * `mergeParts` drops every other attribute), and CLAUDE.md's asset rule wants
+ * form rather than a bitmap. Letters as extruded strokes are form, they light
+ * like the rest of the print, and they merge into the ink batch for no extra
+ * draw call.
+ *
+ * Each glyph is a list of strokes in a unit cell: x in 0..~0.56, y in 0..1,
+ * origin bottom-left. Deliberately a SINGLE-WEIGHT STENCIL — no curves, no
+ * bowls, no serifs. That is not a shortcut, it is what a depot stencil looks
+ * like, and it is also the only style that survives being 40 px wide on a box
+ * seen from 4 m: a rounded letterform at that size is a smudge.
+ */
+type Stroke = readonly [number, number, number, number]
+const GLYPHS: Record<string, readonly Stroke[]> = {
+  F: [[0, 0, 0, 1], [0, 1, 0.52, 1], [0, 0.55, 0.4, 0.55]],
+  R: [[0, 0, 0, 1], [0, 1, 0.44, 1], [0.5, 0.94, 0.5, 0.62],
+      [0, 0.56, 0.44, 0.56], [0.44, 1, 0.5, 0.94], [0.44, 0.56, 0.5, 0.62],
+      [0.2, 0.56, 0.54, 0]],
+  A: [[0, 0, 0.28, 1], [0.28, 1, 0.56, 0], [0.11, 0.36, 0.45, 0.36]],
+  G: [[0.12, 1, 0.46, 1], [0, 0.86, 0, 0.14], [0, 0.86, 0.12, 1],
+      [0, 0.14, 0.12, 0], [0.12, 0, 0.46, 0], [0.46, 0, 0.56, 0.14],
+      [0.56, 0.14, 0.56, 0.44], [0.34, 0.44, 0.56, 0.44]],
+  I: [[0.26, 0, 0.26, 1]],
+  L: [[0, 0, 0, 1], [0, 0, 0.5, 0]],
+  E: [[0, 0, 0, 1], [0, 1, 0.52, 1], [0, 0.52, 0.4, 0.52], [0, 0, 0.52, 0]],
+  T: [[0, 1, 0.56, 1], [0.28, 0, 0.28, 1]],
+  H: [[0, 0, 0, 1], [0.52, 0, 0.52, 1], [0, 0.52, 0.52, 0.52]],
+  // S as five straight runs. A stencil S is exactly this and nothing smoother
+  // would read at the size it is printed.
+  S: [[0.52, 0.88, 0.4, 1], [0.4, 1, 0.12, 1], [0.12, 1, 0, 0.86],
+      [0, 0.86, 0.52, 0.36], [0.52, 0.36, 0.52, 0.14], [0.52, 0.14, 0.4, 0],
+      [0.4, 0, 0.12, 0], [0.12, 0, 0, 0.12]],
+  D: [[0, 0, 0, 1], [0, 1, 0.34, 1], [0.34, 1, 0.52, 0.82],
+      [0.52, 0.82, 0.52, 0.18], [0.52, 0.18, 0.34, 0], [0.34, 0, 0, 0]],
+  U: [[0, 1, 0, 0.16], [0, 0.16, 0.13, 0], [0.13, 0, 0.41, 0],
+      [0.41, 0, 0.54, 0.16], [0.54, 0.16, 0.54, 1]],
+  P: [[0, 0, 0, 1], [0, 1, 0.44, 1], [0.44, 1, 0.5, 0.92],
+      [0.5, 0.92, 0.5, 0.66], [0.5, 0.66, 0.44, 0.58], [0, 0.58, 0.44, 0.58]],
+  ' ': [],
+}
+
+/** Advance width per glyph, in cell units, including the gap to the next. */
+const ADVANCE = 0.74
+
+/**
+ * Set a word as extruded strokes on a wall.
+ *
+ * `axis` names the wall's NORMAL — 'z' for the two short ends, 'x' for the two
+ * long sides — and `face` is +1 or -1 for which of the pair. `across` and `y`
+ * are the centre of the text in world coordinates on that wall.
+ *
+ * THE READING DIRECTION IS DERIVED, NOT AUTHORED, and it is worth deriving here
+ * rather than guessing, because guessing got it backwards on all four walls at
+ * once and the render just says "mirrored".
+ *
+ * A viewer's right hand is `cross(forward, up)`. Standing outside a wall, the
+ * forward direction is the wall's INWARD normal, so:
+ *
+ *   +z wall   forward (0,0,-1)  right = cross(f, up) = (+1, 0, 0)   ->  +x
+ *   -z wall   forward (0,0,+1)  right = (-1, 0, 0)                  ->  -x
+ *   +x wall   forward (-1,0,0)  right = (0, 0, -1)                  ->  -z
+ *   -x wall   forward (+1,0,0)  right = (0, 0, +1)                  ->  +z
+ *
+ * which is `+face` on the z walls and `-face` on the x ones. Every glyph
+ * coordinate is laid out in READING space and multiplied by it. The
+ * first version mirrored with a post-hoc `scale(-1, 1, 1)` and rotated with a
+ * post-hoc `rotateX`, and both are applied about the GEOMETRY'S ORIGIN rather
+ * than about the stroke — `placeGeometry` composes T * R * S, so the rotation
+ * belongs in the `place` call and nowhere else. What that produced was strokes
+ * flung metres off the box in an arc, which is unmistakable once seen and looks
+ * like a font bug rather than a transform-order one.
+ */
+function setText(
+  text: string, size: number, across: number, y: number,
+  axis: 'x' | 'z', face: number, wall: number,
+): THREE.BufferGeometry[] {
+  const parts: THREE.BufferGeometry[] = []
+  const weight = size * 0.16
+  const dir = axis === 'z' ? face : -face
+  const width = (text.length - 1) * ADVANCE * size + size * 0.56
+  let cursor = -width * 0.5
+  for (const ch of text.toUpperCase()) {
+    for (const [x0, y0, x1, y1] of GLYPHS[ch] ?? []) {
+      const ax = across + dir * (cursor + x0 * size)
+      const bx = across + dir * (cursor + x1 * size)
+      const ay = y + y0 * size
+      const by = y + y1 * size
+      // `weight` is added so consecutive strokes overlap at their shared corner
+      // and a letter reads as one continuous mark rather than as loose dashes.
+      const len = Math.hypot(bx - ax, by - ay) + weight
+      const angle = Math.atan2(by - ay, bx - ax)
+      const mx = (ax + bx) * 0.5
+      const my = (ay + by) * 0.5
+      parts.push(axis === 'z'
+        // Built along x and rolled about the wall's own normal.
+        ? place(strip(len, weight, 0.010), mx, my, wall, 0, 0, angle)
+        // Built along z; Rx(-a) sends +z to (0, sin a, cos a), which is the
+        // stroke's direction in this wall's (across, up) plane.
+        : place(strip(0.010, weight, len), wall, my, mx, -angle, 0, 0))
+    }
+    cursor += ADVANCE * size
+  }
+  return parts
+}
+
+/**
+ * Printed marks, in ink. WALLS ONLY — there is no lid seam, because there is no
+ * lid.
+ *
+ * THE WORDS ARE THE POINT NOW. `refs/character/raccoon-boxkart-sheet.png` prints
+ * FRAGILE in a ruled box with THIS SIDE UP beside it on the long side, and it is
+ * the single most recognisable mark on the whole vehicle — the build had three
+ * abstract code bars and a stencil outline where the reference has words, which
+ * is why the kart read as "a cardboard box" rather than as "THAT cardboard box".
+ *
+ * It goes on both long sides, which is where the reference puts it, AND on the
+ * front, which is the face the chase camera looks at for the entire game. That
+ * is a deliberate departure: a mark the player never sees is not doing any work,
+ * and a depot would have stamped every face anyway.
+ *
+ * The arrows stay. They are the only near-black element on the vehicle apart
+ * from the eyes and the paws, and without one the whole kart floats in the top
+ * half of the value range against the meadow.
  */
 export function boxInkGeometry(w: number, h: number, d: number, r: number): THREE.BufferGeometry {
   const hz = d * 0.5
+  const hx = w * 0.5
   const parts: THREE.BufferGeometry[] = []
+  const size = 0.15
 
-  // Rear wall: two this-way-up arrows, and three code bars on the label.
-  const rear = hz + 0.028
-  parts.push(...arrowGlyph(-0.44, 0.0, rear, 0.085))
-  parts.push(...arrowGlyph(-0.19, 0.0, rear, 0.085))
-  const bars = [0.34, 0.28, 0.2]
-  for (let i = 0; i < bars.length; i++) {
-    parts.push(place(strip(bars[i]!, 0.028, 0.008), 0.28, 0.10 - i * 0.075, hz + 0.030))
+  // ── ONE long side: FRAGILE in its box, THIS SIDE UP beside it ────────────
+  // The stamp goes on the wall the exhaust is NOT taped to, which is what the
+  // sheet does — its two side views show different things, one stamped and one
+  // with the pipe. Printing both walls put the two on top of each other and lost
+  // both, and it also made the vehicle symmetric, which a scrounged one is not.
+  for (const face of [-EXHAUST.x] as const) {
+    const wall = face * (hx + 0.024)
+    parts.push(...setText('FRAGILE', size * 0.86, -0.34, -0.30, 'x', face, wall))
+    // The rule around it. Four bars, not a filled panel.
+    const bw = 0.96
+    const bh = 0.26
+    // 0.96 wide, not 0.78. FRAGILE at size 0.129 spans 0.645 m and the rule has
+    // to clear BOTH ends of it plus its own 0.022 m bar; at 0.78 the left bar
+    // landed 0.06 m off the F, which perspective closed to nothing and rendered
+    // as "|RAGILE".
+    // THE WHOLE BLOCK SITS IN THE BOTTOM 40% OF THE WALL, and that is set by the
+    // flap rather than chosen: the long-side flap now folds flat DOWN the outside
+    // of this wall and its tip reaches local y -0.13, so everything above that is
+    // covered board. The sheet puts its FRAGILE in the same place for the same
+    // reason — the folded flap is the band above it.
+    for (const sy of [-1, 1]) {
+      parts.push(place(strip(0.010, 0.022, bw), wall, -0.27 + sy * bh * 0.5, -0.34))
+    }
+    for (const sz of [-1, 1]) {
+      parts.push(place(strip(0.010, bh, 0.022), wall, -0.27, -0.34 + sz * bw * 0.5))
+    }
+    // Three short lines to the right of the rule, exactly as the sheet sets it.
+    parts.push(...setText('THIS', size * 0.55, 0.44, -0.20, 'x', face, wall))
+    parts.push(...setText('SIDE', size * 0.55, 0.44, -0.31, 'x', face, wall))
+    parts.push(...setText('UP', size * 0.55, 0.44, -0.42, 'x', face, wall))
   }
 
-  // Front wall: a stencil block outline. Four bars, not a filled rectangle —
-  // an outline survives being 40 px wide, a filled one becomes a blob.
+  // ── the front: arrows only ───────────────────────────────────────────────
+  // NO TEXT HERE, and that is a correction. It had FRAGILE on it, and the front
+  // flap rests folded DOWN against this wall (FLAP.front, 2.7 rad — see kart.ts)
+  // so the stamp was completely hidden in every capture. A mark nobody can see
+  // is not a mark.
   const front = -(hz + 0.024)
-  // Kept inside the flat part of the wall: past `w/2 - r` the surface curves
-  // away into the corner and a straight printed bar would float off it.
-  const bw = Math.min(w * 0.3, (w * 0.5 - r) * 1.5)
-  const bh = h * 0.28
-  parts.push(place(strip(bw, 0.026, 0.010), 0, bh * 0.5, front))
-  parts.push(place(strip(bw, 0.026, 0.010), 0, -bh * 0.5, front))
-  parts.push(place(strip(0.026, bh, 0.010), bw * 0.5, 0, front))
-  parts.push(place(strip(0.026, bh, 0.010), -bw * 0.5, 0, front))
+  parts.push(...arrowGlyph(-0.56, 0.02, front, 0.075))
+  parts.push(...arrowGlyph(-0.34, 0.02, front, 0.075))
+
+  // ── the rear: FRAGILE, because this is the face the game shows ───────────
+  // The reference stamps the box's long SIDES, and both of those are stamped
+  // above. This one is a deliberate addition: the chase camera sits behind the
+  // kart for the entire game, so the rear wall is the single most-looked-at
+  // surface in the project and it was carrying three abstract code bars.
+  const rear = hz + 0.028
+  // LOW ON THE WALL, for the same reason the side stamp is: the rear end flap
+  // rests at 2.05 rad and shelves 0.51 m back with its tip at local y 0.23, so
+  // everything above that is under it from a camera behind the kart — which is
+  // the only camera this face has. At y -0.02 the stamp was completely hidden and
+  // the chase view showed two arrows and a tear line.
+  parts.push(...setText('FRAGILE', size * 0.8, -0.02, -0.26, 'z', 1, rear))
+  // THE CODE BARS ARE GONE. Three horizontal strips meant to read as a shipping
+  // label's barcode, and at gameplay distance they read as nothing at all — the
+  // critic called them "a stray placeholder with no legible geometric or
+  // narrative purpose", which is exactly right for an abstract mark on a vehicle
+  // where every other mark is a word or a piece of tape. Two more this-way-up
+  // arrows in their place: the arrows are the only near-black element on the
+  // kart besides the eyes and the paws, and they are what anchors its value.
+  parts.push(...arrowGlyph(0.56, -0.30, rear, 0.07))
+  parts.push(...arrowGlyph(0.74, -0.30, rear, 0.07))
+  return mergeGeometries(parts)
+}
+
+/**
+ * The exhaust pipe: a scavenged muffler taped to the box's side.
+ *
+ * Pure sight gag, and the sheet spends a whole view on it — a chrome silencer
+ * with a Y-branch at one end and a bolt-eye flange at the other, strapped to the
+ * cardboard with two bands of packing tape. It is the single clearest statement
+ * of what this vehicle is: two animals have taped a car part to a box because
+ * cars have one, and it is connected to nothing.
+ *
+ * Built lying along the box's z axis so it can be turned onto either long wall,
+ * in the same cool lavender as the hubcaps and the steering wheel — the sheet
+ * gives every scavenged manufactured part one colour, which is what separates
+ * them from the box they are stuck to.
+ *
+ * The two tape bands are NOT here. They are in `boxTapeGeometry` with the rest of
+ * the tape, because they are the same surface and merging them here would mean
+ * a second tape material on the vehicle.
+ */
+export function exhaustGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = []
+  const tube = (r: number, len: number, x: number, y: number, z: number,
+    rx = 0, ry = 0, rz = 0): void => {
+    const g = new THREE.CylinderGeometry(r, r, len, 10, 1)
+    // Built along +Y; swung onto +Z, then by the caller's own angles.
+    parts.push(place(g, x, y, z, rx + Math.PI * 0.5, ry, rz))
+  }
+  // Silencer body, with a slightly wider collar at each end so it reads as a
+  // fabricated part rather than as a length of pipe.
+  tube(0.082, 0.66, 0, 0, 0)
+  tube(0.094, 0.06, 0, 0, -0.30)
+  tube(0.094, 0.06, 0, 0, 0.30)
+  // The Y-branch: two thinner pipes off the front end, one swept up and one down.
+  tube(0.048, 0.32, 0, 0.10, -0.47, -0.5)
+  tube(0.048, 0.24, 0, -0.07, -0.44, 0.42)
+  // Bolt eyes at both far ends — flat rings with a dark centre, which is what
+  // gives the silhouette its two little loops.
+  for (const [z, sign] of [[-0.62, -1], [0.44, 1]] as const) {
+    const eye = new THREE.CylinderGeometry(0.062, 0.062, 0.04, 10, 1)
+    parts.push(place(eye, 0, sign * 0.02, z, Math.PI * 0.5, 0, 0))
+  }
+  tube(0.048, 0.18, 0, 0.01, 0.38)
   return mergeGeometries(parts)
 }

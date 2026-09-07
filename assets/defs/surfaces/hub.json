@@ -1,13 +1,13 @@
 {
   "id": "hub",
-  "version": 3,
+  "version": 5,
   "type": "surface",
-  "notes": "Wheel hubs and the suspension struts. v2 claimed to be 'two stops down in value and with the rim almost off' and was measured not to be: in shots/car-corner.png the far hub at (1000,672) came back HSV h36 s0.75 v0.80 against the box's own lit face at h31 s0.68 v0.81 \u2014 equal in value, MORE saturated, same hue family, so it still punched an orange disc out of a dark tyre and pulled the eye off the characters. v3 takes the whole ladder down for real: lit #a37a4d -> #55402a and top #b58c5c -> #614933, i.e. HSV v 0.64 -> 0.33 and 0.71 -> 0.38, which puts the hub below even the tyre's lit stop (#6d7f96, v0.59) instead of a stop above it. Rim halved again to 0.10, because on a small convex disc the rim is most of what was making it glow. Still warm, still not neutral (ART_BIBLE 2) \u2014 it is a dark hole in the middle of a wheel, which is all it should ever be. Brush overlay reduced 0.3 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
+  "notes": "Wheel hubs and the suspension struts. v2 claimed to be 'two stops down in value and with the rim almost off' and was measured not to be: in shots/car-corner.png the far hub at (1000,672) came back HSV h36 s0.75 v0.80 against the box's own lit face at h31 s0.68 v0.81 — equal in value, MORE saturated, same hue family, so it still punched an orange disc out of a dark tyre and pulled the eye off the characters. v3 takes the whole ladder down for real: lit #a37a4d -> #55402a and top #b58c5c -> #614933, i.e. HSV v 0.64 -> 0.33 and 0.71 -> 0.38, which puts the hub below even the tyre's lit stop (#6d7f96, v0.59) instead of a stop above it. Rim halved again to 0.10, because on a small convex disc the rim is most of what was making it glow. Still warm, still not neutral (ART_BIBLE 2) — it is a dark hole in the middle of a wheel, which is all it should ever be. Brush overlay reduced 0.3 -> 0.0: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. v4 MATCHES THE HUBCAP TO THE STEERING WHEEL. The reference sheet draws both in one cool lavender grey — #8f8aa8 on the hubcap ring, the same family as the wheel's rim — and that is not incidental: they are the only two MANUFACTURED parts on a vehicle otherwise made of cardboard and animal, and giving them a shared cool grey is what says 'these were scavenged and taped on'. v3 was #382a1c, a warm near-black, which made the hub disappear into the tyre and left the wheel a featureless dark disc. Authored low in chroma for the usual reason on this vehicle — the illuminant adds roughly 0.2 of saturation between def and screen. The TREAD LUGS STAY: src/vehicle/geometry.ts documents at length why a bare cylinder has no rotation cue at all under a world-projected material, and a decorative hubcap does not solve that. v5 RAISES the chroma, which is the opposite of the move `fur` needed and for the same underlying reason. v4 authored #6f6d80 — H249 but only S0.14 — and it rendered PINK: at near-zero authored chroma the illuminant's own warm hue is the only hue there is, so a cool grey comes out the colour of the light. `fur` exploits that deliberately (it WANTS the light's warmth and authors near-neutral to avoid doubling it); a hubcap has to stay cool against warm cardboard, so it has to carry enough of its own chroma to outvote the sun. The helm, which renders correctly lavender, is authored at S0.25 — this now matches it. THE RULE: author near-neutral for anything that should take the light's colour, and author saturated for anything that must resist it.",
   "material": {
-    "base": "#382a1c",
-    "shadow": "#241a12",
-    "lit": "#55402a",
-    "top": "#614933",
+    "base": "#5f6488",
+    "shadow": "#41455f",
+    "lit": "#8b90b2",
+    "top": "#9ea2c0",
     "topGain": 1.0,
     "gradientBase": -0.3,
     "gradientHeight": 0.6,
@@ -15,9 +15,9 @@
     "brushScale": 1.2,
     "brushStrength": 0.0,
     "brushSaturation": 0.25,
-    "rimStrength": 0.1,
+    "rimStrength": 0.35,
     "rimPower": 3.0,
-    "saturationGain": 0.22,
+    "saturationGain": 0.3,
     "shadowSkyTint": 0.28
   }
 }

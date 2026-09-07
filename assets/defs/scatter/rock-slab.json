@@ -27,5 +27,22 @@
   "biomes": [
     "meadow",
     "alpine"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "alpine"
+    ],
+    "placement": "Half-buried flat plate almost level with the ground; interrupt turf with wide bedding faces.",
+    "maxSlope": 0.7,
+    "densityPerKm2": [
+      700,
+      750
+    ],
+    "scale": [
+      0.8,
+      2.0
+    ],
+    "avoid": "Avoid dense forest understory; wants open ground to show the plate."
+  }
 }

@@ -3,7 +3,7 @@
   "version": 1,
   "type": "scatter",
   "generator": "rock",
-  "notes": "Car-height rock. First size in the set the kart can be stopped by, so the collision proxy starts to matter here — it is the exact convex solid, inflated four centimetres, which is as tight as a proxy gets.",
+  "notes": "Car-height rock. First size in the set the kart can be stopped by, so the collision proxy starts to matter here \u2014 it is the exact convex solid, inflated four centimetres, which is as tight as a proxy gets.",
   "params": {
     "size": 2.5,
     "height": 0.72,
@@ -27,6 +27,26 @@
   "biomes": [
     "meadow",
     "forest",
-    "alpine"
-  ]
+    "alpine",
+    "coast"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "alpine",
+      "coast"
+    ],
+    "placement": "Car-height discrete outcrops in turf and alpine stone; solid obstacle the kart can hit.",
+    "maxSlope": 0.7,
+    "densityPerKm2": [
+      900,
+      1100
+    ],
+    "scale": [
+      0.8,
+      1.9
+    ],
+    "avoid": "Avoid wetland mud flats where stone should be rare."
+  }
 }

@@ -1,23 +1,23 @@
 {
   "id": "tyre",
-  "version": 1,
+  "version": 2,
   "type": "surface",
-  "notes": "ART_BIBLE 2 forbids neutral grey anywhere, and a tyre is where a renderer most wants to put it. Authored blue-grey with a blue shadow and a strong sky rim: the rim is what makes a 12-sided cylinder read as round without specular. Brush overlay reduced 0.42 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain.",
+  "notes": "ART_BIBLE 2 forbids neutral grey anywhere, and a tyre is where a renderer most wants to put it. Authored blue-grey with a blue shadow and a strong sky rim: the rim is what makes a 12-sided cylinder read as round without specular. Brush overlay reduced 0.42 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. CORRECTED: it went too far. ART_BIBLE 2 does forbid neutral grey and a blue-grey tyre was the right instinct, but measured on car-chase this rendered #334667 — H218 S0.50 — which is not 'a tyre that is not grey', it is BLUE PLASTIC, and the wheels are the largest low element in frame so it set the register of the whole vehicle. The reference's tyre is #473933, H18 S0.28: a warm near-black. Two terms did it, both pointing the same way — the albedo was authored blue AND `shadowSkyTint` 0.3 rotated the shade further toward the sky, and on a dark albedo the ambient is most of the light there is. Authored WARM dark instead: still chromatic, still not grey, and now resisting the sky rather than joining it. `rimStrength` also comes down from 0.85 — a strong sky rim on a black cylinder is a blue outline round every wheel, which is where a lot of the H218 was coming from.",
   "material": {
-    "base": "#3f4c60",
-    "shadow": "#2a3c56",
-    "lit": "#6d7f96",
-    "top": "#8d9fb4",
+    "base": "#3d322c",
+    "shadow": "#26201d",
+    "lit": "#5f5047",
+    "top": "#6f5e52",
     "topGain": 1.05,
     "gradientBase": -0.4,
     "gradientHeight": 0.8,
     "gradientStrength": 0.35,
     "brushScale": 0.24,
-    "brushStrength": 0.18,
+    "brushStrength": 0.0,
     "brushSaturation": 0.3,
-    "rimStrength": 0.85,
+    "rimStrength": 0.4,
     "rimPower": 2.4,
-    "saturationGain": 0.3,
-    "shadowSkyTint": 0.3
+    "saturationGain": 0.35,
+    "shadowSkyTint": 0.14
   }
 }

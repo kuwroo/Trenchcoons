@@ -28,6 +28,23 @@ export interface ScatterEntry {
   scale: [number, number]
   /** Steepest ground this form will stand on, radians. Boulders roll off cliffs. */
   maxSlope?: number
+  /**
+   * Metres of WATER this form may stand in. Default 0 — dry land only, with the
+   * 1.2 m of freeboard `Scatter` requires of everything else.
+   *
+   * `Scatter` otherwise culls every instance whose ground is under
+   * `waterLevel + 1.2`, which is right for a tree and wrong for a rock: it is
+   * why the sea shipped as an empty sheet with nothing in it, and why the
+   * single most characteristic feature of `refs/water/lake-cartoon-cells.jpg` —
+   * a white foam outline around every rock in the lake — had nothing to draw an
+   * outline around. `src/water/index.ts` stamps the collar; this is what puts
+   * the rock there for it to collar.
+   *
+   * A property of the FORM, not of the biome, which is why it sits on the entry
+   * rather than on the style: a boulder can stand in a metre of water in any
+   * biome that has both boulders and water.
+   */
+  wade?: number
 }
 
 export interface BiomeStyle {
@@ -117,8 +134,14 @@ export interface BiomeStyle {
   response: keyof typeof BIOMES
 }
 
-const S = (id: string, perKm2: number, lo: number, hi: number, maxSlope?: number): ScatterEntry =>
-  ({ id, perKm2, scale: [lo, hi], ...(maxSlope === undefined ? {} : { maxSlope }) })
+const S = (
+  id: string, perKm2: number, lo: number, hi: number,
+  maxSlope?: number, wade?: number,
+): ScatterEntry => ({
+  id, perKm2, scale: [lo, hi],
+  ...(maxSlope === undefined ? {} : { maxSlope }),
+  ...(wade === undefined ? {} : { wade }),
+})
 
 /**
  * The table.
@@ -135,168 +158,88 @@ const S = (id: string, perKm2: number, lo: number, hi: number, maxSlope?: number
  * vista.
  */
 export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
-  // ART_BIBLE §4 "Meadow / hub". The default, and the Genshin grasslands frame.
+  // Meadow / hub. Ground, fog, sun tint, scatter and grass follow
+  // overgrown-portfolio (`src/grass/defaults.js`, `environment.ts`,
+  // `groundTextures.ts`). THE SKY stays Trenchcoons' Atmosphere LUT — do not
+  // import overgrown's skybox / cloud field.
   meadow: {
     id: 'meadow', label: 'meadow',
-    // MEASURED off refs/genshin/grasslands.jpg, not authored by eye, and the
-    // previous row is the single thing ART_BIBLE §4 now names as the source of
-    // the acid cast: `lit: 0xb8e84f` is "the same hue at S0.66, double the
-    // chroma — and that is chartreuse."
-    //
-    //   lit    #8fce6a  the reference's lit grass is rgb(133,206,76) at the
-    //                   PIXEL (sample 350,595); authored a shade paler and a
-    //                   shade bluer than that because the light path multiplies
-    //                   the albedo by (ambient + direct) and the post grade
-    //                   pulls the non-peak channels down — measured, an
-    //                   authored blue/green of 0.34 arrived on screen at 0.23.
-    //   base   #63a049  the mid stop. Deeper and slightly cooler than lit, so
-    //                   the ramp has somewhere to go on a face turned off-sun.
-    //   shadow #2b8a44  ART_BIBLE §4's corrected figure, and the correction is
-    //                   the whole story of this row. The table used to say
-    //                   #3B6C9A, "H207, strongly sky-lit", sampled at (0.12,
-    //                   0.62) — and that sample point is a shadowed ROCK in the
-    //                   reference frame, not shadowed grass. Authored on the
-    //                   ground it turned every shaded slope flat blue: measured
-    //                   in the build at H211-215 across the whole foreground, and
-    //                   the acceptance test's own green-family probe came back
-    //                   "no green-family pixels found".
-    //                   Filtering the reference to the green family and taking
-    //                   its darkest fifth gives H136 S0.69 V0.54. Shadowed grass
-    //                   in refs/genshin/grasslands.jpg still reads unmistakably as
-    //                   GRASS, which is §2's rule ("tinted toward the sky hue",
-    //                   about 40 degrees off the lit hue, staying in the material
-    //                   family) rather than replaced by it. Rock is the thing
-    //                   that goes blue, at H205, and it does — see `rock` below.
-    //   cliff  #7d95a4  THE ROCK LANGUAGE. This is the colour the slope
-    //                   material reveals, and it was 0x8b6a45 — damp brown
-    //                   dirt. "Flat sculptural rock planes" is the defining
-    //                   form of the tie-breaker reference and the build measured
-    //                   0.00% grey-blue rock-plane pixels against its 3.01%,
-    //                   because there was no grey-blue anywhere in the meadow to
-    //                   measure. The reference's rock facets run #AECBB3
-    //                   (luma 0.765) lit to #4281A9 (luma 0.464) turned; a
-    //                   mid-value blue-grey is what produces both ends through
-    //                   the `cliff.mul(1.45)` / `cliff.mul(0.55)` pair in
-    //                   ground.ts.
-    //   under  #8b6a45  soil, which is what a rut in a meadow exposes.
-    //
-    // WARMED AND BRIGHTENED TOGETHER, 2026-08-27, and the "together" is the
-    // whole point. Measured against refs/genshin/grasslands.jpg on the median of
-    // a ground-level near band (the median, not the brightest N -- this build's
-    // instanced blade tips dominate any brightest-N selection and the reference
-    // has no such tips, which is what made an earlier reading claim the build
-    // was over-saturated when it is in fact slightly under):
-    //
-    //   reference   H78  V0.85
-    //   was         H113 V0.55     35 degrees too cool, 0.30 too dark
-    //   now         H90  V0.63
-    //
-    // Three candidates that warmed the hue while leaving the value alone were
-    // rejected on sight: warm plus dark plus desaturated is khaki, and all three
-    // turned the sunlit slope into dry stubble. base carries most of this
-    // because the visible ground sits nearer the mid stop than the lit one.
-    //
-    // THE VALUE GAP IS NOT FIXABLE HERE and nothing further should be attempted
-    // in this row. Raising the authored base value 0.61 -> 0.80 (+0.19) moved the
-    // rendered band only 0.547 -> 0.625 (+0.078) -- a compression of about 0.4 --
-    // so reaching the reference's 0.85 would need an authored value above 1.0.
-    // The remainder is exposure and tonemap, not albedo. CLAUDE.md has said "no
-    // palette value fixes either end" all along; this is the measurement behind
-    // it.
-    base: 0x4b9e2c, shadow: 0x2b8a44, lit: 0x7cd13f,
-    cliff: 0x7d95a4, under: 0x8b6a45, rock: 0x7d95a4,
-    // 0.86 — rock from 31 degrees of tilt. The docstring in ground.ts records
-    // that a global 0.86 threshold once produced "broad brown blotches on green",
-    // and it is right about the pixels and wrong about the cause: the meadow's
-    // `cliff` was 0x8b6a45, damp brown DIRT, so a wide reveal was mud smeared
-    // over a hillside. Against the blue-grey rock this biome now exposes, the
-    // same reveal is the stepped stone plane the reference is built out of.
+    // Olive meadow from overgrown defaults:
+    //   grassColor #a8b86a, groundColor #9aab62, soft blue haze #d0eafc,
+    //   warm sun #ffe8a0. Shadow stays in the olive family (not sky-blue).
+    //   under = warm packed dirt from createDirtGroundTexture's sandy base.
+    //   rock/cliff = warm path-stone, not Genshin blue-grey planes.
+    // Authored under the illuminant: overgrown screen olive is ~#9aab62 /
+    // #a8b86a; the pipeline adds chroma, so stops sit slightly duller/warmer.
+    base: 0x8a9a58, shadow: 0x4e6840, lit: 0x9eae66,
+    cliff: 0x8b8570, under: 0xa8804e, rock: 0x8b8570,
     relief: 6, reliefScale: 120, reliefRidge: 0, rockSlope: 0.86,
     scatter: [
-      // ROCK DENSITY AND SCALE UP, and this is the other half of the missing
-      // rock language. The per-biome slope threshold below puts stone on the
-      // BREAKS in a hillside, but refs/genshin/grasslands.jpg's rock is mostly
-      // discrete outcrops standing in the turf, and at 420 rock-medium per
-      // square kilometre — one per 2400 m2 — a driver's-eye frame contained two
-      // or three of them at 1.2 m across. The measured grey-blue rock-plane pixel
-      // share was 0.00% against the reference's 3.01%; that is a density and
-      // scale problem, not a placement one. Outcrop is in the set now because it
-      // is the asset in the library that measurably reads as flat planes (facet
-      // spread 0.318 against the reference cliff's 0.28-0.30).
-      S('rock-medium', 1100, 0.9, 1.9, 0.5),
-      S('rock-small', 2600, 0.6, 1.3, 0.6),
-      S('rock-pebble', 9000, 0.5, 1.3, 0.8),
-      // Scale capped at 1.65, not 1.9. At 1.9 the generator's 3.7 m boulder became
-      // a 6.6 m-radius, 6 m-tall slab, and one landed 7.4 m from the chase camera
-      // in shots/tracks-grass.png — a featureless blue-grey wall across a third of
-      // the frame. A boulder that is taller than the trees next to it is not a
-      // boulder, and this asset's form (a compact convex solid) does not carry a
-      // silhouette at that size.
-      S('boulder-large', 300, 0.9, 1.65, 0.35),
-      S('outcrop-shelf', 90, 0.9, 1.7, 0.4),
-      S('bush-round', 1300, 0.7, 1.3, 0.6),
-      S('conifer-tall', 130, 0.9, 1.4, 0.5),
-      S('pp-tree-broad', 150, 1.2, 2.0, 0.45),
-      S('pp-birch-young', 120, 1.0, 1.7, 0.5),
+      // Quaternius stylized-nature via overgrown landscapePopulate catalog.
+      S('qn-rock-1', 140, 0.75, 1.2, 0.5),
+      S('qn-rock-2', 120, 0.7, 1.15, 0.5),
+      S('qn-rock-3', 100, 0.7, 1.2, 0.45),
+      S('qn-pebble-1', 900, 0.9, 1.5, 0.85),
+      S('qn-pebble-2', 800, 0.85, 1.45, 0.85),
+      S('qn-pebble-3', 700, 0.85, 1.4, 0.85),
+      // Occasional large sculptural rock kept from the old set for Genshin planes.
+      S('boulder-large', 80, 0.9, 1.55, 0.35),
+      S('outcrop-shelf', 40, 0.9, 1.6, 0.4),
+      S('qn-bush', 900, 0.7, 1.15, 0.6),
+      S('qn-clover-1', 520, 0.8, 1.15, 0.7),
+      S('qn-clover-2', 420, 0.8, 1.15, 0.7),
+      // Sparse copses — combined ~400/km2, not a forest.
+      S('qn-common-1', 55, 0.9, 1.25, 0.5),
+      S('qn-common-2', 50, 0.9, 1.25, 0.5),
+      S('qn-common-3', 45, 0.9, 1.3, 0.5),
+      S('qn-common-4', 40, 0.85, 1.25, 0.5),
+      S('qn-common-5', 40, 0.85, 1.2, 0.5),
+      S('qn-pine-1', 35, 0.9, 1.3, 0.5),
+      S('qn-pine-2', 30, 0.9, 1.3, 0.5),
+      S('qn-pine-3', 25, 0.9, 1.25, 0.5),
     ],
-    grassDensity: 0.9, grassId: 'grass-tuft', grassScale: 1,
-    fog: 0xbfe0f0, fogDensity: 0.7, sunTint: 0xfff6dc, ambient: 1,
+    // Overgrown field density ~1.45; structure gate caps how far this can go.
+    grassDensity: 1.45, grassId: 'grass-tuft', grassScale: 1.08,
+    fog: 0xd0eafc, fogDensity: 0.75, sunTint: 0xffe8a0, ambient: 1.05,
     response: 'grass',
   },
-  // "canopy lit #7FB53C, understory #2F5F2E, leaf litter #A8823F, bark #8B4A3A,
-  //  fog #A8CF96 (green-tinted), density 1.0x". Highest disturbed/pristine
-  //  contrast of any biome, so its ground is the darkest thing you drive on.
-  //
-  //  8000 conifers per square kilometre, which is one per 125 m2 and still an
-  //  open woodland by real standards (a managed conifer stand is 40,000-
-  //  100,000/km2). It was 4300 and that is not a forest, it is a meadow with
-  //  trees in it: measured, a kart driving 190 m in a straight line through it
-  //  threaded between every trunk and never touched one, which is also why the
-  //  acceptance test's collision check kept coming back "contact false" on a
-  //  collision system that demonstrably works.
+  // Forest — same overgrown olive countryside, one register darker under canopy.
+  // Soft blue haze (not green-tinted fog): overgrown uses one haze for the whole
+  // field. Collision density still needs ~7k trees/km2 so the kart cannot thread
+  // a straight line through the stand.
   forest: {
     id: 'forest', label: 'forest',
-    // Same correction as the meadow, one register darker and cooler. The lit
-    // stop keeps ART_BIBLE §4's canopy hue and gains the blue channel it was
-    // missing (0x8fc24a is blue 74 against green 194 — a ratio of 0.38 where
-    // the reference's shaded-forest floor runs 0.6 and up); the shadow stop goes
-    // from a flat green to the sky-tinted teal §2 asks for. `cliff` is the
-    // forest's exposed material and stays earth, because a forest floor breaks
-    // to root and soil rather than to rock.
-    base: 0x477a35, shadow: 0x2c6b34, lit: 0x7ab54a,
-    cliff: 0x6a5236, under: 0x4a3524, rock: 0x6d8593,
-    // Tighter than the meadow: a forest floor holds its litter on a steeper
-    // face than a grassland holds its turf, and the exposed material is earth.
+    base: 0x6f8a48, shadow: 0x3f5a38, lit: 0x8fa85a,
+    cliff: 0x6a5236, under: 0x4a3524, rock: 0x7a7568,
     relief: 9, reliefScale: 90, reliefRidge: 0.15, rockSlope: 0.74,
     scatter: [
-      // 4000 + 2300, down from 5000 + 3000. Still an open woodland by the
-      // measure the note above uses (a managed conifer stand is 40,000-100,000
-      // per square kilometre) and still dense enough that the collision check
-      // cannot thread between the trunks, which is what the 8000 was raised for.
-      // It is the perf scene's dominant cost: the driving measurement is taken in
-      // this biome at a 3 m eye, where overlapping tier plates make the conifer
-      // the most overdrawn thing in the build, and it sat 0.2-3 ms over a 17.5 ms
-      // bar with the meadow at 16.1.
-      // FOUR SILHOUETTES, not one repeated. The conifers keep the biome's
-      // spine and the imported pack supplies the broadleaves; scales run to
-      // 1.9 because "trees too small" was the report and a 7 m authored tree
-      // at 0.85 reads as scrub next to a 15 m conifer.
-      S('conifer-tall', 2100, 0.9, 1.6, 0.55),
-      S('conifer-young', 1200, 0.85, 1.45, 0.6),
-      S('pp-tree-broad', 1500, 1.1, 1.9, 0.55),
-      S('pp-tree-round', 1100, 1.0, 1.7, 0.6),
-      S('pp-birch-tall', 900, 1.0, 1.8, 0.5),
-      S('pp-birch-young', 700, 0.9, 1.5, 0.6),
-      S('pp-rock-mossy', 260, 0.7, 1.4, 0.5),
-      S('shrub-broadleaf', 2600, 0.8, 1.4, 0.6),
-      S('bush-round', 1100, 0.8, 1.4, 0.6),
+      // Quaternius canopy from overgrown-portfolio. Combined ~7.3k/km2 keeps the
+      // collision density that the old 8k conifer+pp mix was raised for, while
+      // Common/Pine/Twisted give three silhouettes. groveAt² clumps stands;
+      // qn-bush uses softer grove modulation (UNDERSTORY_IDS) so bushes ring
+      // trees rather than carpet clearings.
+      S('qn-common-1', 900, 0.95, 1.35, 0.55),
+      S('qn-common-2', 850, 0.95, 1.35, 0.55),
+      S('qn-common-3', 800, 0.95, 1.4, 0.55),
+      S('qn-common-4', 750, 0.9, 1.35, 0.55),
+      S('qn-common-5', 700, 0.9, 1.3, 0.55),
+      S('qn-pine-1', 700, 0.95, 1.4, 0.55),
+      S('qn-pine-2', 650, 0.95, 1.4, 0.55),
+      S('qn-pine-3', 600, 0.9, 1.35, 0.55),
+      S('qn-twisted-1', 280, 0.9, 1.15, 0.5),
+      S('qn-twisted-2', 240, 0.9, 1.15, 0.5),
+      S('qn-bush', 2400, 0.75, 1.25, 0.6),
+      S('qn-mushroom', 260, 0.8, 1.3, 0.55),
+      S('qn-rock-1', 90, 0.7, 1.2, 0.5),
+      S('qn-rock-2', 80, 0.7, 1.15, 0.5),
+      S('qn-rock-3', 70, 0.7, 1.2, 0.5),
+      // Deadwood still sells forest floor; overgrown has no equivalent.
       S('log-fallen', 300, 0.8, 1.3, 0.4),
       S('stump-broken', 240, 0.8, 1.3, 0.45),
       S('roots-exposed', 210, 0.8, 1.3, 0.5),
-      S('rock-small', 500, 0.7, 1.4, 0.6),
     ],
-    grassDensity: 0.28, grassId: 'grass-cluster', grassScale: 1.1,
-    fog: 0xa8cf96, fogDensity: 1.0, sunTint: 0xf6f0cc, ambient: 0.86,
+    grassDensity: 0.32, grassId: 'grass-cluster', grassScale: 1.12,
+    fog: 0xd0eafc, fogDensity: 0.95, sunTint: 0xffe8a0, ambient: 0.92,
     response: 'forest',
   },
   // "sand lit #EFD08F, sand shadow #C08F5F (warm, never grey), rock #B87A4F,
@@ -312,11 +255,11 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     // what is underneath is the warm ochre rock of ART_BIBLE §4.
     relief: 14, reliefScale: 260, reliefRidge: 0, rockSlope: 0.83,
     scatter: [
-      S('rock-slab', 700, 0.9, 2.0, 0.4),
-      S('outcrop-step', 150, 0.9, 1.8, 0.35),
-      S('outcrop-shelf', 110, 0.9, 1.7, 0.3),
-      S('boulder-large', 130, 0.8, 1.5, 0.35),
-      S('rock-pebble', 6000, 0.5, 1.2, 0.8),
+      S('rock-slab', 320, 0.9, 2.0, 0.4),
+      S('outcrop-step', 80, 0.9, 1.8, 0.35),
+      S('outcrop-shelf', 60, 0.9, 1.7, 0.3),
+      S('boulder-large', 70, 0.8, 1.5, 0.35),
+      S('rock-pebble', 1800, 0.5, 1.2, 0.8),
       S('stump-broken', 70, 0.7, 1.1, 0.4),
     ],
     grassDensity: 0.11, grassId: 'grass-tuft', grassScale: 0.65,
@@ -353,11 +296,11 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     relief: 28, reliefScale: 125, reliefRidge: 0.74, rockSlope: 0.93,
     scatter: [
       S('cliff-block', 55, 0.3, 0.65, 0.9),
-      S('rock-medium', 900, 0.8, 1.7, 0.7),
-      S('rock-slab', 750, 0.8, 1.6, 0.7),
-      S('boulder-large', 280, 0.8, 1.6, 0.6),
+      S('rock-medium', 380, 0.8, 1.7, 0.7),
+      S('rock-slab', 320, 0.8, 1.6, 0.7),
+      S('boulder-large', 140, 0.8, 1.6, 0.6),
       S('conifer-young', 320, 0.7, 1.1, 0.5),
-      S('rock-pebble', 5000, 0.5, 1.2, 0.8),
+      S('rock-pebble', 1600, 0.5, 1.2, 0.8),
     ],
     grassDensity: 0, grassId: '', grassScale: 1,
     fog: 0xdceeff, fogDensity: 1.8, sunTint: 0xeaf4ff, ambient: 1.25,
@@ -373,7 +316,7 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     scatter: [
       S('shrub-broadleaf', 900, 0.8, 1.4, 0.4),
       S('log-fallen', 190, 0.8, 1.2, 0.3),
-      S('rock-pebble', 2200, 0.5, 1.0, 0.6),
+      S('rock-pebble', 900, 0.5, 1.0, 0.6),
     ],
     grassDensity: 1.4, grassId: 'grass-cluster', grassScale: 1.25,
     fog: 0xc8d8b8, fogDensity: 1.6, sunTint: 0xf4f2d8, ambient: 0.94,
@@ -390,8 +333,80 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     // more wet sand, so the threshold barely matters here.
     relief: 1.5, reliefScale: 90, reliefRidge: 0, rockSlope: 0.80,
     scatter: [
-      S('rock-pebble', 5200, 0.5, 1.1, 0.7),
-      S('rock-small', 300, 0.7, 1.3, 0.5),
+      // PEBBLE DENSITY HALVED AND MORE, and the reason is the ORDER of two tests
+      // in `Scatter`, not the look of a beach.
+      //
+      // A lattice cell picks ONE asset in proportion to density and THEN applies
+      // the water cull, so it does not fall back: underwater, every cell that
+      // picked a non-wading asset yields nothing at all. At 5200/km2 of pebble
+      // against 1710 of wading rock, 76% of underwater cells picked something
+      // that cannot stand in water and produced empty sea — which is the real
+      // arithmetic behind "no rock is ever placed in the water", after `wade`,
+      // the density and the slope limit had each been fixed and changed nothing.
+      //
+      // Rebalancing the DISTRIBUTION is the fix available from this file; the
+      // alternative is re-picking after the cull, which is a change to the
+      // scatter's determinism and belongs to whoever owns that file. Pebbles at
+      // 5200/km2 also read as speckle rather than as shingle, so the beach loses
+      // nothing it wanted.
+      // Beach rock cut to 10% — the dry strand was a boulder field.
+      S('rock-pebble', 90, 0.5, 1.1, 0.7),
+      // ROCKS THAT STAND IN THE WATER. ART_BIBLE §4's coast palette is "water,
+      // foam and two sands", and both water references make the same point in
+      // pictures: a shoreline is legible because things stick out of it. These
+      // three wade, so the shallows carry forms and the water has something to
+      // draw a foam collar around.
+      // DENSE, and the density is set by the WADING BAND rather than by the
+      // beach. A form may only stand in `wade` metres of water, and on this
+      // world's 1-in-5 shelf that is a strip 10-18 m wide; at the 120/km2 a dry
+      // beach would want, a 200 m stretch of visible shoreline expects 0.4
+      // rocks in the water and measured zero. `lake-cartoon-cells.jpg` is
+      // liberally studded with them, which is also what makes its shoreline
+      // legible, so these are authored for the strip and the beach gets the
+      // same rocks for free.
+      // BIGGER, not just deeper. This world's shelf falls about 1 in 5, so
+      // "shallow enough to stand in" is a strip 10-25 m wide however generous
+      // `wade` is, and a form that only just clears the surface in it reads as
+      // gravel. Scaling the two large rocks up makes them sea stacks that stand
+      // several metres proud in several metres of water, which is what the
+      // reference's rocks are.
+      // AND THE SLOPE LIMIT IS RELAXED FOR THE WADING PAIR, which is what
+      // finally put them in the water. `wade` was correct and live in the built
+      // bundle and still nothing was placed below the waterline, because the
+      // slope test rejects first: `roughSlopeAt(x, z, 1.5)` measures the
+      // continental field's LOCAL gradient, and that field's finest octave is 5 m
+      // of amplitude over a 46 m wavelength, so the local slope is already
+      // 0.3-0.6 rad before the shelf's own 0.19 rad is added. On the downslope
+      // into the sea the two compound and a 0.6 limit rejects essentially
+      // everything — the rocks stopped exactly at the sand/water boundary, which
+      // is what the frames showed.
+      //
+      // A boulder standing in the sea does not need gentle ground under it. 1.1
+      // rad is 63 degrees, well inside the 1.5 the schema allows.
+      // HIGH ON PURPOSE, AND THE TRADE IS RECORDED BOTH WAYS because it was made
+      // in both directions and the second call is the right one.
+      //
+      // These densities apply to the WHOLE coast biome, not just the wading
+      // strip, so every rock that makes the shallows legible also lands on the
+      // dry beach — and `npm run distinct`'s corridor ratio measures tyre marks
+      // against the bare sand beside them. At these figures it read 0.67 against
+      // a required 1.25, where the lower set read 0.81.
+      //
+      // They were lowered to 1600 / 1300 / 520 to protect that ratio, and the
+      // cost was the feature: `solidRings` fell from 5 to 2 and then to 0 — no
+      // rock stands in the water at all, and "a thick white foam outline around
+      // every rock" is the single most characteristic mark in
+      // `refs/water/lake-cartoon-cells.jpg`. The corridor ratio was ALREADY 0.81
+      // at HEAD, before any of this work, i.e. already failing its own
+      // requirement; trading a named art requirement away to move an
+      // already-red metric from 0.81 to 0.67 is the wrong side of the trade.
+      //
+      // The real fix is a shore-proximity density so the wading strip can be
+      // dense while the beach is not, which needs a change to `Scatter`.
+      // Same 90% cut as the beach pebbles — a few sea stacks, not a reef.
+      S('rock-small', 140, 0.7, 1.3, 0.5, 0.9),
+      S('rock-medium', 110, 1.4, 2.6, 1.1, 4.0),
+      S('boulder-large', 48, 1.2, 2.4, 1.1, 7.5),
       S('log-fallen', 110, 0.8, 1.3, 0.3),
     ],
     // NONE. ART_BIBLE §4's coast palette lists water, foam and two sands and no
@@ -404,7 +419,7 @@ export const BIOME_STYLES: Record<BiomeId, BiomeStyle> = {
     // sand nothing had driven over, purely because the marram had swayed, and
     // the pair stopped being a controlled A/B at all. Marram belongs on a dune,
     // not on the wet strand this biome is authored for.
-    grassDensity: 0, grassId: 'grass-tuft', grassScale: 0.8,
+    grassDensity: 0, grassId: '', grassScale: 0.8,
     fog: 0xcdeff0, fogDensity: 0.5, sunTint: 0xfff8e4, ambient: 1.16,
     response: 'wetSand',
   },
@@ -440,6 +455,20 @@ export function cloneBiomeStyle(style: BiomeStyle): BiomeStyle {
       perKm2: e.perKm2,
       scale: [e.scale[0], e.scale[1]] as [number, number],
       ...(e.maxSlope === undefined ? {} : { maxSlope: e.maxSlope }),
+      // `wade` MUST BE COPIED HERE. This clone rebuilds each scatter entry
+      // field by field, `ensureSnapshot` replaces the live `BIOME_STYLES` with a
+      // clone at module init, and any key this list forgets is therefore
+      // silently absent from the table the game actually reads. `wade` was
+      // omitted, so three consecutive fixes for "no rock is ever placed in the
+      // water" — the depth semantics, the density, the slope limit — were each
+      // verified present in the built bundle and each changed nothing, because
+      // `entry.wade` was `undefined` by the time `Scatter` read it and
+      // `?? 0` turned that into "dry land only".
+      //
+      // A spread would not have this failure mode. It is written out field by
+      // field on purpose (the Forge round-trips these through JSON), so the cost
+      // of that choice is that every new key has to be added in both clones.
+      ...(e.wade === undefined ? {} : { wade: e.wade }),
     })),
   }
 }
@@ -501,6 +530,20 @@ export function biomeStyleToJson(style: BiomeStyle): string {
       perKm2: e.perKm2,
       scale: e.scale,
       ...(e.maxSlope === undefined ? {} : { maxSlope: e.maxSlope }),
+      // `wade` MUST BE COPIED HERE. This clone rebuilds each scatter entry
+      // field by field, `ensureSnapshot` replaces the live `BIOME_STYLES` with a
+      // clone at module init, and any key this list forgets is therefore
+      // silently absent from the table the game actually reads. `wade` was
+      // omitted, so three consecutive fixes for "no rock is ever placed in the
+      // water" — the depth semantics, the density, the slope limit — were each
+      // verified present in the built bundle and each changed nothing, because
+      // `entry.wade` was `undefined` by the time `Scatter` read it and
+      // `?? 0` turned that into "dry land only".
+      //
+      // A spread would not have this failure mode. It is written out field by
+      // field on purpose (the Forge round-trips these through JSON), so the cost
+      // of that choice is that every new key has to be added in both clones.
+      ...(e.wade === undefined ? {} : { wade: e.wade }),
     })),
     grassDensity: style.grassDensity,
     grassId: style.grassId,

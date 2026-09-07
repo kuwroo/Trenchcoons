@@ -111,59 +111,34 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // its turned ones #4281A9 (H204, blue) — so the lit stop goes green-grey, the
   // shadow stop goes properly blue, and the pair spans a hue range the ramp can
   // now actually select between.
+  // Warm path-stone (overgrown PathRocks / dirt shoulders), not Genshin blue.
   stone: {
-    shadow: 0x7d97ba, base: 0x93a6a4, lit: 0xa8bda6,
-    ambient: 1.75, midLevel: 0.60, rampShadow: 0.26, rampMid: 0.74,
+    shadow: 0x6a6358, base: 0x8b8570, lit: 0xb0a890,
+    ambient: 1.65, midLevel: 0.58, rampShadow: 0.24, rampMid: 0.74,
   },
   massif: {
     shadow: 0x7b96bd, base: 0x8fa3ab, lit: 0xa2b7aa,
     ambient: 1.8, midLevel: 0.60, rampShadow: 0.28, rampMid: 0.76,
   },
-  // Conifer tiers. The def's teal is the tie-breaker's own measurement and is
-  // kept; only the light rig moves. `rampShadow` stays soft on foliage — a tier
-  // plate is not a fracture plane and does not want a hard terminator — but it
-  // has to be above zero for the underside of a plate to read as an underside.
-  // Ambient 0.8 and midLevel 0.56, both measured against the tie-breaker rather
-  // than fitted: refs/genshin/grasslands.jpg's conifers read luma 0.698 on a lit
-  // plate and 0.347 on a shaded one, and at 1.1/0.70 over the new fill floor the
-  // build's plates came back at 0.63 lit / 0.51 shaded — a pale mint tree with
-  // almost no value range, where the reference's has a 2:1 spread. The teal
-  // itself is the def's own reference measurement and is untouched.
-  needle: { ambient: 0.62, midLevel: 0.54, rampShadow: 0.16, rampMid: 0.80 },
-  // The dark anchor. Ambient down for the fill floor; nothing else, because the
-  // def's own fit against the meadow ground (body at 0.84x the ground it sits
-  // on) is the right relationship and this file must not undo it.
+  // Pine canopy — olive family with overgrown Common/Pine tint, not mint teal.
+  needle: {
+    base: 0x5a7a48, shadow: 0x3f5a38, lit: 0x8aa858, top: 0xa8b86a,
+    ambient: 0.62, midLevel: 0.54, rampShadow: 0.16, rampMid: 0.80,
+  },
   leaf: { ambient: 0.8, midLevel: 0.48 },
 
-  // Forest canopy. ART_BIBLE §4: canopy lit #7FB53C, canopy shadow #3F7A2E.
+  // Broadleaf canopy — overgrown olive (grassColor / noiseColor family).
   foliage: {
-    base: 0x4f8f2c, shadow: 0x3f7a2e, lit: 0x9fd45c, top: 0xc2ef78,
+    base: 0x6a8a48, shadow: 0x4a6a40, lit: 0xa0b868, top: 0xb8c878,
     ambient: 0.86, rimStrength: 0.55, midLevel: 0.5,
   },
-  // Understory #2F5F2E. The frame's dark anchor is allowed to be dark; it is
-  // not allowed to be black, and it is not allowed to be blue.
+  // Understory — darker olive, still plant-green not charcoal.
   bush: {
-    base: 0x2f5f2e, shadow: 0x2a5340, lit: 0x7fb53c, top: 0x93c74a,
+    base: 0x4a6a40, shadow: 0x3a5a38, lit: 0x8aa858, top: 0xa8b86a,
     ambient: 0.78, midLevel: 0.48,
   },
-  // The two grass surfaces. `gradientStrength` is pulled back from the authored
-  // 0.6/0.35 because it lightens the blade TIP, and a field of tens of
-  // thousands of high-contrast tips is a field of isolated bright pixels: the
-  // driver's-eye capture measured 0.14% speckle against a 0.02% reference and
-  // tile detail 1.5x the reference ceiling. The tip gradient is doing the right
-  // thing on one tuft and the wrong thing on ten thousand.
-  // Measured against refs/genshin/grasslands.jpg rather than authored: the
-  // reference's lit grass is hue 93-96 at S0.61-0.64 and this lit stop was
-  // 0x8bbb52, hue 84 — on the chartreuse side of the same measurement the
-  // terrain palette was just corrected for, and the one surface in the frame
-  // there are ten thousand instances of. Blue up, so the hue rotates into the
-  // reference's band and the chroma falls into it at the same time. The shadow
-  // stop goes sky-tinted for §2, matching the terrain's own new 0x3b6c9a rather
-  // than fighting it — grass tufts standing in the shade of a hill that has gone
-  // blue cannot stay green.
   scrub: {
-    base: 0x477f42, shadow: 0x33655a, lit: 0x84bb5c,
-    // See `grassMound` — same tip treatment, slightly gentler on a broader leaf.
+    base: 0x6a8a48, shadow: 0x4a6a40, lit: 0xa0b868,
     top: 0xfff6c0, topGain: 1.16, gradientStrength: 0.42,
     ambient: 0.88,
   },
@@ -200,19 +175,11 @@ const GRADE: Record<string, Partial<PainterlyParams>> = {
   // Coast: "wet sand #C9A96F, dry sand #EFE49A".
   sand: { shadow: 0xc9a96f },
   sandPan: { shadow: 0xc9a96f },
+  // Overgrown grassColor #a8b86a / noiseColor #b8c878 — olive carpet.
   grassMound: {
-    base: 0x4d8544, shadow: 0x37685c, lit: 0x8ac262,
-    // BRIGHT WARM TIPS. `top` is a MULTIPLIER on the albedo, not a replacement,
-    // so a warm near-white with the blue pulled down both lifts the tip and
-    // rotates it toward yellow — which is what the reference's grass does and
-    // what ART_BIBLE 2 asks of a lit surface.
-    //
-    // Only usable since the gradient was fixed: `positionLocal` was
-    // self-referential for any material overriding `positionNode`, which grass
-    // does for wind, so this whole term silently did nothing on every blade in
-    // the game. See the note in src/material/painterly.ts.
-    top: 0xfff6c0, topGain: 1.2, gradientStrength: 0.5,
-    ambient: 1.0,
+    base: 0x7a9450, shadow: 0x5a7a48, lit: 0xa8b86a,
+    top: 0xfff6c0, topGain: 1.18, gradientStrength: 0.45,
+    ambient: 1.05,
   },
 }
 

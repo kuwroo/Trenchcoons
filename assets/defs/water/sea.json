@@ -1,0 +1,62 @@
+{
+  "id": "sea",
+  "version": 1,
+  "type": "water",
+  "notes": "The cartoon sea. Every colour and every metre in here was measured off refs/water/shore-foam-wake.jpg and refs/water/lake-cartoon-cells.jpg — see the table in src/water/defs.ts. The depth ladder is the load-bearing part: the reference rotates hue 192 -> 57 and drops saturation 0.77 -> 0.16 as the water shallows onto sand, and it does that at a CONSTANTLY HIGH value (0.73-0.86). This water is bright, not dark; anything that darkens the deep end is wrong.",
+  "material": {
+    "deep": "#5eb4c7",
+    "mid": "#a3d1d1",
+    "shallow": "#c1dbce",
+    "edge": "#aec39d",
+    "foam": "#f4fdf6",
+
+    "depthMid": 15.0,
+    "depthShallow": 6.0,
+    "depthEdge": 1.1,
+    "bandSoftness": 0.30,
+    "seabedMix": 0.40,
+    "bandWarp": 2.6,
+
+    "causticColour": "#d9f3e6",
+    "causticScale": 26.0,
+    "causticFine": 6.8,
+    "causticStrength": 0.10,
+    "causticWidth": 0.55,
+    "causticFlow": 0.055,
+    "causticDeep": 0.34,
+
+    "cellScale": 15.0,
+    "cellLevels": 2.8,
+    "cellAmp": 1.10,
+    "cellRim": 0.108,
+    "cellRimStrength": 0.80,
+    "cellRound": 0.72,
+    "cellRimValue": 2.60,
+    "cellRimDesat": 0.21,
+    "aerial": 0.50,
+    "shallowDesat": 0.55,
+
+    "waveAmp": 0.32,
+    "waveScale": 27.0,
+    "waveSpeed": 0.42,
+    "waveChop": 0.55,
+    "swashAmp": 0.90,
+    "swashReach": 2.6,
+    "swashRate": 0.075,
+
+    "foamShore": 11.5,
+    "foamLace": 2.80,
+    "foamLaceScale": 7.5,
+    "foamSlopeBias": 0.22,
+    "wakeStrength": 1.0,
+    "wakeLace": 1.3,
+    "wakeLaceScale": 0.85,
+
+    "glintStrength": 0.12,
+    "glintPower": 320.0,
+    "glintNeutral": 0.82,
+    "skyMix": 0.05,
+    "saturationGain": 0.31,
+    "ambient": 0.85
+  }
+}

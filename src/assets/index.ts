@@ -17,7 +17,7 @@
 export { ScatterLibrary, type ScatterBatch } from './library'
 export {
   allScatterAssets, generators, pickLod, scatterAsset, scatterDef, scatterIds,
-  scatterVariants, type ScatterDef,
+  scatterVariants, type AssetRules, type ScatterDef,
 } from './registry'
 export { scatterBudget, variantCounts, BATCH_CEILING, TRIANGLE_CEILING } from './budget'
 export { colliderGeometry } from './collider'

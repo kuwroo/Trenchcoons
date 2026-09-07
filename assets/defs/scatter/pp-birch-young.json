@@ -17,5 +17,23 @@
     "forest",
     "wetland",
     "meadow"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "forest",
+      "wetland",
+      "meadow"
+    ],
+    "placement": "Young birch sapling for meadow edges and forest understory; smallest of the four trees.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      120,
+      700
+    ],
+    "scale": [
+      0.9,
+      1.7
+    ],
+    "avoid": "Avoid desert, alpine, and coast."
+  }
 }

@@ -86,11 +86,19 @@ export function wheelGeometry(radius: number, width: number, segments = 14): THR
 
   // Shallow blocks around the circumference. Nine is coprime with the 14 facets,
   // so lugs and facets do not beat against each other into a static pattern.
+  // NINE SHALLOW LUGS, and "shallow" got shallower. At 0.13 of the radius the
+  // lugs stood 0.052 m proud of a 0.4 m tyre and the wheel read as a COG — the
+  // reference sheet draws a smooth black tyre with a decorative hubcap and
+  // nothing else. They cannot go away, though, and src/vehicle/geometry.ts's own
+  // header is the reason: the painterly field is sampled from `positionWorld`, so
+  // on a bare cylinder the mottle SLIDES ACROSS the tyre instead of turning with
+  // it and the wheel has no rotation cue at any speed. 0.085 keeps the cue and
+  // stops the silhouette being toothed.
   const LUGS = 9
-  const lugH = radius * 0.13
+  const lugH = radius * 0.085
   for (let i = 0; i < LUGS; i++) {
     const a = (i / LUGS) * Math.PI * 2
-    const g = new THREE.BoxGeometry(width * 0.72, lugH, radius * 0.46)
+    const g = new THREE.BoxGeometry(width * 0.62, lugH, radius * 0.38)
     place(
       g,
       0, Math.sin(a) * (radius - lugH * 0.35), Math.cos(a) * (radius - lugH * 0.35),
@@ -105,6 +113,36 @@ export function wheelGeometry(radius: number, width: number, segments = 14): THR
   place(bar, 0, 0, 0, 0.6, 0, 0)
   parts.push(bar)
 
+  return mergeGeometries(parts)
+}
+
+/**
+ * A hubcap: a shallow dished disc with two concentric rings and a centre boss.
+ *
+ * THE HUB WAS A SECOND LUGGED WHEEL. `kart.ts` built it with `wheelGeometry` at a
+ * smaller radius, so every wheel carried a 0.19 m toothed disc inside a 0.40 m
+ * toothed tyre — the critic read the pair as "a mechanical fender/wheel-housing
+ * wrapping each wheel" and shifted the whole vehicle's register from "wagon with
+ * bolted-on wheels" toward "off-road buggy". Reusing the tyre geometry was a
+ * convenience that changed what the vehicle IS.
+ *
+ * The reference draws a pale concentric-ring cap covering about 45% of the tyre,
+ * which is what this is. Rings rather than a flat disc because a flat disc at
+ * this size is a dot: concentric steps catch the key light at different angles
+ * and give the cap a form read at chase distance, and they turn with the wheel,
+ * so they carry some of the rotation cue the lugs were shrunk away from.
+ */
+export function hubCapGeometry(radius: number, width: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = []
+  const ring = (r: number, w: number, x: number): THREE.BufferGeometry => {
+    const g = new THREE.CylinderGeometry(r, r, w, 12, 1)
+    g.rotateZ(Math.PI * 0.5)
+    g.translate(x, 0, 0)
+    return g
+  }
+  parts.push(ring(radius, width * 0.5, 0))
+  parts.push(ring(radius * 0.66, width * 0.72, 0))
+  parts.push(ring(radius * 0.26, width * 0.9, 0))
   return mergeGeometries(parts)
 }
 
@@ -173,6 +211,29 @@ export class PosedInstances {
     this.e.set(rx, ry, rz)
     this.q.setFromEuler(this.e)
     this.mesh.setMatrixAt(i, this.m.compose(pos, this.q, scale))
+  }
+
+  /**
+   * Write a world matrix straight in, optionally post-scaled in the part's OWN
+   * frame.
+   *
+   * This is what lets a rig drive an instanced batch: `Joint.world` is already
+   * the matrix the part wants, and decomposing it back to TRS so `set()` can
+   * recompose it loses the chain's non-uniform scales and costs a quaternion
+   * round trip per part per frame. `scale` is applied on the RIGHT on purpose —
+   * `world * S` scales in the joint's local axes, which is what a blink
+   * (squash the eye about its own vertical) or a limb length (stretch the bone
+   * along its own axis) actually means. Applying it on the left would scale in
+   * world axes and a blinking head turned 40 degrees would pinch diagonally.
+   */
+  setMatrix(i: number, world: THREE.Matrix4, scale?: THREE.Vector3): void {
+    if (scale) {
+      this.m.makeScale(scale.x, scale.y, scale.z)
+      this.m.premultiply(world)
+      this.mesh.setMatrixAt(i, this.m)
+    } else {
+      this.mesh.setMatrixAt(i, world)
+    }
   }
 
   /** Call once after all `set()` calls for the frame. */

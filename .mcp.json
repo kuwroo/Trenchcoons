@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "olympus": {
+      "command": "/Volumes/Intuition Install/Intuition.app/Contents/Resources/app/resources/atlas/darwin-arm64/node",
+      "args": [
+        "/Volumes/Intuition Install/Intuition.app/Contents/Resources/app/resources/atlas/darwin-arm64/atlas-launcher.cjs",
+        "mcp"
+      ]
+    }
+  }
+}

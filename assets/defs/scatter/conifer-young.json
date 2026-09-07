@@ -3,7 +3,7 @@
   "version": 1,
   "type": "scatter",
   "generator": "conifer",
-  "notes": "Sapling. Fewer, wider plates relative to height and almost no bare trunk, so it reads as a different age of the same species rather than as the tall one scaled down \u2014 which is the tell that gives a procedural forest away.",
+  "notes": "Sapling. Fewer, wider plates relative to height and almost no bare trunk, so it reads as a different age of the same species rather than as the tall one scaled down — which is the tell that gives a procedural forest away.",
   "params": {
     "height": 5.2,
     "tiers": 5,
@@ -38,5 +38,23 @@
     "forest",
     "alpine",
     "meadow"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "forest",
+      "alpine",
+      "meadow"
+    ],
+    "placement": "Sapling understory and alpine scrub; mix with tall conifers so age reads, never just a scaled-down hero tree.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      320,
+      1200
+    ],
+    "scale": [
+      0.7,
+      1.45
+    ],
+    "avoid": "Avoid desert and coast."
+  }
 }

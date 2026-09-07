@@ -3,7 +3,7 @@
   "version": 1,
   "type": "scatter",
   "generator": "imported",
-  "notes": "Birch. Pale trunk on its own surface \u2014 the pack splits bark across several UV swatches and the importer merges them by height, so the whole trunk is one part.",
+  "notes": "Birch. Pale trunk on its own surface — the pack splits bark across several UV swatches and the importer merges them by height, so the whole trunk is one part.",
   "params": {
     "mesh": "pp-birch-tall",
     "scale": 1.3
@@ -16,5 +16,22 @@
   "biomes": [
     "forest",
     "wetland"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "forest",
+      "wetland"
+    ],
+    "placement": "Pale birch for forest (and wetland edge) canopy variety beside conifers and broadleaves.",
+    "maxSlope": 0.5,
+    "densityPerKm2": [
+      540,
+      1260
+    ],
+    "scale": [
+      1.0,
+      1.8
+    ],
+    "avoid": "Avoid desert, alpine, and coast."
+  }
 }

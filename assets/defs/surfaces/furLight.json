@@ -1,22 +1,21 @@
 {
   "id": "furLight",
-  "version": 1,
+  "version": 5,
   "type": "surface",
-  "notes": "Muzzle and ear insides. The pale counter-shape that makes the dark mask read as a mask (ART_BIBLE 6: 'the mask reads as a strong dark shape'). Brush overlay reduced 0.55 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. Brush disabled (0.18 -> 0). At brushScale 0.2 m on a head-sized object the pattern repeats once or twice across the whole surface, which reads as speckle rather than texture \u2014 and the painterly direction is abandoned (ART_BIBLE 1).",
+  "notes": "The raccoon's pale marks: muzzle, the brow blaze over each eye patch, inner ear, and the sclera crescent. v2 desaturates hard, and the reason is the same measurement that fixed `mask`: the reference's pale fur is #c6b09e — H26 S0.20 V0.78 — while v1 was authored at #dcb98c, H32 S0.36 V0.86. v1 therefore sat within 6 degrees of hue AND 0.02 of saturation of `cardboard`'s own base (#a88a68, H30 S0.38), which is exactly the 'heads and vehicle are one material to the eye' failure `fur` v2 was written to escape — the muzzle had quietly walked back into it. The reference separates pale fur from kraft box by SATURATION and VALUE rather than hue: S0.20 against the box's 0.45, V0.78 against 0.77 on the lit face but against 0.66 on the box's base. So this stays warm and goes chalky. It is also carrying much more of the face now than it used to (v1 was the muzzle alone), so its area on screen roughly tripled and a saturated version of it would have dominated the head. SATURATION: the previous revision of this note had `saturationGain` BACKWARDS. It reads as 'fraction of chroma LOST at full light' (see painterly.ts), so lowering it SATURATES, and the pass that took it from 0.30 to 0.08 to fix a measured S0.49 was pushing on the wrong side of the lever — the rendered figure did not move (0.49 -> 0.50), which is what said the term was not the cause. It is not: the illuminant is. At hour 0.62 the warm low sun dominates `albedo * (ambient + direct)`, and the signature is that this surface authored at S0.18 and `cardboard` authored at S0.38 BOTH land on S0.50 — the rendered chroma is converging on the light's, not on the albedo's. That is the open issue CLAUDE.md already names ('the palette only survives in mid-tones'), it is not fixable from a def, and it is not fixable from here. The gain is set at 0.34 to take what it can off the lit end, which is the one stop it acts on. THE SECOND REFERENCE SHEET (refs/character/raccoon-boxkart-sheet-2.png) settles the value ladder, and the build had it INVERTED AT THE TOP. Measured on its front view: muzzle #c2ad97 V0.76, brow band #99816e V0.60, chest bib #9b8375 V0.61, fur #5b4448 V0.36, mask #4b343d V0.29. So the muzzle is the BRIGHTEST thing on the animal, brow and bib sit together a step under it, and fur is well below both. The build had the muzzle rendering DARKER than the brow, because `furMuzzle` was split off `furLight` on a measurement from the first sheet, where the muzzle reads mid-tone — the two sheets disagree on absolute value (the first is a lit scene, the second a flat character sheet) and agree exactly on the ORDER. The order is what is authored to; the absolute fur value stays where it is, because that is set by the separation from the cardboard the first sheet does show. Brow band and chest bib, one step under the muzzle rather than above it.",
   "material": {
-    "base": "#dcb98c",
-    "shadow": "#a3805a",
-    "lit": "#f6e0bd",
-    "top": "#fff0d8",
-    "topGain": 1.05,
+    "base": "#9a8d80",
+    "shadow": "#6e645a",
+    "lit": "#bcb1a4",
+    "top": "#cbc1b5",
+    "topGain": 1.04,
     "gradientBase": -0.16,
     "gradientHeight": 0.32,
-    "gradientStrength": 0.4,
-    "brushScale": 0.2,
+    "gradientStrength": 0.35,
     "brushStrength": 0.0,
-    "brushSaturation": 0.42,
-    "rimStrength": 0.8,
-    "saturationGain": 0.28,
-    "shadowSkyTint": 0.22
+    "detailStrength": 0.16,
+    "rimStrength": 0.65,
+    "saturationGain": 0.3,
+    "shadowSkyTint": 0.24
   }
 }

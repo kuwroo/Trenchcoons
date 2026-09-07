@@ -35,6 +35,7 @@ import { GroundMaterial } from '../terrain/ground'
 import { Scatter, type Obstacle, type SolidInstance } from './scatter'
 import { Grass } from './grass'
 import { graded } from './surfaceGrade'
+import type { Water } from '../water/water'
 
 export type { Obstacle, SolidInstance }
 
@@ -80,6 +81,7 @@ export function buildWorld(
   wind: WindField,
   deform: DeformHook | null,
   terrain: TerrainWorld,
+  water: Water | null,
   options: WorldOptions = {},
 ): World {
   void options
@@ -124,14 +126,17 @@ export function buildWorld(
   //
   // The sand ring went with the cylinders. The shore reads from the coast biome
   // now, which follows the real waterline everywhere instead of only here.
-  const water = mat('water')
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(24000, 24000, 1, 1), water)
-  sea.rotation.x = -Math.PI / 2
-  sea.position.set(0, terrain.waterLevel, 0)
-  sea.frustumCulled = false
-  sea.renderOrder = -1
-  sea.name = 'sea'
-  group.add(sea)
+  //
+  // THE SHEET ITSELF NOW LIVES IN src/water. What used to be here was
+  // `PlaneGeometry(24000, 24000, 1, 1)` carrying the painterly `water` surface:
+  // two triangles, one flat colour, no shore, no foam, and nothing to drive on.
+  // The world's job is to place it and to keep it out of the shadow cascades;
+  // everything else — the depth ladder off `terrain.bathyMap`, the caustic
+  // network, the surf line, the wake — belongs to `Water`, and the vehicle
+  // coupling belongs to `WaterSystem`. Passed in rather than constructed here
+  // for the same reason `deform` is: it is a system with a render pass and a
+  // vehicle hook, and `buildWorld` is an assembler.
+  if (water) group.add(water.mesh)
 
   // ── the skyline ──────────────────────────────────────────────────────────
   // There is no longer a skyline OBJECT. ART_BIBLE §1 names atmospheric
@@ -233,7 +238,14 @@ export function buildWorld(
     // every blade in the frame; distant scatter casts into cascades whose
     // texels are metres across. Near scatter still casts, which is the shadow
     // that reads.
-    shadowExcluded: [grass.group, scatter.farGroup, ...clipmap.shadowExcluded],
+    // The sea is excluded too. It is 48k triangles of horizontal sheet whose only
+    // possible contribution to a sun cascade is a shadow cast by its own wave
+    // crests onto itself, at an amplitude of 0.24 m against cascade texels that
+    // are metres across — four extra draws of the whole sheet for nothing.
+    shadowExcluded: [
+      grass.group, scatter.farGroup, ...clipmap.shadowExcluded,
+      ...(water ? [water.mesh] : []),
+    ],
     dominantAt: (x, z) => terrain.dominantAt(x, z),
   }
 }

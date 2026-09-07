@@ -16,5 +16,23 @@
     "forest",
     "meadow",
     "alpine"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "forest",
+      "meadow",
+      "alpine"
+    ],
+    "placement": "Mossy forest boulder for understory ground clutter beside trunks and roots.",
+    "maxSlope": 0.5,
+    "densityPerKm2": [
+      156,
+      364
+    ],
+    "scale": [
+      0.7,
+      1.4
+    ],
+    "avoid": "Avoid desert and bare coast — moss wants forest shade."
+  }
 }

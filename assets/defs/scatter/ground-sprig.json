@@ -28,5 +28,19 @@
     "forest",
     "wetland",
     "coast"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "wetland",
+      "coast"
+    ],
+    "placement": "Close-range clutter between tufts to break the bare terrain plane in the last couple of metres; near band only.",
+    "scale": [
+      0.8,
+      1.2
+    ],
+    "avoid": "Avoid desert and alpine; near-band grass biomes only."
+  }
 }

@@ -1,10 +1,10 @@
-// Forge Environments mode — live biome / atmosphere preview and style editor.
+// Forge Environments mode — Blender-style outliner + properties + prompt.
 //
 // Uses the game's TerrainWorld + clipmap ground + scatter + grass + atmosphere
 // + post chain (ARCHITECTURE: "WYSIWYG or the tool is useless"). Edits mutate
 // BIOME_STYLES in place, rebake the palette maps, and force a scatter/grass
-// rebuild. Copy JSON exports a patch you can paste into biomes.ts; nothing
-// writes source files from the browser.
+// rebuild. Copy JSON exports a patch you can paste into biomes.ts / asset defs;
+// nothing writes source files from the browser.
 
 import * as THREE from 'three/webgpu'
 import { Atmosphere } from '../../atmosphere/sky'
@@ -18,8 +18,10 @@ import {
 } from '../../terrain/biomes'
 import { TerrainWorld } from '../../terrain/world'
 import { buildWorld } from '../../world/world'
-import { scatterIds } from '../registry'
+import { Water } from '../../water'
+import { scatterDef, scatterIds, type AssetRules, type ScatterDef } from '../registry'
 import { BIOMES } from '../../deform/biome'
+import { formatPatchDiff, interpretPrompt, type PromptPatch } from './promptPatch'
 
 declare global {
   interface Window {
@@ -51,6 +53,8 @@ const RESPONSE_KEYS = Object.keys(BIOMES) as Array<keyof typeof BIOMES>
 const GRASS_IDS = ['', ...scatterIds().filter((id) => id.startsWith('grass'))]
 const ALL_SCATTER = scatterIds()
 
+type PropTab = 'world' | 'scatter' | 'asset' | 'prompt'
+
 const COLOR_FIELDS = [
   'base', 'shadow', 'lit', 'cliff', 'under', 'rock', 'fog', 'sunTint',
 ] as const satisfies ReadonlyArray<keyof BiomeStyle>
@@ -80,9 +84,21 @@ function parseHex(s: string, fallback: number): number {
   return m ? Number.parseInt(m[1]!, 16) : fallback
 }
 
-/** Assign a numeric BiomeStyle field without fighting the scatter/string union. */
 function setStyleNumber(style: BiomeStyle, key: string, value: number): void {
   ;(style as unknown as Record<string, unknown>)[key] = value
+}
+
+/** Effective rules: JSON `rules` + top-level `biomes` + notes fallback. */
+function effectiveRules(def: ScatterDef, draft?: AssetRules | null): AssetRules {
+  const base: AssetRules = {
+    biomes: def.rules?.biomes ?? def.biomes ?? [],
+    placement: def.rules?.placement ?? (def.notes ? def.notes.split(/(?<=\.)\s/)[0] : ''),
+    maxSlope: def.rules?.maxSlope,
+    densityPerKm2: def.rules?.densityPerKm2,
+    scale: def.rules?.scale,
+    avoid: def.rules?.avoid,
+  }
+  return draft ? { ...base, ...draft } : base
 }
 
 function fail(e: unknown): never {
@@ -106,12 +122,17 @@ export async function bootEnvEditor(): Promise<void> {
     ? q.get('biome') as BiomeId
     : 'meadow')
   let tod = numParam('time', 0.42)
-  // Vite HMR can keep a mutated BIOME_STYLES across soft reloads of this
-  // module. Always start from the authored snapshot so a previous pink
-  // experiment cannot leak into a fresh Environments session.
   resetBiomeStyle()
   let draft = cloneBiomeStyle(BIOME_STYLES[biome])
   let lastExport = ''
+  let selectedAsset: string | null = q.get('asset')
+  let propTab: PropTab = (['world', 'scatter', 'asset', 'prompt'].includes(q.get('tab') ?? '')
+    ? q.get('tab') as PropTab
+    : 'world')
+  const rulesDrafts = new Map<string, AssetRules>()
+  const paramDrafts = new Map<string, Record<string, number>>()
+  let pending: PromptPatch | null = null
+  let promptText = ''
 
   let resolveReady!: () => void
   window.__ready = new Promise<void>((r) => { resolveReady = r })
@@ -131,7 +152,11 @@ export async function bootEnvEditor(): Promise<void> {
   scene.add(atmosphere.dome)
   const wind = new WindField()
   const terrain = new TerrainWorld(new Rng('forge-env'), { forced: biome })
-  const world = buildWorld(atmosphere, wind, null, terrain)
+  // THE FORGE MUST RENDER EXACTLY LIKE THE GAME (CLAUDE.md). The env editor
+  // gets the same sea the game does, off the same def, or the biome whose whole
+  // point is a coastline previews without one.
+  const water = new Water(atmosphere, terrain)
+  const world = buildWorld(atmosphere, wind, null, terrain, water)
   scene.add(world.group)
 
   const view = { ...VIEWS[biome] }
@@ -164,6 +189,10 @@ export async function bootEnvEditor(): Promise<void> {
   const pipeline = buildPostChain(renderer, scene, camera, atmosphere)
   const clock = new Clock({ fixedDelta: 1 / 60 })
   const hud = document.getElementById('hud') as HTMLDivElement
+  const outliner = document.getElementById('outliner') as HTMLDivElement
+  const panel = document.getElementById('env-panel') as HTMLDivElement
+  outliner.hidden = false
+  panel.hidden = false
 
   const syncHud = (): void => {
     const g = world.heightAt(view.x, view.z)
@@ -171,6 +200,7 @@ export async function bootEnvEditor(): Promise<void> {
       `ENV  ${biome}  tod=${tod.toFixed(2)}  eye=${view.eye.toFixed(1)}\n` +
       `pos ${view.x.toFixed(0)},${g.toFixed(1)},${view.z.toFixed(0)}  ` +
       `scatter ${world.scatter.instances}\n` +
+      (selectedAsset ? `sel ${selectedAsset}\n` : '') +
       `drag orbit · scroll eye · 1-6 biome · R reset`
   }
   syncHud()
@@ -189,33 +219,50 @@ export async function bootEnvEditor(): Promise<void> {
       resetBiomeStyle(biome)
       draft = cloneBiomeStyle(BIOME_STYLES[biome])
       applyLive()
-      renderPanel()
+      renderAll()
     },
   }
 
-  // ── panel DOM ─────────────────────────────────────────────────────────────
-  const panel = document.getElementById('env-panel') as HTMLDivElement
-  panel.hidden = false
+  const rulesFor = (id: string): AssetRules => {
+    try {
+      return effectiveRules(scatterDef(id), rulesDrafts.get(id))
+    } catch {
+      return { biomes: [], placement: '' }
+    }
+  }
 
-  const renderPanel = (): void => {
-    const scatterOpts = ALL_SCATTER.map(
-      (id) => `<option value="${id}">${id}</option>`,
-    ).join('')
+  const renderOutliner = (): void => {
+    const biomeAssets = draft.scatter.map((e) => e.id)
+    const library = ALL_SCATTER.filter((id) => !biomeAssets.includes(id))
+    outliner.innerHTML = `
+      <div class="ol-head">Outliner</div>
+      <div class="ol-section">Biomes</div>
+      ${BIOME_IDS.map((id) =>
+        `<button type="button" class="ol-item ol-biome ${id === biome ? 'on' : ''}" data-biome="${id}">${id}</button>`,
+      ).join('')}
+      <div class="ol-section">Scatter in ${biome}</div>
+      ${draft.scatter.map((e) =>
+        `<button type="button" class="ol-item ${selectedAsset === e.id ? 'on' : ''}" data-asset="${e.id}">
+          ${e.id}<span class="ol-meta">${e.perKm2}</span>
+        </button>`,
+      ).join('') || '<div class="ol-item" style="opacity:.5">— empty —</div>'}
+      <div class="ol-section">Library</div>
+      ${library.map((id) =>
+        `<button type="button" class="ol-item ${selectedAsset === id ? 'on' : ''}" data-asset="${id}">
+          ${id}
+        </button>`,
+      ).join('')}
+    `
+  }
+
+  const renderWorldTab = (): string => {
     const grassOpts = GRASS_IDS.map(
       (id) => `<option value="${id}" ${draft.grassId === id ? 'selected' : ''}>${id || '(none)'}</option>`,
     ).join('')
     const respOpts = RESPONSE_KEYS.map(
       (k) => `<option value="${k}" ${draft.response === k ? 'selected' : ''}>${k}</option>`,
     ).join('')
-
-    panel.innerHTML = `
-      <div class="forge-section">
-        <div class="forge-row forge-tabs-biome">
-          ${BIOME_IDS.map((id) =>
-            `<button type="button" data-biome="${id}" class="${id === biome ? 'on' : ''}">${id}</button>`,
-          ).join('')}
-        </div>
-      </div>
+    return `
       <div class="forge-section">
         <label>time of day <span data-readout="tod">${tod.toFixed(2)}</span>
           <input type="range" min="0" max="1" step="0.01" value="${tod}" data-tod />
@@ -242,9 +289,7 @@ export async function bootEnvEditor(): Promise<void> {
       </div>
       <div class="forge-section">
         <h3>grass</h3>
-        <label>grass def
-          <select data-grass-id>${grassOpts}</select>
-        </label>
+        <label>grass def<select data-grass-id>${grassOpts}</select></label>
         ${NUM_FIELDS.filter((f) => f.key === 'grassDensity' || f.key === 'grassScale').map((f) => `
           <label>${f.label} <span data-readout="${f.key}">${Number(draft[f.key]).toFixed(2)}</span>
             <input type="range" min="${f.min}" max="${f.max}" step="${f.step}"
@@ -266,36 +311,144 @@ export async function bootEnvEditor(): Promise<void> {
             <input type="range" min="${f.min}" max="${f.max}" step="${f.step}"
               value="${draft[f.key] as number}" data-num="${f.key}" />
           </label>`).join('')}
-        <label>deform response
-          <select data-response>${respOpts}</select>
-        </label>
+        <label>deform response<select data-response>${respOpts}</select></label>
+      </div>`
+  }
+
+  const renderScatterTab = (): string => `
+    <div class="forge-section">
+      <h3>biome scatter <button type="button" class="forge-mini" data-add-scatter>+ add</button></h3>
+      <div class="forge-scatter-list">
+        ${draft.scatter.map((e, i) => `
+          <div class="forge-scatter-row" data-si="${i}">
+            <select data-s-id>${ALL_SCATTER.map((id) =>
+              `<option value="${id}" ${e.id === id ? 'selected' : ''}>${id}</option>`,
+            ).join('')}</select>
+            <label>dens<input type="number" data-s-dens min="0" max="20000" step="10" value="${e.perKm2}" /></label>
+            <label>lo<input type="number" data-s-lo min="0.2" max="3" step="0.05" value="${e.scale[0]}" /></label>
+            <label>hi<input type="number" data-s-hi min="0.2" max="3" step="0.05" value="${e.scale[1]}" /></label>
+            <label>slope<input type="number" data-s-slope min="0.05" max="1.4" step="0.05" value="${e.maxSlope ?? 0.6}" /></label>
+            <button type="button" class="forge-mini" data-s-del title="remove">×</button>
+          </div>`).join('') || '<p class="forge-muted">no scatter entries</p>'}
+      </div>
+      <p class="forge-muted">Click a row's asset in the outliner to edit its rules.
+        Density is instances per km² at full biome weight.</p>
+    </div>`
+
+  const renderAssetTab = (): string => {
+    if (!selectedAsset) {
+      return `<p class="forge-muted">Select an asset in the outliner to edit its placement rules and params.</p>`
+    }
+    let def: ScatterDef
+    try { def = scatterDef(selectedAsset) } catch {
+      return `<p class="forge-muted">Unknown asset ${selectedAsset}</p>`
+    }
+    const rules = rulesFor(selectedAsset)
+    const biomeChips = BIOME_IDS.map((id) =>
+      `<button type="button" class="forge-chip ${(rules.biomes ?? []).includes(id) ? 'on' : ''}"
+        data-rule-biome="${id}">${id}</button>`,
+    ).join('')
+    const mergedParams = { ...(def.params ?? {}), ...(paramDrafts.get(selectedAsset) ?? {}) }
+    const params = Object.entries(mergedParams).map(([k, v]) =>
+      `<label>${k}<input type="number" data-param="${k}" step="0.01" value="${Number(v)}" /></label>`,
+    ).join('')
+    return `
+      <div class="forge-section">
+        <h3>${selectedAsset}</h3>
+        <p class="forge-muted">${def.generator} · v${def.version} · ${def.variants ?? 1} variant(s)</p>
+        <a class="forge-muted" href="/forge.html?focus=${encodeURIComponent(selectedAsset)}" target="_blank">
+          open mesh in Assets →
+        </a>
       </div>
       <div class="forge-section">
-        <h3>scatter <button type="button" class="forge-mini" data-add-scatter>+ add</button></h3>
-        <div class="forge-scatter-list">
-          ${draft.scatter.map((e, i) => `
-            <div class="forge-scatter-row" data-si="${i}">
-              <select data-s-id>${ALL_SCATTER.map((id) =>
-                `<option value="${id}" ${e.id === id ? 'selected' : ''}>${id}</option>`,
-              ).join('')}</select>
-              <label>dens<input type="number" data-s-dens min="0" max="20000" step="10" value="${e.perKm2}" /></label>
-              <label>lo<input type="number" data-s-lo min="0.2" max="3" step="0.05" value="${e.scale[0]}" /></label>
-              <label>hi<input type="number" data-s-hi min="0.2" max="3" step="0.05" value="${e.scale[1]}" /></label>
-              <button type="button" class="forge-mini" data-s-del title="remove">×</button>
-            </div>`).join('') || '<p class="forge-muted">no scatter entries</p>'}
+        <h3>rules</h3>
+        <label>placement
+          <textarea data-rule-placement>${rules.placement ?? ''}</textarea>
+        </label>
+        <label>avoid
+          <textarea data-rule-avoid>${rules.avoid ?? ''}</textarea>
+        </label>
+        <div class="rules-grid">
+          <label>max slope (rad)
+            <input type="number" data-rule-slope min="0" max="1.5" step="0.05" value="${rules.maxSlope ?? 0.6}" />
+          </label>
+          <label>dens hint lo/hi
+            <span style="display:flex;gap:4px">
+              <input type="number" data-rule-d0 step="10" value="${rules.densityPerKm2?.[0] ?? ''}" placeholder="lo" />
+              <input type="number" data-rule-d1 step="10" value="${rules.densityPerKm2?.[1] ?? ''}" placeholder="hi" />
+            </span>
+          </label>
+          <label>scale hint lo
+            <input type="number" data-rule-s0 step="0.05" value="${rules.scale?.[0] ?? ''}" />
+          </label>
+          <label>scale hint hi
+            <input type="number" data-rule-s1 step="0.05" value="${rules.scale?.[1] ?? ''}" />
+          </label>
         </div>
-        <template id="scatter-blank">${scatterOpts}</template>
+        <div style="margin-top:8px">${biomeChips}</div>
+      </div>
+      <div class="forge-section">
+        <h3>params <span class="forge-muted">(export to def JSON — live mesh regen is Assets mode)</span></h3>
+        <div class="rules-grid">${params || '<p class="forge-muted">no params</p>'}</div>
       </div>
       <div class="forge-section forge-actions">
-        <button type="button" data-act="apply">apply</button>
-        <button type="button" data-act="reset">reset biome</button>
-        <button type="button" data-act="copy">copy JSON</button>
-        <button type="button" data-act="game">open in game</button>
+        <button type="button" data-act="export-asset">export asset JSON</button>
+        <button type="button" data-act="add-selected">add to ${biome}</button>
+      </div>`
+  }
+
+  const renderPromptTab = (): string => `
+    <div class="forge-section">
+      <h3>prompt</h3>
+      <p class="forge-muted">Edits land as a reviewable patch — never silent geometry rewrites.
+        Select an asset in the outliner for per-asset commands.</p>
+      <div class="prompt-row">
+        <textarea data-prompt placeholder="e.g. denser · bigger · max slope 25 deg · only in alpine · placement: sits on ridge breaks · add rock-slab · more grass">${promptText}</textarea>
+        <button type="button" data-act="prompt-run">run</button>
       </div>
-      <p class="forge-muted">Live edits mutate the in-memory biome table and rebake
-        the same maps the game reads. Copy JSON to paste into
-        <code>src/terrain/biomes.ts</code> — the browser cannot write that file.</p>
-    `
+      ${pending ? `
+        <h3 style="margin-top:12px">diff</h3>
+        <pre class="forge-diff">${formatPatchDiff(pending).replace(/</g, '&lt;')}</pre>
+        <div class="forge-actions" style="margin-top:8px">
+          <button type="button" data-act="prompt-accept">accept</button>
+          <button type="button" data-act="prompt-reject">reject</button>
+        </div>` : ''}
+      <p class="forge-muted" style="margin-top:10px">
+        Tips: <code>denser</code> / <code>sparser</code>, <code>bigger</code> / <code>smaller</code>,
+        <code>max slope 25 deg</code>, <code>only in forest</code>, <code>add conifer-young</code>,
+        <code>placement: …</code>, <code>more grass</code>.
+      </p>
+    </div>`
+
+  const renderPanel = (): void => {
+    panel.innerHTML = `
+      <div class="prop-head">Properties · ${biome}${selectedAsset ? ` · ${selectedAsset}` : ''}</div>
+      <div class="forge-prop-tabs">
+        ${(['world', 'scatter', 'asset', 'prompt'] as PropTab[]).map((t) =>
+          `<button type="button" data-tab="${t}" class="${propTab === t ? 'on' : ''}">${t}</button>`,
+        ).join('')}
+      </div>
+      <div class="prop-body">
+        ${propTab === 'world' ? renderWorldTab() : ''}
+        ${propTab === 'scatter' ? renderScatterTab() : ''}
+        ${propTab === 'asset' ? renderAssetTab() : ''}
+        ${propTab === 'prompt' ? renderPromptTab() : ''}
+        <div class="forge-section forge-actions">
+          <button type="button" data-act="apply">apply</button>
+          <button type="button" data-act="reset">reset biome</button>
+          <button type="button" data-act="copy">copy biome JSON</button>
+          <button type="button" data-act="game">open in game</button>
+        </div>
+        <p class="forge-muted">Live edits mutate the in-memory biome table and rebake
+          the same maps the game reads. Copy JSON to paste into
+          <code>src/terrain/biomes.ts</code> or asset defs — the browser cannot write those files.</p>
+      </div>`
+  }
+
+  const renderAll = (): void => {
+    renderOutliner()
+    renderPanel()
+    syncHud()
   }
 
   let debounce: number | null = null
@@ -308,7 +461,6 @@ export async function bootEnvEditor(): Promise<void> {
   }
 
   const switchBiome = (id: BiomeId): void => {
-    // Keep the previous biome's draft committed before leaving.
     replaceBiomeStyle(biome, draft)
     biome = id
     draft = cloneBiomeStyle(BIOME_STYLES[biome])
@@ -317,17 +469,85 @@ export async function bootEnvEditor(): Promise<void> {
     world.scatter.reloadChoices(atmosphere)
     placeCamera()
     applyGrade()
-    renderPanel()
-    syncHud()
     const url = new URL(location.href)
     url.searchParams.set('mode', 'env')
     url.searchParams.set('biome', biome)
     history.replaceState(null, '', url)
+    renderAll()
   }
+
+  const selectAsset = (id: string): void => {
+    selectedAsset = id
+    if (propTab === 'world' || propTab === 'scatter') propTab = 'asset'
+    const url = new URL(location.href)
+    url.searchParams.set('asset', id)
+    history.replaceState(null, '', url)
+    renderAll()
+  }
+
+  const acceptPatch = (patch: PromptPatch): void => {
+    if (patch.scatter) draft.scatter = patch.scatter.map((e) => ({
+      id: e.id,
+      perKm2: e.perKm2,
+      scale: [e.scale[0], e.scale[1]] as [number, number],
+      ...(e.maxSlope === undefined ? {} : { maxSlope: e.maxSlope }),
+    }))
+    if (patch.styleNums) {
+      for (const [k, v] of Object.entries(patch.styleNums)) {
+        if (v !== undefined) setStyleNumber(draft, k, v)
+      }
+    }
+    if (patch.rules && selectedAsset) {
+      rulesDrafts.set(selectedAsset, { ...rulesFor(selectedAsset), ...patch.rules })
+    }
+    if (patch.params && selectedAsset) {
+      paramDrafts.set(selectedAsset, {
+        ...(paramDrafts.get(selectedAsset) ?? {}),
+        ...patch.params,
+      })
+    }
+    pending = null
+    applyLive()
+    renderAll()
+  }
+
+  const exportAssetJson = (id: string): string => {
+    const def = scatterDef(id)
+    const rules = rulesFor(id)
+    const params = { ...(def.params ?? {}), ...(paramDrafts.get(id) ?? {}) }
+    const out = {
+      ...def,
+      params,
+      biomes: rules.biomes ?? def.biomes,
+      rules: {
+        biomes: rules.biomes,
+        placement: rules.placement,
+        ...(rules.maxSlope !== undefined ? { maxSlope: rules.maxSlope } : {}),
+        ...(rules.densityPerKm2 ? { densityPerKm2: rules.densityPerKm2 } : {}),
+        ...(rules.scale ? { scale: rules.scale } : {}),
+        ...(rules.avoid ? { avoid: rules.avoid } : {}),
+      },
+    }
+    return JSON.stringify(out, null, 2)
+  }
+
+  outliner.addEventListener('click', (ev) => {
+    const t = (ev.target as HTMLElement).closest('button') as HTMLButtonElement | null
+    if (!t) return
+    if (t.dataset.biome) {
+      switchBiome(t.dataset.biome as BiomeId)
+      return
+    }
+    if (t.dataset.asset) selectAsset(t.dataset.asset)
+  })
 
   panel.addEventListener('input', (ev) => {
     const t = ev.target as HTMLElement
-    if (!(t instanceof HTMLInputElement || t instanceof HTMLSelectElement)) return
+    if (t instanceof HTMLTextAreaElement && t.hasAttribute('data-prompt')) {
+      promptText = t.value
+      return
+    }
+    if (!(t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement)) return
 
     if (t.hasAttribute('data-tod')) {
       tod = Number(t.value)
@@ -348,8 +568,7 @@ export async function bootEnvEditor(): Promise<void> {
     }
     if (t.hasAttribute('data-color')) {
       const key = t.getAttribute('data-color') as (typeof COLOR_FIELDS)[number]
-      const cur = draft[key] as number
-      setStyleNumber(draft, key, parseHex(t.value, cur))
+      setStyleNumber(draft, key, parseHex(t.value, draft[key] as number))
       scheduleApply()
       return
     }
@@ -372,35 +591,94 @@ export async function bootEnvEditor(): Promise<void> {
       return
     }
 
+    // Asset rules
+    if (selectedAsset && (
+      t.hasAttribute('data-rule-placement') || t.hasAttribute('data-rule-avoid') ||
+      t.hasAttribute('data-rule-slope') || t.hasAttribute('data-rule-d0') ||
+      t.hasAttribute('data-rule-d1') || t.hasAttribute('data-rule-s0') ||
+      t.hasAttribute('data-rule-s1')
+    )) {
+      const cur = { ...rulesFor(selectedAsset) }
+      if (t.hasAttribute('data-rule-placement')) cur.placement = t.value
+      if (t.hasAttribute('data-rule-avoid')) cur.avoid = t.value
+      if (t.hasAttribute('data-rule-slope')) cur.maxSlope = Number(t.value)
+      if (t.hasAttribute('data-rule-d0') || t.hasAttribute('data-rule-d1')) {
+        const d0 = Number((panel.querySelector('[data-rule-d0]') as HTMLInputElement)?.value)
+        const d1 = Number((panel.querySelector('[data-rule-d1]') as HTMLInputElement)?.value)
+        if (Number.isFinite(d0) && Number.isFinite(d1)) {
+          cur.densityPerKm2 = [Math.min(d0, d1), Math.max(d0, d1)]
+        }
+      }
+      if (t.hasAttribute('data-rule-s0') || t.hasAttribute('data-rule-s1')) {
+        const s0 = Number((panel.querySelector('[data-rule-s0]') as HTMLInputElement)?.value)
+        const s1 = Number((panel.querySelector('[data-rule-s1]') as HTMLInputElement)?.value)
+        if (Number.isFinite(s0) && Number.isFinite(s1)) {
+          cur.scale = [Math.min(s0, s1), Math.max(s0, s1)]
+        }
+      }
+      rulesDrafts.set(selectedAsset, cur)
+      return
+    }
+    if (selectedAsset && t.hasAttribute('data-param')) {
+      const key = t.getAttribute('data-param')!
+      const cur = { ...(paramDrafts.get(selectedAsset) ?? {}) }
+      cur[key] = Number((t as HTMLInputElement).value)
+      paramDrafts.set(selectedAsset, cur)
+      return
+    }
+
     const row = t.closest('[data-si]') as HTMLElement | null
     if (!row) return
     const i = Number(row.dataset.si)
     const entry = draft.scatter[i]
     if (!entry) return
-    if (t.hasAttribute('data-s-id')) entry.id = t.value
+    if (t.hasAttribute('data-s-id')) {
+      entry.id = t.value
+      selectAsset(entry.id)
+    }
     if (t.hasAttribute('data-s-dens')) entry.perKm2 = Number(t.value)
     if (t.hasAttribute('data-s-lo')) entry.scale[0] = Number(t.value)
     if (t.hasAttribute('data-s-hi')) entry.scale[1] = Number(t.value)
+    if (t.hasAttribute('data-s-slope')) entry.maxSlope = Number(t.value)
     scheduleApply()
   })
 
   panel.addEventListener('click', (ev) => {
     const t = (ev.target as HTMLElement).closest('button') as HTMLButtonElement | null
     if (!t) return
-    if (t.dataset.biome) {
-      switchBiome(t.dataset.biome as BiomeId)
+
+    if (t.dataset.tab) {
+      propTab = t.dataset.tab as PropTab
+      renderPanel()
+      return
+    }
+    if (t.dataset.ruleBiome && selectedAsset) {
+      const cur = { ...rulesFor(selectedAsset) }
+      const set = new Set(cur.biomes ?? [])
+      if (set.has(t.dataset.ruleBiome)) set.delete(t.dataset.ruleBiome)
+      else set.add(t.dataset.ruleBiome)
+      cur.biomes = [...set]
+      rulesDrafts.set(selectedAsset, cur)
+      renderPanel()
       return
     }
     if (t.hasAttribute('data-add-scatter')) {
       const entry: ScatterEntry = {
-        id: ALL_SCATTER[0] ?? 'rock-small',
+        id: selectedAsset && ALL_SCATTER.includes(selectedAsset)
+          ? selectedAsset
+          : (ALL_SCATTER[0] ?? 'rock-small'),
         perKm2: 200,
         scale: [0.8, 1.2],
-        maxSlope: 0.6,
+        maxSlope: rulesFor(selectedAsset ?? 'rock-small').maxSlope ?? 0.6,
       }
+      const hint = rulesFor(entry.id)
+      if (hint.densityPerKm2) {
+        entry.perKm2 = Math.round((hint.densityPerKm2[0] + hint.densityPerKm2[1]) / 2)
+      }
+      if (hint.scale) entry.scale = [hint.scale[0], hint.scale[1]]
       draft.scatter.push(entry)
       applyLive()
-      renderPanel()
+      renderAll()
       return
     }
     if (t.hasAttribute('data-s-del')) {
@@ -408,7 +686,7 @@ export async function bootEnvEditor(): Promise<void> {
       if (!row) return
       draft.scatter.splice(Number(row.dataset.si), 1)
       applyLive()
-      renderPanel()
+      renderAll()
       return
     }
     switch (t.dataset.act) {
@@ -420,11 +698,10 @@ export async function bootEnvEditor(): Promise<void> {
         draft = authoredBiomeStyle(biome)
         replaceBiomeStyle(biome, draft)
         applyLive()
-        renderPanel()
+        renderAll()
         break
       }
       case 'copy': {
-        // Export only into memory + a textarea. Prefer Ctrl/Cmd-C from the box.
         lastExport = biomeStyleToJson(draft)
         let box = panel.querySelector('#env-export') as HTMLTextAreaElement | null
         if (!box) {
@@ -437,9 +714,59 @@ export async function bootEnvEditor(): Promise<void> {
         }
         box.value = lastExport
         t.textContent = 'exported'
-        window.setTimeout(() => { t.textContent = 'copy JSON' }, 1600)
+        window.setTimeout(() => { t.textContent = 'copy biome JSON' }, 1600)
         break
       }
+      case 'export-asset': {
+        if (!selectedAsset) break
+        lastExport = exportAssetJson(selectedAsset)
+        let box = panel.querySelector('#env-export') as HTMLTextAreaElement | null
+        if (!box) {
+          box = document.createElement('textarea')
+          box.id = 'env-export'
+          box.className = 'forge-export'
+          box.spellcheck = false
+          box.readOnly = true
+          panel.querySelector('.prop-body')?.append(box)
+        }
+        box.value = lastExport
+        break
+      }
+      case 'add-selected': {
+        if (!selectedAsset || draft.scatter.some((e) => e.id === selectedAsset)) break
+        const hint = rulesFor(selectedAsset)
+        draft.scatter.push({
+          id: selectedAsset,
+          perKm2: hint.densityPerKm2
+            ? Math.round((hint.densityPerKm2[0] + hint.densityPerKm2[1]) / 2)
+            : 200,
+          scale: (hint.scale ?? [0.8, 1.2]) as [number, number],
+          maxSlope: hint.maxSlope ?? 0.6,
+        })
+        applyLive()
+        propTab = 'scatter'
+        renderAll()
+        break
+      }
+      case 'prompt-run': {
+        const area = panel.querySelector('[data-prompt]') as HTMLTextAreaElement | null
+        promptText = area?.value ?? promptText
+        pending = interpretPrompt(promptText, {
+          biome,
+          style: draft,
+          assetId: selectedAsset,
+          rules: selectedAsset ? rulesFor(selectedAsset) : null,
+        })
+        renderPanel()
+        break
+      }
+      case 'prompt-accept':
+        if (pending) acceptPatch(pending)
+        break
+      case 'prompt-reject':
+        pending = null
+        renderPanel()
+        break
       case 'game': {
         const u = new URL('/', location.origin)
         u.searchParams.set('biome', biome)
@@ -454,7 +781,7 @@ export async function bootEnvEditor(): Promise<void> {
     }
   })
 
-  renderPanel()
+  renderAll()
 
   // ── orbit ─────────────────────────────────────────────────────────────────
   let dragging = false
@@ -491,7 +818,8 @@ export async function bootEnvEditor(): Promise<void> {
   }, { passive: false })
 
   addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement ||
+      e.target instanceof HTMLTextAreaElement) return
     const idx = '123456'.indexOf(e.key)
     if (idx >= 0 && BIOME_IDS[idx]) {
       switchBiome(BIOME_IDS[idx]!)
@@ -502,7 +830,7 @@ export async function bootEnvEditor(): Promise<void> {
       draft = authoredBiomeStyle(biome)
       replaceBiomeStyle(biome, draft)
       applyLive()
-      renderPanel()
+      renderAll()
     }
   })
 
@@ -510,8 +838,7 @@ export async function bootEnvEditor(): Promise<void> {
 
   let readied = false
   const tick = (ms: number): void => {
-    if (!readied) clock.tick(ms)
-    else clock.tick(ms)
+    clock.tick(ms)
     wind.timeNode.value = clock.elapsed
     camera.updateMatrixWorld()
     atmosphere.updateLuts(renderer)
@@ -521,8 +848,8 @@ export async function bootEnvEditor(): Promise<void> {
       renderer, scene, camera, atmosphere.state.sunDir, atmosphere.dome,
     ).finally(() => { for (const o of hidden) o.visible = true })
     atmosphere.updateSky(camera, clock.elapsed)
-    // Keep streaming centred on the orbit point (not camera-forward wander).
     world.recentre(view.x, view.z)
+    void water.update(renderer, camera, clock.delta, [])
     pipeline.render()
     if (!readied && clock.frame >= warmup) {
       readied = true

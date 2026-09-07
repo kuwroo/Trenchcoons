@@ -1,0 +1,30 @@
+{
+  "id": "foliageAutumn",
+  "version": 1,
+  "type": "surface",
+  "notes": "Autumn canopy for Quaternius TwistedTree. Warm olive-orange so the stand is not one green silhouette repeated. Authored as a scatter-owned surface (like leaf/needle) so graded() CLEAN applies and Forge matches the game. Guide: overgrown-portfolio tintTreeFoliage for TwistedTree.",
+  "material": {
+    "base": "#8a6a3a",
+    "shadow": "#6a5238",
+    "lit": "#c4924a",
+    "top": "#d4a868",
+    "topGain": 1.16,
+    "gradientBase": -1.0,
+    "gradientHeight": 2.0,
+    "gradientStrength": 0.45,
+    "rampShadow": -0.06,
+    "rampMid": 0.88,
+    "rampSoftness": 0.3,
+    "midLevel": 0.5,
+    "ambient": 1.7,
+    "saturationGain": 0.22,
+    "shadowSkyTint": 0.1,
+    "rimStrength": 0.55,
+    "rimPower": 2.6,
+    "brushStrength": 0.0,
+    "brushHue": 0.0,
+    "detailStrength": 0.0,
+    "regionStep": 0.0,
+    "reliefShade": 0.0
+  }
+}

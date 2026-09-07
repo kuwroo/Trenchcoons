@@ -1,0 +1,38 @@
+{
+  "id": "qn-bush",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius Bush_Common. Understory rings around tree stands (overgrown landscapePopulate).",
+  "params": {
+    "mesh": "qn-bush",
+    "scale": 0.85,
+    "solidAbove": 0.6,
+    "radius": 0.45
+  },
+  "surfaces": {
+    "body": "leaf"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow",
+    "forest"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest"
+    ],
+    "placement": "Understory bush \u2014 concentrate with groveAt, not open meadow mid-field.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      800,
+      2200
+    ],
+    "scale": [
+      0.7,
+      1.25
+    ],
+    "avoid": "Desert, alpine, coast."
+  }
+}

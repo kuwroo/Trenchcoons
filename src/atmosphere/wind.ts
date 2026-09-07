@@ -5,8 +5,8 @@
 // it, so the grass this round adds would otherwise have arrived with a private
 // sine — which is exactly the failure the invariant names. A field that every
 // consumer shares is what makes a gust read as a gust: the same travelling
-// front crosses the grass, the shrubs and (when it lands) the trenchcoat, in
-// that order, because they are at different distances along the wind vector.
+// front crosses the grass, the shrubs and the kart flaps, in that order,
+// because they are at different distances along the wind vector.
 //
 // ANALYTIC, NOT AN RT. ARCHITECTURE budgets a small render target for this, and
 // a texture is the right answer once the field carries vehicle wake and gust

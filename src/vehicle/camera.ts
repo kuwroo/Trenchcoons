@@ -172,6 +172,30 @@ export interface ChaseFraming {
   yaw?: number | null
   /** Multiplier on the solved arm length. <1 pulls in. */
   arm?: number | null
+  /**
+   * Extra metres of camera HEIGHT, with the look point unchanged — so it
+   * pitches the view down over the car rather than moving the subject.
+   *
+   * Added for the M7 water captures, and for the same reason `yaw` and `arm`
+   * exist: the feature under test is invisible from the angle the rig gives on
+   * its own. A foam wake is a pattern lying flat on the water, and from the
+   * gameplay camera's 2.55 m it is seen at a grazing angle where a chain of
+   * 4.6 m rings compresses into a line — measured, the longest unbroken run of
+   * foam along a scanline was 0.63 of the box from astern against 0.37 in
+   * `refs/water/shore-foam-wake.jpg`, which is a picture taken from above.
+   * Lengthening the arm does not help; the rig's height is nearly constant, so
+   * a longer arm only moves further away at the same grazing angle.
+   *
+   * NEGATIVE IS ALLOWED NOW, down to -2.4 m, and the reason is the mirror image
+   * of the one above. The rig sits 2.55 m over the car, so pulling the arm in to
+   * frame the OCCUPANTS' FACES only steepens the view — at `camarm=0.30` the
+   * camera is 1.2 m away and 2.55 m up, which is a photograph of the tops of two
+   * skulls. Every character detail on this vehicle is on the front of a head, and
+   * before this there was no vantage in the harness that could see one. -2.4 is
+   * the floor because the rig's own terrain solve keeps the camera above the
+   * ground and a larger drop just gets clamped there instead, silently.
+   */
+  lift?: number | null
 }
 
 const TAU = Math.PI * 2
@@ -206,6 +230,16 @@ export class ChaseCamera {
   /** Capture-only framing offsets. See `ChaseFraming`. */
   private readonly frameYaw: number
   private readonly frameArm: number
+  private readonly frameLift: number
+
+  /**
+   * Player orbit, layered on top of capture framing. Sticky — left-click drag
+   * writes these and they stay until the next drag (or `orbitReset`). They are
+   * NOT springs of their own: the position/aim springs already ease the rig to
+   * wherever `resolve` points, so lagging the mouse itself would feel soft.
+   */
+  private userYaw = 0
+  private userLift = 0
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -215,6 +249,28 @@ export class ChaseCamera {
   ) {
     this.frameYaw = framing.yaw ?? 0
     this.frameArm = clamp(framing.arm ?? 1, 0.35, 3)
+    this.frameLift = clamp(framing.lift ?? 0, -2.4, 60)
+  }
+
+  /**
+   * Orbit the arm from a pointer delta, pixels. +dx swings the camera to the
+   * car's left (same sign as `ChaseFraming.yaw`); +dy raises the camera.
+   */
+  orbitBy(dxPx: number, dyPx: number): void {
+    this.userYaw += dxPx * 0.005
+    // Keep the sum inside the same floor/ceiling `frameLift` uses, so a capture
+    // that already lifted the rig cannot be dragged through the ground.
+    this.userLift = clamp(
+      this.userLift - dyPx * 0.012,
+      -2.4 - this.frameLift,
+      60 - this.frameLift,
+    )
+  }
+
+  /** Snap the player orbit back to the default chase angle. */
+  orbitReset(): void {
+    this.userYaw = 0
+    this.userLift = 0
   }
 
   /**
@@ -254,9 +310,11 @@ export class ChaseCamera {
       _side.copy(vehicle.velocity).normalize()
       _dir.lerp(_side, this.yawBlend).normalize()
     }
-    // Capture-only azimuth swing. Applied to the arm DIRECTION, so the terrain
-    // clearance solve below still runs against wherever the camera ends up.
-    if (this.frameYaw !== 0) _dir.applyAxisAngle(_up, this.frameYaw)
+    // Capture framing + player orbit, both applied to the arm DIRECTION so the
+    // terrain clearance solve below still runs against wherever the camera ends
+    // up. Player yaw is sticky (see `orbitBy`); capture yaw is URL-only.
+    const yaw = this.frameYaw + this.userYaw
+    if (yaw !== 0) _dir.applyAxisAngle(_up, yaw)
 
     let arm = this.arm.step(dt, RIG.arm + RIG.armSpeed * speedNorm) * this.frameArm
     arm = Math.max(arm * 0.42, this.clearOfScatter(car, arm))
@@ -274,12 +332,13 @@ export class ChaseCamera {
     // the crest rather than climbing above it, which is what a camera operator
     // would do and what keeps the kart from shrinking to nothing behind a hill.
     const targetY = car.y + RIG.lookUp
+    const lift = this.frameLift + this.userLift
     let shrink = 1
     for (let pass = 0; pass < 2; pass++) {
       const a = arm * shrink
       outPos.copy(car)
         .addScaledVector(_dir, -a)
-        .addScaledVector(_up, RIG.height + RIG.heightSpeed * speedNorm)
+        .addScaledVector(_up, RIG.height + RIG.heightSpeed * speedNorm + lift)
       let need = this.heightAt(outPos.x, outPos.z) + RIG.clearance
       for (let i = 1; i <= RIG.sightSamples; i++) {
         const f = i / (RIG.sightSamples + 1)

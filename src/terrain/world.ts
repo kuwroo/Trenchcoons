@@ -25,6 +25,11 @@ import {
   BIOME_COUNT, BIOME_IDS, BIOME_STYLES, biomeResponse, type BiomeId, type BiomeStyle,
 } from './biomes'
 import type { DeformResponse } from '../deform/biome'
+import {
+  distToPath as overgrownDistToPath,
+  pathCorridorWeight,
+  ROAD_HALF,
+} from '../world/pathCurve'
 
 /** Half-extent of the playable world, metres. */
 export const WORLD_HALF = 4000
@@ -57,6 +62,11 @@ const RIM_HEIGHT = 520
 const PALETTE_RES = 512
 /** Resolution of the baked deform-response maps. These vary slowly. */
 const RESPONSE_RES = 256
+
+/** Metres of water depth the bathymetry map's R channel spans. */
+export const BATHY_RANGE = 48
+/** Metres the finer G channel spans. The shore ladder lives inside this. */
+export const BATHY_NEAR = 6
 
 /**
  * Climate at a point, and the biome weights that follow from it.
@@ -118,6 +128,25 @@ export class TerrainWorld {
    *  `cliffMap` — see `BiomeStyle.rock`; a forest's hillside breaks to soil and
    *  a boulder standing in it is still stone. */
   readonly rockMap = makeMap(PALETTE_RES)
+  /**
+   * BATHYMETRY, for the water surface. R = water depth / `BATHY_RANGE`, G = the
+   * same depth over the first `BATHY_NEAR` metres (so the shallows, where the
+   * whole shore ladder lives, get the full 8-bit range instead of the bottom
+   * eighth of it), B = continental slope / 1 rad, A unused.
+   *
+   * Baked here rather than in src/water because it is a property of the
+   * HEIGHTFIELD and every other consumer of the heightfield's baked form is
+   * already in this file. Free, too: the palette loop below already evaluates
+   * `climateAt` at each texel and `heightAt` reuses that through the memo.
+   *
+   * 16 m per texel is coarse for a foam line and that is fine — the OUTER edge
+   * of the shore band is the depth buffer (water is opaque and terrain occludes
+   * it), which is exact at any resolution. The map only sets how far INLAND
+   * from that exact edge the band reaches, and the terrain's finest octave is a
+   * 46 m wavelength, so a bilinear tap between 16 m texels is within about a
+   * metre of the true depth everywhere the ladder is doing work.
+   */
+  readonly bathyMap = makeMap(PALETTE_RES)
   /** (refill, maskLife, collapse, dry), log-encoded. */
   readonly responseTimeMap = makeMap(RESPONSE_RES)
   /** (darken, chroma/1.5, expose, edge). */
@@ -126,6 +155,9 @@ export class TerrainWorld {
   /** `log(1 + t)` normaliser the response maps were encoded with. Read by
    *  src/deform/field.ts, which decodes them. */
   readonly responseLogMax = RESPONSE_LOG_MAX
+  /** Root world seed (u32). Scatter and grass fold this into their lattice
+   *  hashes so vegetation is a fixed function of `?seed=` like the heightfield. */
+  readonly seed: number
 
   private readonly nBase: Noise2
   private readonly nDetail: Noise2
@@ -159,6 +191,7 @@ export class TerrainWorld {
   private memoZ = Number.NaN
 
   constructor(rng: Rng, options: TerrainWorldOptions = {}) {
+    this.seed = rng.seed
     const fork = rng.fork('terrain')
     this.nBase = valueNoise(fork.fork('base'))
     this.nDetail = valueNoise(fork.fork('detail'))
@@ -533,7 +566,42 @@ export class TerrainWorld {
     return this.gradeOut
   }
 
-  /** Grass clumps per square metre here, before the distance falloff. */
+  /**
+   * Dirt-track mask, 0..1 — overgrown pathCurve corridor weight, only where
+   * meadow+forest dominate. 0 in desert/alpine/coast/wetland.
+   */
+  pathAt(x: number, z: number): number {
+    return pathCorridorWeight(x, z, 3.2) * this.pathLandAt(x, z)
+  }
+
+  /** Metres to nearest overgrown path (main / cross / spur). */
+  distToPath(x: number, z: number): number {
+    return overgrownDistToPath(x, z)
+  }
+
+  /** Meadow + forest weight, 0..1. Dirt paths are gated on this. */
+  pathLandAt(x: number, z: number): number {
+    const c = this.climateAt(x, z)
+    let w = 0
+    for (let i = 0; i < BIOME_COUNT; i++) {
+      const id = BIOME_IDS[i]!
+      if (id === 'meadow' || id === 'forest') w += c.weights[i]!
+    }
+    return w
+  }
+
+  /**
+   * Tree-grove mask, 0..1. High = dense stand, low = clearing. Trees multiply
+   * their placement rate by this so the forest reads as clumps with room
+   * between them rather than a uniform lattice.
+   */
+  groveAt(x: number, z: number): number {
+    const g = this.nBase(x / 110 + 2.1, z / 110 - 5.3) * 0.62
+      + this.nDetail(x / 42 + 0.7, z / 42 + 3.4) * 0.38
+    return smoothstep(-0.18, 0.42, g)
+  }
+
+  /** Grass clumps per square metre — uniform carpet, cleared on path/coast. */
   private readonly grassOut = { density: 0, id: '', scale: 1 }
 
   /** Allocation-free: the grass rebuild calls this once per lattice cell, which
@@ -551,6 +619,23 @@ export class TerrainWorld {
       density += w * s.grassDensity
       scale += w * s.grassScale
       if (s.grassId && w > best) { best = w; id = s.grassId }
+    }
+    // Coast / beach carries no grass. Density was already 0 on the coast row,
+    // but land biomes still bled tufts onto the strand through weight blend —
+    // kill that with coastality so the shore stays sand.
+    density *= 1 - c.coastality
+    if (c.coastality > 0.45) id = ''
+    // Overgrown grassField roadCorridor — only in meadow/forest.
+    const pathLand = (c.weights[BIOME_IDS.indexOf('meadow')] ?? 0)
+      + (c.weights[BIOME_IDS.indexOf('forest')] ?? 0)
+    if (pathLand > 0.2) {
+      const d = overgrownDistToPath(x, z)
+      if (d < ROAD_HALF * 0.7) {
+        density = 0
+        id = ''
+      } else if (d < ROAD_HALF * 1.05) {
+        density *= 0.45
+      }
     }
     this.grassOut.density = density
     this.grassOut.id = id
@@ -583,6 +668,7 @@ export class TerrainWorld {
     const pl = this.litMap.image.data as Uint8Array
     const pc = this.cliffMap.image.data as Uint8Array
     const pr = this.rockMap.image.data as Uint8Array
+    const pba = this.bathyMap.image.data as Uint8Array
     const cBase = new THREE.Color()
     const cShadow = new THREE.Color()
     const cLit = new THREE.Color()
@@ -593,15 +679,22 @@ export class TerrainWorld {
       for (let i = 0; i < PALETTE_RES; i++) {
         const x = ((i + 0.5) / PALETTE_RES - 0.5) * this.span
         const z = ((j + 0.5) / PALETTE_RES - 0.5) * this.span
+        // `heightAt` first, so `climateAt` below lands on the memo. Both orders
+        // give the same numbers; this one costs one classification per texel
+        // instead of two.
+        const h = this.heightAt(x, z)
         const c = this.climateAt(x, z)
         cBase.setRGB(0, 0, 0); cShadow.setRGB(0, 0, 0)
         cLit.setRGB(0, 0, 0); cCliff.setRGB(0, 0, 0); cRock.setRGB(0, 0, 0)
         let grass = 0
         let rockSlope = 0
+        // Overgrown dirt paths only in meadow + forest (not desert/alpine/…).
+        let pathLand = 0
         for (let b = 0; b < BIOME_COUNT; b++) {
           const w = c.weights[b]!
           if (w <= 0) continue
-          const s = BIOME_STYLES[BIOME_IDS[b]!]
+          const id = BIOME_IDS[b]!
+          const s = BIOME_STYLES[id]
           rockSlope += w * s.rockSlope
           // Blended in sRGB, deliberately: these are AUTHORED colours and the
           // authored midpoint between two of them is the sRGB one. Blending
@@ -613,6 +706,7 @@ export class TerrainWorld {
           cCliff.add(hexRgb(tmp, s.cliff).multiplyScalar(w))
           cRock.add(hexRgb(tmp, s.rock).multiplyScalar(w))
           grass += w * s.grassDensity
+          if (id === 'meadow' || id === 'forest') pathLand += w
         }
         const o = (j * PALETTE_RES + i) * 4
         writeRgb(pb, o, cBase); pb[o + 3] = 255
@@ -621,7 +715,18 @@ export class TerrainWorld {
         pl[o + 3] = Math.round(clamp01(rockSlope) * 255)
         writeRgb(pc, o, cCliff)
         pc[o + 3] = Math.round(clamp01(grass / 2) * 255)
-        writeRgb(pr, o, cRock); pr[o + 3] = 255
+        writeRgb(pr, o, cRock)
+        pr[o + 3] = Math.round(clamp01(pathLand) * 255)
+        const wet = this.waterLevel - h
+        pba[o] = Math.round(clamp01(wet / BATHY_RANGE) * 255)
+        pba[o + 1] = Math.round(clamp01(wet / BATHY_NEAR) * 255)
+        // `roughSlopeAt` over the texel width, not `slopeAt`: the honest one is
+        // eight `heightAt` calls, i.e. eight classifications, and at 262 144
+        // texels that is two million of them in the constructor. The seabed
+        // slope AT MAP RESOLUTION is also the thing the shore band wants — how
+        // wide the shelf is, not how rough one square metre of it is.
+        pba[o + 2] = Math.round(clamp01(this.roughSlopeAt(x, z, 16) / 0.7) * 255)
+        pba[o + 3] = 255
       }
     }
     this.baseMap.needsUpdate = true
@@ -629,6 +734,7 @@ export class TerrainWorld {
     this.litMap.needsUpdate = true
     this.cliffMap.needsUpdate = true
     this.rockMap.needsUpdate = true
+    this.bathyMap.needsUpdate = true
 
     const rt = this.responseTimeMap.image.data as Uint8Array
     const rn = this.responseToneMap.image.data as Uint8Array
@@ -655,7 +761,7 @@ export class TerrainWorld {
   dispose(): void {
     for (const t of [
       this.baseMap, this.shadowMap, this.litMap, this.cliffMap, this.rockMap,
-      this.responseTimeMap, this.responseToneMap,
+      this.responseTimeMap, this.responseToneMap, this.bathyMap,
     ]) t.dispose()
   }
 }

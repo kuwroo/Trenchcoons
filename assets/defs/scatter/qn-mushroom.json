@@ -1,0 +1,36 @@
+{
+  "id": "qn-mushroom",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius Mushroom_Common. Forest floor / trunk-adjacent accent.",
+  "params": {
+    "mesh": "qn-mushroom",
+    "scale": 1.1,
+    "solidAbove": 0.0,
+    "radius": 0.35
+  },
+  "surfaces": {
+    "body": "leaf"
+  },
+  "variants": 1,
+  "biomes": [
+    "forest"
+  ],
+  "rules": {
+    "biomes": [
+      "forest"
+    ],
+    "placement": "Sparse forest mushrooms near stands.",
+    "maxSlope": 0.55,
+    "densityPerKm2": [
+      180,
+      320
+    ],
+    "scale": [
+      0.7,
+      1.4
+    ],
+    "avoid": "Open meadow."
+  }
+}

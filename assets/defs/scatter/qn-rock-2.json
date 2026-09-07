@@ -1,0 +1,38 @@
+{
+  "id": "qn-rock-2",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius Rock_Medium_2. Embed-friendly medium rock for meadow/forest floors.",
+  "params": {
+    "mesh": "qn-rock-2",
+    "scale": 0.55,
+    "solidAbove": 0.35,
+    "radius": 0.5
+  },
+  "surfaces": {
+    "body": "stone"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow",
+    "forest"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest"
+    ],
+    "placement": "Medium rock among turf; keep half-buried feel via scale, not floating slabs.",
+    "maxSlope": 0.55,
+    "densityPerKm2": [
+      80,
+      200
+    ],
+    "scale": [
+      0.7,
+      1.3
+    ],
+    "avoid": "Coast wading set still uses rock-small/medium."
+  }
+}

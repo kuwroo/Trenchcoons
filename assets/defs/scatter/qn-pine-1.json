@@ -1,0 +1,37 @@
+{
+  "id": "qn-pine-1",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius Pine_1. Needle canopy stand-in for procedural conifer in meadow/forest.",
+  "params": {
+    "mesh": "qn-pine-1",
+    "scale": 1.05
+  },
+  "surfaces": {
+    "trunk": "bark",
+    "foliage": "needle"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow",
+    "forest"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest"
+    ],
+    "placement": "Pine silhouette for woodland canopy variety beside CommonTree.",
+    "maxSlope": 0.55,
+    "densityPerKm2": [
+      60,
+      900
+    ],
+    "scale": [
+      0.9,
+      1.4
+    ],
+    "avoid": "Avoid desert, alpine, coast, wetland."
+  }
+}

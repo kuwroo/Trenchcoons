@@ -1,0 +1,21 @@
+{
+  "id": "alertOutline",
+  "version": 1,
+  "type": "surface",
+  "notes": "The keyline behind the cartoon '!'. It exists because the outline the glyph claimed to have was authored in the SAME red as the glyph, which is no outline at all — the critic measured the glyph at #af2e29 V0.69 on a V0.90 snowfield and it read as a dark smear rather than as a warning. A comic exclamation is INK: a coloured fill inside a near-black keyline, and the keyline is what makes it legible against a bright sky as well as a dark hillside. Flat for the same reason `alert` is flat, and `ambient` is lifted so it does not disappear into the kart's own volume shadow. Deliberately not pure black — at 0 chroma the palette gate counts it as grey.",
+  "material": {
+    "base": "#2a1418",
+    "shadow": "#2a1418",
+    "lit": "#2a1418",
+    "top": "#2a1418",
+    "topGain": 1.0,
+    "gradientStrength": 0.0,
+    "brushStrength": 0.0,
+    "detailStrength": 0.0,
+    "reliefShade": 0.0,
+    "rimStrength": 0.0,
+    "saturationGain": 0.0,
+    "shadowSkyTint": 0.0,
+    "ambient": 1.6
+  }
+}

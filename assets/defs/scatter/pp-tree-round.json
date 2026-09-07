@@ -16,5 +16,22 @@
   "biomes": [
     "meadow",
     "forest"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest"
+    ],
+    "placement": "Rounder shorter broadleaf — second silhouette so forest stands are not one shape repeated.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      660,
+      1540
+    ],
+    "scale": [
+      1.0,
+      1.7
+    ],
+    "avoid": "Avoid desert, alpine, coast, and open meadow monoculture."
+  }
 }

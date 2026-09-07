@@ -127,6 +127,42 @@ export function buildProxy(collider: Collider): ProxyPoly | null {
   return { points, top, bottom, radius }
 }
 
+/** True when (px, pz) is inside the convex polygon (or on the boundary). */
+export function polyContains(poly: Float32Array, px: number, pz: number): boolean {
+  return polyInset(poly, px, pz) >= 0
+}
+
+/**
+ * Signed distance to the polygon boundary in the polygon's plane.
+ * Positive = inside (metres to the nearest edge), negative = outside.
+ */
+export function polyInset(poly: Float32Array, px: number, pz: number): number {
+  const n = poly.length / 2
+  if (n < 3) return -Infinity
+  let minInside = Infinity
+  let minOutside = Infinity
+  let inside = true
+  for (let i = 0; i < n; i++) {
+    const ax = poly[i * 2]!
+    const az = poly[i * 2 + 1]!
+    const j = (i + 1) % n
+    const bx = poly[j * 2]!
+    const bz = poly[j * 2 + 1]!
+    const ex = bx - ax
+    const ez = bz - az
+    const len = Math.hypot(ex, ez) || 1e-6
+    // Counter-clockwise winding → outward normal (ez, -ex). Inside ⇒ d <= 0.
+    const d = (px - ax) * (ez / len) + (pz - az) * (-ex / len)
+    if (d > 1e-5) inside = false
+    if (d <= 0) minInside = Math.min(minInside, -d)
+    // Distance to segment for the outside case.
+    let t = ((px - ax) * ex + (pz - az) * ez) / (len * len)
+    t = t < 0 ? 0 : t > 1 ? 1 : t
+    minOutside = Math.min(minOutside, Math.hypot(px - (ax + ex * t), pz - (az + ez * t)))
+  }
+  return inside ? (Number.isFinite(minInside) ? minInside : 0) : -minOutside
+}
+
 /**
  * Closest-point query against a convex polygon.
  *

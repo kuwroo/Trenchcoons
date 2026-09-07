@@ -29,5 +29,25 @@
     "alpine",
     "desert",
     "coast"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "alpine",
+      "desert",
+      "coast"
+    ],
+    "placement": "Knee-to-waist workhorse rock across biomes; mix bedding tops with vertical fracture faces.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      300,
+      2600
+    ],
+    "scale": [
+      0.6,
+      1.4
+    ],
+    "avoid": "Avoid wetland (prefer pebbles there)."
+  }
 }

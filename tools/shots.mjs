@@ -85,6 +85,16 @@ const PARKED = 'time=0.62&warmup=64&spawn=720,-540&caryaw=3.142'
 // 0.45 lights the same slope instead of silhouetting it. The physics is
 // identical either way — the sim does not read the clock.
 const JUMP = 'time=0.45&warmup=64&spawn=-160,1040&caryaw=3.142'
+// A site that ACTUALLY LAUNCHES THE CAR. See `car-fall` below for how it was
+// found and why `JUMP` no longer does. Hour 0.45 for the same reason JUMP uses
+// it — this heading would otherwise fill the frame with a shaded hillside.
+const LIP = 'time=0.45&warmup=64&spawn=1710,1440&caryaw=1.571'
+// The same site an hour later. `car-thump`'s subject is the crew and the flaps
+// reacting, and at 0.45 this heading puts the sun behind them — measured across
+// four hours, the kart's side face is lit at every one of them and the crew above
+// the rim is in shadow at 0.30, 0.45 and 0.72. 0.62 is the only one that lights
+// the occupants, which is the same reason the M3 parked captures use it.
+const LIP_LIT = 'time=0.62&warmup=64&spawn=1710,1440&caryaw=1.571'
 
 // M4's deformation site. Hour 0.62 for the same reason the M3 poses use it —
 // the sun behind the chase camera — and it matters more here: a tyre mark is a
@@ -137,6 +147,39 @@ const PAN = 'time=0.62&deform=1&biome=coast&warmup=64&spawn=-1840,360&caryaw=0'
 // this script backs the car up 9.7 m over its own tracks. That doubled patch is
 // the deepest ground in the frame and it is the last thing to disappear.
 const PAN_RUN = 'drive=throttle:0-150@0.62,brake:150-235'
+
+// ── M7: the water ─────────────────────────────────────────────────────────
+//
+// THE SITE, and it was measured rather than guessed. `tools/shots.mjs` had no
+// camera pointed at water at all, which is how the sea shipped for a whole
+// milestone as a flat unlit plane and then shipped again, after the rebuild,
+// INVISIBLE — the polar sheet's winding faced down and back-face culling took
+// the entire ocean, and every frame in this list looked plausible because
+// what it showed instead was the seabed, which in a coast biome is sand.
+//
+// (-1169, -483) is a beach in the coast biome with the waterline 14 m to
+// seaward along heading 1.374 rad, found by sweeping `__trench.heightAt` on a
+// 300 m grid for a point that stands on dry land, has 400+ m of water within
+// 600 m of it, and reaches 78 m of depth by 400 m out — i.e. a site with a
+// real LADDER in it, not a puddle. The camera yaw is
+// `atan2(-cos a, -sin a)` of that heading, which is the vehicle's convention
+// too (`Vehicle.updateBasis`), so the car and the camera agree.
+//
+// Absolute `pos` y rather than `eye` on the two offshore cameras: `eye` is
+// metres above the GROUND, and over water the ground is the seabed 60 m down.
+const SHORE = 'pos=-1174,0,-508&eye=11&look=-2.945,-0.28'
+const SEA = 'pos=-1110,-94,-189&look=-2.945,-0.05'
+// RE-DERIVED, because the coastline moved under it. At `caryaw=-2.945` the car
+// drove ALONG the beach and never entered the water, so `water-wake` and
+// `water-wake-turn` were both measuring sand — every ring-shape metric in the
+// suite read zero while the water material itself was fine.
+//
+// Found the same way the site was: sweeping 48 headings from the spawn and
+// taking the one with the greatest mean depth over the first 120 m. That is
+// 0.524 rad; the car's forward is `(-sin yaw, -cos yaw)`, hence `+ PI`. MEASURED
+// at frame 320 through `__trench.car()`: (-1085.6, -99.45, -355.2) at 35 m/s
+// with the seabed 34.3 m down, i.e. genuinely afloat in open water.
+const DRIVE_IN = 'spawn=-1174,-508&caryaw=3.666'
 
 export const SHOTS = [
   // Fixed vista camera, varying time. Five sun elevations, not four: with the
@@ -200,7 +243,7 @@ export const SHOTS = [
   // matching, which is exactly the failure that survived the last two rounds.
   //
   // Parked and untouched, so the idle layer is what is on trial: the box
-  // breathes, the occupants shift and blink, the coat settles.
+  // breathes, and the occupants shift and blink.
   //   pitch -0.15 / roll -0.73, both ENTIRELY terrain (terrainPitch -0.15,
   //   terrainRoll -0.73). speed 0.00, 4/4 contact, idle 1.00, all four wheels
   //   at 0.110 compression, vy 0.000. cam dy 2.550, arm 3.90 m, fov 58.00.
@@ -220,7 +263,7 @@ export const SHOTS = [
   // 28.801449358268343, -537.8567111827165) at both frames — and the vehicle
   // telemetry is identical to the last digit (pitch -0.149, roll -0.726, speed
   // 0, idle 1.00, all four wheels 0.110), so the entire pixel difference
-  // between the two files is breathing, glancing, blinking and coat settle.
+  // between the two files is breathing, glancing and blinking.
   // MEASURED: 195,829 pixels differ by more than 2/255 between the two PNGs,
   // 13.60% of the frame, with a peak delta of 221. There is no longer anything
   // to take on trust here — `cmp shots/car-idle.png shots/car-idle-b.png`.
@@ -307,6 +350,128 @@ export const SHOTS = [
   //      kart's own kraft/teal/violet are most of the hue variety available
   //      down there, also costs hue entropy.
   { name: 'car-landing',  q: `${JUMP}&drive=throttle:0-9999&frame=209&camyaw=0.4&camarm=0.42` },
+
+  // ── the crew, close enough to judge a face ────────────────────────────────
+  //
+  // NEITHER OF THESE EXISTED AND THAT WAS THE GAP. The seven M3 poses above are
+  // all framed on the KART, at 2.3-3.9 m, and at that distance a raccoon's head
+  // is about 90 px — enough to check that a head is present and turning, and not
+  // enough to check whether the thing on it is a mask. Which is exactly how a
+  // face made of an equatorial band, no brow blaze, no forehead stripe and no
+  // sclera survived every capture round it was ever in: no gated frame could
+  // resolve the marks that were missing.
+  //
+  // `camarm=0.30` is the closest the chase rig will come. The kart is 1.72 m
+  // wide and the arm is 3.90 m, so this stands about 1.2 m off two heads that
+  // are 0.58 m across — a portrait, at the register the reference sheet is drawn
+  // at, which is the only register the sheet can actually be compared against.
+  //
+  // `camlift=-1.95` IS THE LOAD-BEARING PART and it took a wasted capture to
+  // find. `camarm` alone only shortens the arm; the rig's HEIGHT is nearly
+  // constant, so pulling in from 3.9 m to 1.2 m without dropping the camera just
+  // steepens the view until it is plan-on — the first car-crew was a photograph
+  // of the tops of two skulls, at 1.2 m, which resolves the ruff and the ears
+  // and none of the face. A negative lift drops the rig to about the crew's own
+  // eye height with the look point held, which is the vantage the reference
+  // sheet's front view is drawn from and therefore the only one it can be
+  // compared against.
+  { name: 'car-crew',    q: `${PARKED}&drive=&frame=102&camarm=0.5&camyaw=2.95&camlift=-1.05` },
+  // ── the fall: the hover, and the "!" ──────────────────────────────────────
+  //
+  // ITS OWN SITE, and finding out why is a real finding about the branch rather
+  // than about this work: THE OLD `JUMP` SITE NO LONGER JUMPS. Probed through
+  // `__trench.car()` at the exact URLs `car-airborne` and `car-landing` use,
+  // frames 150 through 215 all report `airborne=false`, `airtime=0.00` and a
+  // POSITIVE vy of +1.5 to +3.2 — the car is driving up a hill. Profiling
+  // `__trench.heightAt` 700 m along that heading confirms it: the ground rises
+  // monotonically from -87 m to -7 m and the steepest 15 m drop anywhere on the
+  // path is 0.08 m. The landform slope flattening (CLAUDE.md, "the foreground
+  // was too dark — and the cause was the TERRAIN": 28 deg median down to 8 deg)
+  // removed the jump, and `car-airborne` and `car-landing` have been photographs
+  // of a car on the ground ever since. They are LEFT ALONE here on purpose —
+  // repointing them rewrites two ratcheted baselines — but they are not testing
+  // what their names and their comments claim.
+  //
+  // This site was found by scanning the world on a 60 m lattice for a LIP: under
+  // 0.16 of average gradient over the 60 m run-up, more than 7 m of drop past the
+  // edge, and more than 3 m of convexity at the edge itself. The best of eight
+  // candidates carries 41 m of convexity, and MEASURED through `__trench.car()`
+  // it gives a 3.6 second flight: airborne from about frame 75, apex at frame
+  // 150 (vy -2.2), touchdown between 280 and 285.
+  //
+  // Frame 175 is picked off vy, not by eye. `airtime` 1.85 has the hover spring
+  // fully settled, and vy -13.0 is past the "!" threshold for both animals
+  // (-2.4 and -3.5 m/s), so this is the one frame in the set where the zero-g
+  // pose is at full extension AND both glyphs are up. The apex would show the
+  // pose and no glyph; the descent at frame 235 shows both and is 26 m lower,
+  // against ground instead of sky.
+  //
+  // HOUR 0.62, NOT 0.45, and for the reason `car-thump` already records: at this
+  // heading the kart's side face is lit at every hour tried but the crew ABOVE
+  // the rim is in shadow at 0.30, 0.45 and 0.72. At 0.45 this capture was a
+  // near-black silhouette against a twilight sky — the pose read and not one
+  // face or marking did, which makes it useless for judging the crew even though
+  // the crew is what it is framed on.
+  //
+  // `camyaw=1.35` is near-side-on, and that is the whole point of the framing:
+  // the hover is a VERTICAL displacement of the crew relative to the box, and
+  // dead astern is the one angle that cannot see a vertical displacement — from
+  // behind, two raccoons 0.30 m up out of a box look like two raccoons.
+  // ── the crew AS THE PLAYER SEES THEM ─────────────────────────────────────
+  //
+  // THIS CAPTURE IS THE GAP THAT COST TEN ROUNDS. Every frame framed to judge the
+  // characters — `car-crew`, and every parked pose before it — looks at them from
+  // the FRONT, and the game does not: the chase camera sits behind and 2.55 m
+  // above the kart for essentially its entire running time. So the whole face was
+  // developed, measured and signed off on a hemisphere the player never sees,
+  // and the hemisphere they do see was three flat browns with no mark on it at
+  // all. Quantised, `car-chase`'s head region returned V0.20 / V0.43 / V0.57 and
+  // nothing else while `car-crew`'s returned a 0.45 spread with cream at V0.65.
+  //
+  // `car-chase` existed the whole time. It was only ever read as a composition
+  // frame — is the kart in shot, is the horizon right — and never as a character
+  // frame, which is what it actually is.
+  //
+  // Same site and drive as `car-chase`, pulled in AND DROPPED. The lift is not
+  // optional and it is the same trap `car-crew` fell into: the rig's height is
+  // nearly constant, so shortening the arm alone only steepens the view until it
+  // is plan-on — at `camarm=0.42` with no lift this was a photograph looking
+  // straight down into the box, which is a vantage the game never has.
+  // `camlift=-1.2` puts the camera at about the crew's own height, 1.95 m behind
+  // them, which is a chase view. It is what caught
+  // the missing dorsal stripe and the occluded tails, and it is where any future
+  // character work should be judged FIRST.
+  { name: 'car-back',    q: `${FLAT}&drive=throttle:0-400@0.8,steerRight:60-400@0.35&frame=200&camarm=0.5&camlift=-1.2` },
+  { name: 'car-fall',    q: `${LIP_LIT}&drive=throttle:0-9999&frame=175&camyaw=1.15&camarm=1.15&camlift=-0.5` },
+  // TOUCHDOWN PLUS 0.08 s, and the frame is picked off `__trench.crew()` rather
+  // than off the telemetry alone. `landingImpact` is held for ONE frame by the
+  // vehicle so it cannot be photographed; what this frame photographs is its
+  // consequences, which ring for about a second — the flap springs kicked up off
+  // the impulse, both ears flopped, the tail whipped, and the crew slammed back
+  // down out of the hover.
+  //
+  // Frame 285 was wrong and this capture is what found out why: at 285 the squash
+  // is at its 0.26 ceiling but `hover` still measured 0.95, so the crew were
+  // photographed floating above a box that had already hit the ground. The hover
+  // came down at the same 0.9 Hz it went up at. It now takes a velocity kick on
+  // landing, and at 286 it measures 0.49 — mid-slam, which is the frame worth
+  // having.
+  //
+  // WHAT THIS FRAME CANNOT DO, and it took two rounds of reframing to accept: a
+  // still cannot show that a flap was KICKED. A flap at 3.19 rad photographs
+  // identically whether it was kicked there or authored there. The impact
+  // response is measured through `window.__trench.crew()` against a parked
+  // control instead, and the numbers are worth more than this picture:
+  //
+  //   front flap   parked 2.69  ->  landing 3.19 rad   (+0.50, holds 0.08 s)
+  //   ear flick    parked 0.00  ->  landing 0.47 rad   (rings down over ~0.5 s)
+  //   tail root    parked -0.04 ->  landing 0.18 rad, and the wave arrives at
+  //                segment 1 at +0.08 s and segment 2 at +0.25 s
+  //
+  // Two of those three were NOMINAL until that measurement was taken — the ear
+  // peaked at 0.10 rad and the tail at 0.08, both invisible, both looking fine in
+  // the source. See the coefficient notes in kart.ts.
+  { name: 'car-thump',   q: `${LIP_LIT}&drive=throttle:0-9999&frame=286&camyaw=0.9&camarm=0.8&camlift=0.2` },
 
   // ── M4: the deformation field, as four states of one system ───────────────
   //
@@ -432,6 +597,17 @@ export const SHOTS = [
     name: 'biome-meadow',
     q: 'time=0.42&car=0&warmup=48&pos=2160,0,-420&eye=6&look=1.15,-0.06',
   },
+  // Overgrown pathCurve dirt corridor — camera sits on the tiled spine.
+  {
+    name: 'path-dirt',
+    q: 'time=0.42&car=0&warmup=48&pos=2159,0,-420&eye=3.2&look=1.55,-0.35',
+  },
+  // FOREST canopy check — Quaternius Common/Pine/Twisted from overgrown guide.
+  // Forced biome so the frame is not a meadow edge with a few trees.
+  {
+    name: 'biome-forest',
+    q: 'time=0.42&car=0&biome=forest&warmup=48&pos=900,0,-900&eye=8&look=0.9,-0.08',
+  },
   // ALPINE, weight 1.00. Against the meadow this must differ in FIVE ways at
   // once, which is the whole test: ground material (high-key snow over dark
   // exposed rock), scatter set (cliff-block and boulder, no broadleaf), rock
@@ -465,6 +641,118 @@ export const SHOTS = [
   {
     name: 'grass-close',
     q: 'time=0.42&car=0&warmup=48&pos=2160,0,-420&eye=1.6&look=1.15,-0.30',
+  },
+
+  // THE COAST-TO-SEA TRANSITION, which is what refs/water/shore-foam-wake.jpg
+  // is a picture of: warm sand, a white surf band, pale mint shallows, and
+  // saturated cyan open water, in one frame and in that order.
+  { name: 'water-shore', q: `time=0.45&car=0&warmup=48&${SHORE}` },
+  // The same ladder from above, where all four stops are on screen at once and
+  // the gate can measure the hue rotation across them.
+  {
+    name: 'water-vista',
+    q: 'time=0.45&car=0&warmup=48&pos=-1181,0,-542&eye=45&look=-2.945,-0.39',
+  },
+  // OPEN WATER at gameplay height. The frame that judges the ripple network on
+  // its own terms, with no shore in it to carry the picture.
+  { name: 'water-open', q: `time=0.45&car=0&warmup=48&${SEA}` },
+  // CLOSE OVER OPEN WATER, pitched down. The frame that judges the cell field on
+  // its own terms: water fills it, at nearly constant depth, at a scale where a
+  // cell is a hundred pixels rather than fifteen. `tools/water.mjs` puts its
+  // `cells` boxes here and on `water-open` for that reason.
+  // 12 m up, not 4: at 4 m the frame covered less than one cell and the cell
+  // metrics were being satisfied by a single gradient. A judging frame has to
+  // contain several of the thing it judges.
+  { name: 'water-close', q: 'time=0.45&car=0&warmup=48&pos=-1090,-88,-150&look=-2.945,-0.55' },
+  // ROCKS IN THE WATER, AND THE FOAM COLLARS ROUND THEM.
+  //
+  // A shot exists for this because the feature shipped once already without one
+  // and was therefore not delivered: `ScatterEntry.wade` and the collar stamp
+  // were both correct and in the build, and a review of the five static water
+  // captures measured 0.0000% rock-like pixels in 2.53 million pixels of water
+  // across all of them. The wading strip is 10-25 m wide and none of the
+  // existing cameras had it in frame at a size that reads.
+  //
+  // Stands ON the waterline and looks ALONG the shore rather than out to sea,
+  // which is the composition `lake-cartoon-cells.jpg` uses and the only one in
+  // which a 20 m strip fills a frame.
+  {
+    name: 'water-rocks',
+    q: 'time=0.45&car=0&warmup=48&pos=-1166,0,-467&eye=8&look=1.769,-0.42',
+  },
+  // THE BEACH SWASH, as a SERIES across one full cycle.
+  //
+  // A wave washing up a beach is motion, and no single frame can show it. A
+  // PAIR half a cycle apart cannot either, and that was the first attempt: this
+  // shore's shelf is so flat that the ORDINARY wave field already sweeps the
+  // waterline about 80 m (0.32 m of wave over a 1-in-250 shelf), so a two-frame
+  // difference measured the waves and the swash together and scored 0.0120 with
+  // the swash switched off against 0.0150 with it — a 25% margin on a feature
+  // that was entirely absent.
+  //
+  // Six frames spanning one swash cycle separate them. The swash contributes a
+  // single coherent rise and fall across the series; the wave field, whose
+  // components are seconds long rather than 13 s, contributes noise between
+  // neighbours. `tools/water.mjs` takes the range and compares it against the
+  // measured swash-off baseline.
+  //
+  // The shot clock is a fixed 1/60 s (`Clock({ fixedDelta: state.shot ? 1/60 })`),
+  // so `swashRate` 0.075 Hz is a 800-frame period and these are 133 apart.
+  { name: 'water-swash-0', q: `time=0.4&car=0&warmup=48&${SHORE}` },
+  { name: 'water-swash-1', q: `time=0.4&car=0&warmup=181&${SHORE}` },
+  { name: 'water-swash-2', q: `time=0.4&car=0&warmup=314&${SHORE}` },
+  { name: 'water-swash-3', q: `time=0.4&car=0&warmup=448&${SHORE}` },
+  { name: 'water-swash-4', q: `time=0.4&car=0&warmup=581&${SHORE}` },
+  { name: 'water-swash-5', q: `time=0.4&car=0&warmup=714&${SHORE}` },
+
+  // Dusk, because water is the one surface in the build with a specular term
+  // and a raking sun is where it either reads as glitter or as a lens flare.
+  { name: 'water-dusk', q: `time=0.75&car=0&warmup=48&${SHORE}` },
+
+  // ── driving on the water ──────────────────────────────────────────────────
+  // Spawns on the beach and drives straight out to sea. The chase arm is swung
+  // to the side so the frame carries the TRAIL as well as the car — a shot from
+  // behind puts the wake directly under the hull, which is the one composition
+  // in which the feature cannot be judged.
+  //
+  // The framing is load-bearing and matched to the boxes in `tools/water.mjs`:
+  // moving `camyaw` to 2.2 to centre the trail took every wake metric here to
+  // zero, because the boxes are in fixed pixels. Retune the boxes with the
+  // camera or not at all.
+  {
+    name: 'water-wake',
+    q: `time=0.45&warmup=64&${DRIVE_IN}&drive=throttle:0-9999&frame=320`
+      + '&camyaw=1.5&camarm=1.4&camlift=16',
+  },
+  // The same run from the gameplay camera, because that is where a player
+  // actually sees it and a feature that only works from a crane is not a
+  // feature. Nothing measures laciness here — from 2.55 m a flat pattern is
+  // seen at a grazing angle and compresses into a line no matter how it is
+  // built — so this frame gates the wake's SHARE and its contrast against bare
+  // water, and `water-wake` above gates its shape.
+  {
+    name: 'water-wake-low',
+    q: `time=0.45&warmup=64&${DRIVE_IN}&drive=throttle:0-9999&frame=320`
+      + '&camyaw=1.6&camarm=2.2',
+  },
+  // FLOATING AND BOBBING, with the throttle released. The one frame that can
+  // show the bob ripples: at 35 m/s they are swamped by the wake, and a gate
+  // that only ever sees a car at speed cannot tell a working ripple from a dead
+  // one. Drives out to sea, then coasts for several seconds so the box is
+  // riding the swell under its own weight.
+  {
+    name: 'water-bob',
+    q: `time=0.45&warmup=64&${DRIVE_IN}&drive=throttle:0-150&frame=560`
+      + '&camyaw=2.1&camarm=2.0&camlift=7',
+  },
+
+  // Cornering. The scrub term widens the churn and the ring pulses fan out
+  // along the arc, which is the difference between this and a painted stripe.
+  {
+    name: 'water-wake-turn',
+    q: `time=0.45&warmup=64&${DRIVE_IN}`
+      + '&drive=throttle:0-9999,steerLeft:150-9999&frame=330'
+      + '&camyaw=2.2&camarm=1.4&camlift=18',
   },
 
   // ── the two complaints that need the car ──────────────────────────────────
@@ -594,4 +882,7 @@ async function main() {
   console.log(failed ? `\n${failed} problem(s)` : `\n${list.length} shot(s) ok`)
   process.exit(failed ? 1 : 0)
 }
-main()
+// GUARDED, so `SHOTS` can be imported without triggering a capture — see
+// tools/crawl.mjs, which reuses the shot list and renders each frame twice.
+// Without this, importing this module runs the whole gauntlet as a side effect.
+if (import.meta.url === `file://${process.argv[1]}`) main()

@@ -3,7 +3,7 @@
   "version": 1,
   "type": "scatter",
   "generator": "rock",
-  "notes": "Landmark boulder — tall enough to hide a kart, which makes it navigation furniture rather than decoration. More cuts than the smaller sizes because the form is close enough for a bare six-plane block to read as a crate, and a lower `embed` because a boulder sits ON the ground, it is not part of it.",
+  "notes": "Landmark boulder \u2014 tall enough to hide a kart, which makes it navigation furniture rather than decoration. More cuts than the smaller sizes because the form is close enough for a bare six-plane block to read as a crate, and a lower `embed` because a boulder sits ON the ground, it is not part of it.",
   "params": {
     "size": 5.4,
     "height": 0.85,
@@ -27,6 +27,26 @@
   "biomes": [
     "meadow",
     "alpine",
-    "forest"
-  ]
+    "forest",
+    "coast"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "alpine",
+      "forest",
+      "coast"
+    ],
+    "placement": "Landmark boulder tall enough to hide a kart \u2014 sits on the ground as navigation furniture, not buried decoration.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      130,
+      300
+    ],
+    "scale": [
+      0.8,
+      1.65
+    ],
+    "avoid": "Avoid crowding mid-distance frames; one oversized slab reads as a wall."
+  }
 }

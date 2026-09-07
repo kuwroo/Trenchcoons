@@ -34,5 +34,23 @@
       "shadowSkyTint": 0.45,
       "ambient": 1.05
     }
+  },
+  "rules": {
+    "biomes": [
+      "forest",
+      "meadow",
+      "alpine"
+    ],
+    "placement": "Strong horizontal break across slope — scatter sparsely so meadows and shores do not read as a repeated stamp.",
+    "maxSlope": 0.4,
+    "densityPerKm2": [
+      110,
+      300
+    ],
+    "scale": [
+      0.8,
+      1.3
+    ],
+    "avoid": "Avoid dense rock fields where the horizontal read is lost."
   }
 }

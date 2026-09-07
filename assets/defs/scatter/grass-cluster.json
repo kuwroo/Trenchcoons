@@ -27,5 +27,18 @@
     "meadow",
     "wetland",
     "forest"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "wetland",
+      "forest"
+    ],
+    "placement": "Taller strappy clumps at rock bases and slope breaks for silhouette density; must not out-contrast the ground.",
+    "scale": [
+      1.1,
+      1.25
+    ],
+    "avoid": "Avoid desert, alpine snow, and bare coast strand."
+  }
 }

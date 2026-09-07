@@ -94,6 +94,7 @@ export function mountControlHint(): HTMLElement | null {
     'P1  A / D        steer',
     'P2  Up / Down    throttle · brake',
     'solo  W A S D  or  arrows',
+    'LMB drag         orbit camera',
   ].join('\n')
   document.body.appendChild(el)
   return el

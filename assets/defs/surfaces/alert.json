@@ -1,0 +1,21 @@
+{
+  "id": "alert",
+  "version": 1,
+  "type": "surface",
+  "notes": "The cartoon red '!' that pops over a falling raccoon. Authored FLAT on purpose and it is the only surface in the game that is: base, shadow, lit and top are all one red, so the 3-stop ramp collapses and the glyph carries no shading at any sun angle or hour. That is the point — a comic-book exclamation is INK, a 2D graphic pasted over the scene, and the instant it takes a lit stop on one side it reads as a red plastic prop lying in the box instead. rimStrength is 0 for the same reason: a sky rim would put a blue edge on it. `ambient` is lifted to 1.6 so the glyph does not go dark when the kart's own volume shadows it — a warning sign that dims in shade is not a warning sign. Red is picked at the palette's warm extreme (H2, S0.83) because it has to punch out of a frame that is otherwise green ground, kraft box and blue sky, none of which is within 60deg of it.",
+  "material": {
+    "base": "#e03428",
+    "shadow": "#e03428",
+    "lit": "#e03428",
+    "top": "#e03428",
+    "topGain": 1.0,
+    "gradientStrength": 0.0,
+    "brushStrength": 0.0,
+    "detailStrength": 0.0,
+    "reliefShade": 0.0,
+    "rimStrength": 0.0,
+    "saturationGain": 0.0,
+    "shadowSkyTint": 0.0,
+    "ambient": 1.6
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "qn-twisted-2",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius TwistedTree_2. Authored ~17-19 m; scale keeps it in the canopy band. Autumn foliage surface matches overgrown tintTreeFoliage.",
+  "params": {
+    "mesh": "qn-twisted-2",
+    "scale": 0.62
+  },
+  "surfaces": {
+    "trunk": "bark",
+    "foliage": "foliageAutumn"
+  },
+  "variants": 1,
+  "biomes": [
+    "forest"
+  ],
+  "rules": {
+    "biomes": [
+      "forest"
+    ],
+    "placement": "Autumn accent tree \u2014 sparse in forest stands for silhouette variety.",
+    "maxSlope": 0.5,
+    "densityPerKm2": [
+      200,
+      400
+    ],
+    "scale": [
+      0.85,
+      1.15
+    ],
+    "avoid": "Meadow and non-forest biomes."
+  }
+}

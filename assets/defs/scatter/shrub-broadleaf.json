@@ -27,5 +27,23 @@
     "meadow",
     "forest",
     "wetland"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "wetland"
+    ],
+    "placement": "Dark understory anchor along forest floor and wetland margins; waist-high, non-solid.",
+    "maxSlope": 0.6,
+    "densityPerKm2": [
+      900,
+      2600
+    ],
+    "scale": [
+      0.8,
+      1.4
+    ],
+    "avoid": "Avoid desert, alpine, and coast."
+  }
 }

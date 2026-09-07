@@ -28,5 +28,23 @@
     "forest",
     "alpine",
     "coast"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "alpine",
+      "coast"
+    ],
+    "placement": "Ankle-height debris littering foreground ground and tracks; dense, cheap, few facets.",
+    "maxSlope": 0.8,
+    "densityPerKm2": [
+      2200,
+      9000
+    ],
+    "scale": [
+      0.5,
+      1.3
+    ]
+  }
 }

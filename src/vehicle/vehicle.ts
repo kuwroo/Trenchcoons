@@ -554,7 +554,7 @@ export class Vehicle {
     // for free, which is what body roll actually responds to.
     //
     // Scaled by contact, because every consumer of these two reads them as
-    // TYRE LOAD: body roll and pitch, the coat springs, the occupant lean, the
+    // TYRE LOAD: body roll and pitch, the occupant lean, the
     // camera roll and the FOV punch. With four wheels at full droop there is no
     // contact patch and therefore no load, and the first pass reported -37.9
     // m/s^2 — 3.9 g — mid-air, banking the body 12.6 degrees off a force

@@ -1,0 +1,20 @@
+{
+  "id": "mouthPink",
+  "version": 1,
+  "type": "surface",
+  "notes": "The driver's open mouth. The reference sheet's front view gives the DRIVER a wide open pink-tongued grin and the passenger a closed line, and that asymmetry is most of the pair's character — one is delighted to be driving and the other is holding on. The previous pass ruled the open mouth out as 'a two-value detail a 40-pixel head cannot hold' and kept only the dark line; the critic was right that this costs the friendly read at every distance, and the line is cheap enough to keep for the passenger while the driver gets the grin. Authored well under the reference's rendered H351 S0.54 because the illuminant adds roughly 0.15 of chroma on this vehicle. Dark enough that at 12 px it merges into the mouth cavity rather than flashing.",
+  "material": {
+    "base": "#8a4450",
+    "shadow": "#5c2a35",
+    "lit": "#a95e68",
+    "top": "#b86d74",
+    "topGain": 1.02,
+    "gradientStrength": 0.1,
+    "brushStrength": 0.0,
+    "detailStrength": 0.0,
+    "reliefShade": 0.0,
+    "rimStrength": 0.3,
+    "saturationGain": 0.5,
+    "shadowSkyTint": 0.2
+  }
+}

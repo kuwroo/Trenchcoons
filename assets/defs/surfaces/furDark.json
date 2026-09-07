@@ -1,0 +1,22 @@
+{
+  "id": "furDark",
+  "version": 3,
+  "type": "surface",
+  "notes": "The raccoon's near-black marks: paws, nose tip, tail rings. Measured off the reference sheet (09ea03c1 concept, front view) at #3a2e2a for the paws and #3d2f33 for the nose — a very dark warm brown, NOT neutral black. It exists because the reference's paws and tail rings are the darkest marks on the animal by a wide margin and `mask` is two stops too light to carry them: the paws on the box rim are 4-5 small shapes and at chase distance they only read as fingers if they are near-black against the kraft rim. Kept off pure black so the palette gate's near-grey count does not rise and so the sky rim still finds a normal on a 0.05 m digit. SATURATION: the previous revision of this note had `saturationGain` BACKWARDS. It reads as 'fraction of chroma LOST at full light' (see painterly.ts), so lowering it SATURATES, and the pass that took it from 0.30 to 0.08 to fix a measured S0.49 was pushing on the wrong side of the lever — the rendered figure did not move (0.49 -> 0.50), which is what said the term was not the cause. It is not: the illuminant is. At hour 0.62 the warm low sun dominates `albedo * (ambient + direct)`, and the signature is that this surface authored at S0.18 and `cardboard` authored at S0.38 BOTH land on S0.50 — the rendered chroma is converging on the light's, not on the albedo's. That is the open issue CLAUDE.md already names ('the palette only survives in mid-tones'), it is not fixable from a def, and it is not fixable from here. The gain is set at 0.34 to take what it can off the lit end, which is the one stop it acts on.",
+  "material": {
+    "base": "#332826",
+    "shadow": "#1f1719",
+    "lit": "#57443c",
+    "top": "#6a5548",
+    "topGain": 1.04,
+    "gradientBase": -0.08,
+    "gradientHeight": 0.2,
+    "gradientStrength": 0.25,
+    "brushStrength": 0.0,
+    "detailStrength": 0.1,
+    "rimStrength": 0.7,
+    "rimPower": 2.2,
+    "saturationGain": 0.26,
+    "shadowSkyTint": 0.3
+  }
+}

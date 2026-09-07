@@ -29,5 +29,22 @@
   "biomes": [
     "alpine",
     "meadow"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "alpine",
+      "meadow"
+    ],
+    "placement": "Skyline mass with near-vertical faces; place on ridgelines and distant massifs as a wall silhouette.",
+    "maxSlope": 0.9,
+    "densityPerKm2": [
+      33,
+      77
+    ],
+    "scale": [
+      0.3,
+      0.65
+    ],
+    "avoid": "Avoid flat meadow floors — this is ridgeline / skyline mass only."
+  }
 }

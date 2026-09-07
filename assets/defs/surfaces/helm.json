@@ -1,0 +1,22 @@
+{
+  "id": "helm",
+  "version": 3,
+  "type": "surface",
+  "notes": "The steering wheel. The reference sheet draws it a cool blue-grey lavender (#8b8ba8 rim, #6f6f90 in shade) and that is a real art decision rather than a neutral: it is the only man-made hard-edged object in the box, and against kraft cardboard and warm fur a cool grey is the one hue that says 'this is a manufactured part someone taped in'. A neutral grey would have collapsed into the tyre's dark, and a warm grey would have joined the box. Kept off `hub` (#382a1c, a warm near-black) because the wheel is held UP in front of a pale muzzle and needs to be mid-value there, not a silhouette. `specular` does not exist as a knob here and would be wrong anyway — CLAUDE.md restricts specular to water, wet surfaces, ice and vehicle paint, and this is moulded plastic. v2 DARKENS IT TWO STOPS. Measured on car-crew, the hub and the two lower spokes rendered as a bright white cross across the driver's chest — brighter than anything else on the vehicle. The cause is form, not colour: a torus is curved and takes a range of stops, but the spokes are FLAT SLABS facing straight up at the sun, so all of them select the `lit` stop at once and hold it over their whole area. At lit #b0b3c8 that is near-white. The rim still needs to be mid-value against a pale muzzle, so the fix is to move the whole ramp down rather than to desaturate: the torus keeps enough range to read as a rim and the spokes land on a mid grey-blue instead of on paper. rimStrength also comes down, because a sky rim on a slab facing the sky is the same problem a second time. v3: IT WAS ONLY EVER CHECKED IN ONE LIGHT. Authored H228 S0.25, it looks correct on car-crew at hour 0.62 where the sun is warm — and on car-fall, an alpine site at hour 0.45 under a cool sky, the exhaust rendered #445194, H230 S0.54, i.e. saturated cobalt. The reference's part is #8f8aa8, H247 S0.15: a pale grey-lavender that barely has a hue. Two terms were adding the sky's blue on top of an already-blue albedo — `shadowSkyTint` 0.26 rotating the shade toward the sky, and `rimStrength` 0.55 putting a bright sky edge round every cylinder, which on a pipe is a blue outline along its whole length. Both cut hard, the chroma more than halved, and the value lifted so it reads as pale metal rather than as coloured plastic. THE PROCESS POINT: this surface sits on the steering wheel, the exhaust AND (in family) the hubcaps, and it is the only one on the vehicle that appears in both a warm-hour capture and a cool-hour one. Anything low in chroma has to be checked in BOTH, because the illuminant supplies whatever hue the albedo does not.",
+  "material": {
+    "base": "#7a7682",
+    "shadow": "#55525d",
+    "lit": "#a8a4b0",
+    "top": "#bab6c2",
+    "topGain": 1.05,
+    "gradientBase": -0.1,
+    "gradientHeight": 0.3,
+    "gradientStrength": 0.28,
+    "brushStrength": 0.0,
+    "detailStrength": 0.12,
+    "rimStrength": 0.25,
+    "rimPower": 2.4,
+    "saturationGain": 0.45,
+    "shadowSkyTint": 0.08
+  }
+}

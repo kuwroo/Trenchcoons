@@ -35,5 +35,22 @@
       "shadowSkyTint": 0.45,
       "ambient": 1.05
     }
+  },
+  "rules": {
+    "biomes": [
+      "forest",
+      "alpine"
+    ],
+    "placement": "Snapped trunk with root flare — solid knee-to-waist obstacle in forest clearings and sparse desert remnants.",
+    "maxSlope": 0.45,
+    "densityPerKm2": [
+      70,
+      240
+    ],
+    "scale": [
+      0.7,
+      1.3
+    ],
+    "avoid": "Avoid meadow carpets and alpine snowfields; sparse desert only."
   }
 }

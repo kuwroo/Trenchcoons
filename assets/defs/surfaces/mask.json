@@ -1,23 +1,22 @@
 {
   "id": "mask",
-  "version": 2,
+  "version": 6,
   "type": "surface",
-  "notes": "The raccoon mask \u2014 the one shape that says 'raccoon' rather than 'small brown animal'. v1 was a flattened lens on the front of the face, which from the chase camera's dead-astern view survived as a single purple crescent on one cheek of one head and nothing at all on the other; the geometry in kart.ts is now a band that wraps the sides. Lightened a stop from v1 so the near-black eyes still punch out of it (refs/character/raccoon-artstyle-capycastaway.jpg: hard dark eye against a lighter mask), and kept violet rather than neutral because the palette gate counts near-grey pixels. Brush overlay reduced 0.45 -> 0.18: the painterly direction is abandoned (ART_BIBLE 1) and this was still running at full strength, which is the camouflage mottle on terrain. Brush disabled (0.18 -> 0). At brushScale 0.2 m on a head-sized object the pattern repeats once or twice across the whole surface, which reads as speckle rather than texture \u2014 and the painterly direction is abandoned (ART_BIBLE 1).",
+  "notes": "The raccoon mask. v3 is measured off the reference sheet (09ea03c1) rather than reasoned about: a 10-colour quantise of the driver's face puts the mask at #463234 — H354 S0.29 V0.27, a very dark warm brown with a mauve cast. v2 was authored at H283, i.e. 71 degrees too PURPLE, and one stop too light. Both errors came from the same place: the mask was doing the work of the whole face on its own, so it had to be light enough for the eyes to punch out of it and coloured enough not to count as grey. It no longer is — the reference's face is a three-value sandwich (pale brow blaze ABOVE, dark mask, pale muzzle BELOW) and the pale marks now exist as geometry in raccoon.ts, so the mask is free to go as dark as the reference has it. What makes the eye read is the cream sclera crescent inside the patch, not a light mask around it. Still carries S0.29 of chroma so the palette gate's near-grey count does not rise. GEOMETRY CHANGED WITH IT: v2 was an equatorial band round the whole skull, which is not what a raccoon has; it is now two almond patches over the eyes plus a stripe down the forehead centre, all spherical caps of the skull's own radius. SATURATION: the previous revision of this note had `saturationGain` BACKWARDS. It reads as 'fraction of chroma LOST at full light' (see painterly.ts), so lowering it SATURATES, and the pass that took it from 0.30 to 0.08 to fix a measured S0.49 was pushing on the wrong side of the lever — the rendered figure did not move (0.49 -> 0.50), which is what said the term was not the cause. It is not: the illuminant is. At hour 0.62 the warm low sun dominates `albedo * (ambient + direct)`, and the signature is that this surface authored at S0.18 and `cardboard` authored at S0.38 BOTH land on S0.50 — the rendered chroma is converging on the light's, not on the albedo's. That is the open issue CLAUDE.md already names ('the palette only survives in mid-tones'), it is not fixable from a def, and it is not fixable from here. The gain is set at 0.34 to take what it can off the lit end, which is the one stop it acts on. v5 TAKES THE LIT STOP DOWN 0.30 IN VALUE AND HALVES ITS CHROMA, and this is the single largest correction in the whole character pass. Measured on car-crew: mask lit rendered #a54756 H350 S0.57 V0.65 while the fur beside it rendered #a97b4a H31 S0.56 V0.66 — a 0.01 value step against the reference's 0.16, and 2.1x its saturation. The SHADED stop was already right (V0.31 against the reference's V0.29), so the fault was only ever at the lit end — and the pipeline multiplies roughly 1.5x between the def and the screen there, so rendering the reference's V0.34 means authoring about V0.23. That is DARKER THAN THE BASE STOP, which looks wrong in the file and is right on screen: a raccoon's mask is a flat dark mass that barely changes with the light, and a mask with a 0.20 lit-to-base range reads as a shiny plastic domino. Consequence worth knowing: warm-orange fur plus a crimson mask at the fur's own value plus a cream brow IS a red panda's pattern, and that is what the pair read as.",
   "material": {
-    "base": "#4e3550",
-    "shadow": "#33243c",
-    "lit": "#7d5f7a",
-    "top": "#8f6f88",
-    "topGain": 1.06,
-    "gradientBase": -0.14,
-    "gradientHeight": 0.3,
-    "gradientStrength": 0.35,
-    "brushScale": 0.2,
+    "base": "#3c3034",
+    "shadow": "#241d21",
+    "lit": "#463a3c",
+    "top": "#4f4143",
+    "topGain": 1.0,
+    "gradientBase": -0.12,
+    "gradientHeight": 0.28,
+    "gradientStrength": 0.22,
     "brushStrength": 0.0,
-    "brushSaturation": 0.35,
-    "detailStrength": 0.28,
-    "rimStrength": 0.55,
-    "saturationGain": 0.34,
-    "shadowSkyTint": 0.35
+    "detailStrength": 0.24,
+    "rimStrength": 0.45,
+    "rimPower": 2.6,
+    "saturationGain": 0.28,
+    "shadowSkyTint": 0.3
   }
 }

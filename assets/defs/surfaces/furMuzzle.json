@@ -1,0 +1,21 @@
+{
+  "id": "furMuzzle",
+  "version": 2,
+  "type": "surface",
+  "notes": "The muzzle, split off `furLight`. Measured on the reference sheet's driver front view, the muzzle is #927c6a — H27 S0.27 V0.57, a warm MID tan — while the brow blaze beside it is #c0ab98 at V0.75. They are 0.18 of value apart and the build was drawing both off one surface, so the muzzle rendered at V0.90+ and became the brightest thing on the head. That costs the face at distance: on car-idle the eye goes to the muzzle instead of to the mask-and-eyes combination that is the diagnostic raccoon read, which is the opposite of what a muzzle is for. Authored around V0.45 because this pipeline lifts value about 0.14 between def and screen on this vehicle, and at near-zero chroma for the reason `fur` documents at length — the illuminant supplies roughly 0.25 of saturation on its own and the albedo's adds to it. THE SECOND REFERENCE SHEET (refs/character/raccoon-boxkart-sheet-2.png) settles the value ladder, and the build had it INVERTED AT THE TOP. Measured on its front view: muzzle #c2ad97 V0.76, brow band #99816e V0.60, chest bib #9b8375 V0.61, fur #5b4448 V0.36, mask #4b343d V0.29. So the muzzle is the BRIGHTEST thing on the animal, brow and bib sit together a step under it, and fur is well below both. The build had the muzzle rendering DARKER than the brow, because `furMuzzle` was split off `furLight` on a measurement from the first sheet, where the muzzle reads mid-tone — the two sheets disagree on absolute value (the first is a lit scene, the second a flat character sheet) and agree exactly on the ORDER. The order is what is authored to; the absolute fur value stays where it is, because that is set by the separation from the cardboard the first sheet does show. Now the brightest surface on the character, as the sheet has it.",
+  "material": {
+    "base": "#bcb0a4",
+    "shadow": "#8d8377",
+    "lit": "#dcd2c6",
+    "top": "#eae2d8",
+    "topGain": 1.03,
+    "gradientBase": -0.14,
+    "gradientHeight": 0.3,
+    "gradientStrength": 0.3,
+    "brushStrength": 0.0,
+    "detailStrength": 0.12,
+    "rimStrength": 0.5,
+    "saturationGain": 0.5,
+    "shadowSkyTint": 0.24
+  }
+}

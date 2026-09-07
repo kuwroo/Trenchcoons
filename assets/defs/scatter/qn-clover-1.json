@@ -1,0 +1,36 @@
+{
+  "id": "qn-clover-1",
+  "version": 1,
+  "type": "scatter",
+  "generator": "imported",
+  "notes": "Quaternius Clover_1. Path-shoulder soft plant; mesh is tall \u2014 scale down.",
+  "params": {
+    "mesh": "qn-clover-1",
+    "scale": 0.35,
+    "solidAbove": 0.0,
+    "radius": 0.3
+  },
+  "surfaces": {
+    "body": "leaf"
+  },
+  "variants": 1,
+  "biomes": [
+    "meadow"
+  ],
+  "rules": {
+    "biomes": [
+      "meadow"
+    ],
+    "placement": "Sparse clover patches on meadow shoulders.",
+    "maxSlope": 0.7,
+    "densityPerKm2": [
+      400,
+      900
+    ],
+    "scale": [
+      0.7,
+      1.2
+    ],
+    "avoid": "Forest canopy floor."
+  }
+}

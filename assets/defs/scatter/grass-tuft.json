@@ -28,5 +28,19 @@
     "forest",
     "wetland",
     "coast"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "forest",
+      "wetland",
+      "coast"
+    ],
+    "placement": "Base ground-cover lattice — blanket meadows and sparse desert scrub; keep cheap and dense.",
+    "scale": [
+      0.65,
+      1.0
+    ],
+    "avoid": "Avoid alpine snow; coast strand keeps grassDensity at 0 on purpose."
+  }
 }

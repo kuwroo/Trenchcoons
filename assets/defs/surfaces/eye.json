@@ -1,21 +1,21 @@
 {
   "id": "eye",
-  "version": 1,
+  "version": 3,
   "type": "surface",
-  "notes": "ART_BIBLE 6: 'simple dot / slit eyes', 'no specular except on the eyes'. The painterly material has no specular term by design, so the highlight is a very strong low-power sky rim on a dark sphere instead — same read, no PBR.",
+  "notes": "The eye. v2 is measured against the reference sheet, where the iris is #3e1e38 — a very dark warm violet at V0.24 — with a small white catchlight. v1 authored #1e2130, a cobalt navy, and ran rimStrength at 1.5: three times the material default on a small convex sphere, which put a bright sky-blue band round the whole orb and rendered it #3c4c6b H220 V0.42. Two things went wrong with that at once. The value is nearly double the reference's, so the eye stopped being the darkest mark on the face; and H220 is 100 degrees off, so the pair read as a Furby rather than an animal. The catchlight is NOT worth a rim term — it is one pixel of specular on a surface CLAUDE.md's invariants reserve specular for (water, wet surfaces, ice, vehicle paint), and a rim strong enough to fake it lights the whole silhouette. rimStrength 0.45 keeps enough edge to separate the orb from the mask it sits in. v3 TAKES IT OFF VIOLET. v2 authored #33203a on a reading of the reference iris as 'a very dark warm violet', and the hue was right in the def and wrong on screen: measured on car-crew the orb renders H300 S0.57 against the reference's H341-353 S0.27, i.e. 45 degrees off and at twice the chroma. The illuminant adds chroma here as it does everywhere on this vehicle (see fur), so a stop authored at S0.44 lands at S0.57 and a 341-degree authored hue would land near 350 while a 300-degree one lands at 300. Authored near-neutral and barely warm, it renders as the near-black the reference actually has. The eye is the strongest identity mark on a 150 px head and a gemstone-coloured one reads as a toy.",
   "material": {
-    "base": "#1e2130",
-    "shadow": "#171a28",
-    "lit": "#4a5470",
-    "top": "#5d6a8a",
+    "base": "#2b2126",
+    "shadow": "#191316",
+    "lit": "#443639",
+    "top": "#4e3f41",
     "gradientBase": -0.06,
     "gradientHeight": 0.12,
     "gradientStrength": 0.3,
     "brushStrength": 0.12,
     "brushScale": 0.1,
-    "rimStrength": 1.5,
-    "rimPower": 1.5,
-    "saturationGain": 0.36,
-    "shadowSkyTint": 0.4
+    "rimStrength": 0.45,
+    "rimPower": 2.6,
+    "saturationGain": 0.5,
+    "shadowSkyTint": 0.2
   }
 }

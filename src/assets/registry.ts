@@ -38,6 +38,27 @@ for (const g of GENERATORS) {
   BY_NAME.set(g.info.name, g)
 }
 
+/**
+ * Authored placement rules. The env editor and prompt box edit these; the live
+ * biome table in `src/terrain/biomes.ts` still owns runtime density. Rules are
+ * the brief a modeller (or a prompt) writes so every asset states where it
+ * belongs, not only what it looks like.
+ */
+export interface AssetRules {
+  /** Biomes this asset is intended for. Mirrors top-level `biomes` when set. */
+  biomes?: string[]
+  /** Freeform placement guidance shown in the env editor. */
+  placement?: string
+  /** Default max slope (radians) when adding this asset to a biome scatter set. */
+  maxSlope?: number
+  /** Suggested density range when adding to a biome, instances per km². */
+  densityPerKm2?: [number, number]
+  /** Suggested uniform scale range when adding to a biome. */
+  scale?: [number, number]
+  /** Art-direction avoid notes. */
+  avoid?: string
+}
+
 export interface ScatterDef {
   id: string
   version: number
@@ -47,6 +68,8 @@ export interface ScatterDef {
   params?: Record<string, unknown>
   /** Slot -> painterly surface def id. Omitted slots take the generator default. */
   surfaces?: Record<string, string>
+  /** Placement / biome authorship — see `AssetRules`. */
+  rules?: AssetRules
   /**
    * Slot -> per-asset overrides on top of that surface's def.
    *
@@ -85,17 +108,29 @@ export interface ScatterDef {
  */
 const LOD_STEPS = [16, 46, 130] as const
 
-const modules = import.meta.glob<{ default: ScatterDef }>(
-  '/assets/defs/scatter/*.json', { eager: true },
-)
+const RULE_BIOMES = new Set(['meadow', 'forest', 'desert', 'alpine', 'wetland', 'coast'])
 
-const DEFS = new Map<string, ScatterDef>()
-for (const mod of Object.values(modules)) {
-  const def = mod.default
-  if (def.type !== 'scatter') continue
-  if (DEFS.has(def.id)) throw new Error(`duplicate scatter def id: ${def.id}`)
-  validate(def)
-  DEFS.set(def.id, def)
+function validateRules(id: string, rules: AssetRules): void {
+  if (rules.biomes) {
+    for (const b of rules.biomes) {
+      if (!RULE_BIOMES.has(b)) {
+        throw new Error(`${id}.rules.biomes: unknown biome "${b}"`)
+      }
+    }
+  }
+  if (rules.maxSlope !== undefined) {
+    if (!Number.isFinite(rules.maxSlope) || rules.maxSlope < 0 || rules.maxSlope > 1.5) {
+      throw new Error(`${id}.rules.maxSlope: expected 0..1.5 rad, got ${String(rules.maxSlope)}`)
+    }
+  }
+  for (const key of ['densityPerKm2', 'scale'] as const) {
+    const pair = rules[key]
+    if (!pair) continue
+    if (!Array.isArray(pair) || pair.length !== 2 ||
+      !Number.isFinite(pair[0]) || !Number.isFinite(pair[1]) || pair[0]! > pair[1]!) {
+      throw new Error(`${id}.rules.${key}: expected [lo, hi] with lo <= hi`)
+    }
+  }
 }
 
 function validate(def: ScatterDef): void {
@@ -145,6 +180,20 @@ function validate(def: ScatterDef): void {
   if (!Number.isInteger(v) || v < 1 || v > 6) {
     throw new Error(`${def.id}.variants: expected an integer 1..6, got ${String(def.variants)}`)
   }
+  if (def.rules) validateRules(def.id, def.rules)
+}
+
+const modules = import.meta.glob<{ default: ScatterDef }>(
+  '/assets/defs/scatter/*.json', { eager: true },
+)
+
+const DEFS = new Map<string, ScatterDef>()
+for (const mod of Object.values(modules)) {
+  const def = mod.default
+  if (def.type !== 'scatter') continue
+  if (DEFS.has(def.id)) throw new Error(`duplicate scatter def id: ${def.id}`)
+  validate(def)
+  DEFS.set(def.id, def)
 }
 
 const COLOUR_KEYS = new Set(['base', 'shadow', 'lit', 'top'])

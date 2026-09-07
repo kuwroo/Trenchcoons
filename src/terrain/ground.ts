@@ -29,6 +29,11 @@ import {
   boostSaturation, clampChroma, gradeSaturation, setSaturation,
 } from '../atmosphere/scattering'
 import type { TerrainWorld } from './world'
+import {
+  DIRT_PATH, DIRT_SHOULDER,
+  PATH_FADE_M, PATH_SOLID_M, SHOULDER_FADE_M, SHOULDER_SOLID_M,
+  dirtAlphaNode, distToPathNode,
+} from '../world/pathCurve'
 
 /** sRGB byte -> linear. The maps store authored sRGB; this undoes it. */
 const decode = (c: Node<'vec3'>): Node<'vec3'> => vec3(pow(c, float(2.2)))
@@ -164,9 +169,44 @@ export class GroundMaterial {
     // was abandoned for.
     const rockMid = litTap.a.toVar()
     const rock = smoothstep(rockMid.add(0.05), rockMid.sub(0.13), n.y).toVar()
-    const base = vec3(mix(rawBase, cliff, rock)).toVar()
-    const shade = vec3(mix(rawShade, cliff.mul(0.55), rock)).toVar()
-    const lit = vec3(mix(rawLit, cliff.mul(1.45), rock)).toVar()
+    const turfBase = vec3(mix(rawBase, cliff, rock))
+    const turfShade = vec3(mix(rawShade, cliff.mul(0.55), rock))
+    const turfLit = vec3(mix(rawLit, cliff.mul(1.45), rock))
+
+    // ── overgrown dirt path network (pathCurve + dirt alpha envelopes) ───────
+    // Analytical — same main/cross/spur as overgrown-portfolio, painted into
+    // the ground shader so the open world does not need a 230 m dirt plane.
+    const pathDist = distToPathNode(wp.x, wp.z)
+    const shoulderA = dirtAlphaNode(pathDist, SHOULDER_SOLID_M, SHOULDER_FADE_M, 0.65)
+    const pathA = dirtAlphaNode(pathDist, PATH_SOLID_M, PATH_FADE_M, 0.9)
+    const dirtShoulder = decode(vec3(
+      float((DIRT_SHOULDER >> 16) & 255).div(255),
+      float((DIRT_SHOULDER >> 8) & 255).div(255),
+      float(DIRT_SHOULDER & 255).div(255),
+    ))
+    const dirtPathCol = decode(vec3(
+      float((DIRT_PATH >> 16) & 255).div(255),
+      float((DIRT_PATH >> 8) & 255).div(255),
+      float(DIRT_PATH & 255).div(255),
+    ))
+    // Keep steep rock faces as stone; only meadow+forest get dirt paths
+    // (rockMap.a = baked meadow+forest weight).
+    const pathLand = texture(world.rockMap, mapUv).a
+    const pathW = float(1).sub(rock).mul(pathLand)
+    const shW = shoulderA.mul(pathW)
+    const pW = pathA.mul(pathW)
+    const base = vec3(mix(
+      mix(turfBase, dirtShoulder, shW),
+      dirtPathCol, pW,
+    )).toVar()
+    const shade = vec3(mix(
+      mix(turfShade, dirtShoulder.mul(0.72), shW),
+      dirtPathCol.mul(0.72), pW,
+    )).toVar()
+    const lit = vec3(mix(
+      mix(turfLit, dirtShoulder.mul(1.15), shW),
+      dirtPathCol.mul(1.18), pW,
+    )).toVar()
 
     // ── ground modelling: LOW frequency, LOW amplitude, value only ───────────
     //

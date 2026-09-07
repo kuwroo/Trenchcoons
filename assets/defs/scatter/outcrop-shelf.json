@@ -27,5 +27,22 @@
   "biomes": [
     "meadow",
     "alpine"
-  ]
+  ],
+  "rules": {
+    "biomes": [
+      "meadow",
+      "alpine"
+    ],
+    "placement": "Mid-ground three-course shelf on hillside breaks; layers set back so steps stay walkable/collidable.",
+    "maxSlope": 0.4,
+    "densityPerKm2": [
+      90,
+      110
+    ],
+    "scale": [
+      0.9,
+      1.7
+    ],
+    "avoid": "Avoid wetland mud and dense forest floor clutter."
+  }
 }
